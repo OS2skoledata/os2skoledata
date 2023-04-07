@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://unilogin.dk/data" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://unilogin.dk/data" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="InstitutionNumber" type="xs:unsignedInt" />
+  <xs:element name="InstitutionName" type="xs:string" />
+  <xs:element name="Group">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="GroupId" type="xs:string" />
+        <xs:element name="GroupName" type="xs:string" />
+        <xs:element name="GroupType" type="xs:string" />
+        <xs:element minOccurs="0" name="GroupLevel" type="xs:unsignedByte" />
+        <xs:element minOccurs="0" name="Line" type="xs:string" />
+        <xs:element minOccurs="0" name="FromDate" type="xs:date" />
+        <xs:element minOccurs="0" name="ToDate" type="xs:date" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="LocalPersonId" type="xs:string" />
+  <xs:element name="UserId" type="xs:string" />
+  <xs:element name="Name" type="xs:string" />
+  <xs:element name="InitialPassword" type="xs:string" />
+  <xs:element name="PasswordState" type="xs:string" />
+  <xs:element name="FirstName" type="xs:string" />
+  <xs:element name="FamilyName" type="xs:string" />
+  <xs:element name="BirthDate" type="xs:date" />
+  <xs:element name="Gender" type="xs:string" />
+  <xs:element name="PhotoId" type="xs:unsignedInt" />
+  <xs:element name="Address">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="StreetAddress" type="xs:string" />
+        <xs:element name="PostalCode" type="xs:unsignedShort" />
+        <xs:element name="PostalDistrict" type="xs:string" />
+        <xs:element minOccurs="0" name="MunicipalityCode" type="xs:unsignedShort" />
+        <xs:element minOccurs="0" name="MunicipalityName" type="xs:string" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="ShortName" type="xs:string" />
+  <xs:element name="Occupation" type="xs:string" />
+  <xs:element name="GroupId" type="xs:string" />
+</xs:schema>

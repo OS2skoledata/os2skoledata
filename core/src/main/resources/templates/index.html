@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header" />
+<body class="top-navigation">
+	<div id="wrapper">
+		<div id="page-wrapper" class="gray-bg">
+			<div th:replace="fragments/topbar :: topbar (page = 'index')" />
+
+			<div class="wrapper wrapper-content">
+				<div class="row">
+
+					<div class="col-lg-8 offset-lg-2">
+						<div class="ibox">
+							<div class="ibox-title">
+								<h5><em class="fa fa-lock"></em> &nbsp; Login to OS2skoledata</h5>
+							</div>
+							<div class="ibox-content">
+								<div class="row">
+									<div class="col-lg-6 col-xl-4 offset-lg-3 offset-xl-4">
+										<a th:href="@{/saml/login}" class="btn btn-block btn-primary">Login</a>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<div th:replace="fragments/footer :: scripts" />
+
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+		+]*/
+
+		var token = $("meta[name='_csrf']").attr("content");
+
+		$(document).ready(function(){
+		});
+		
+		/*]]>*/
+	</script>
+</body>
+</html>

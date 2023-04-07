@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "os2skoledata_ad_sync": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

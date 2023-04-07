@@ -1,0 +1,15 @@
+.classpath
+.project
+.settings
+target/
+.idea/
+.mvn/
+*.iml
+**/.factorypath
+.vs/
+[Dd]ebug/
+[Rr]elease/
+.jpb/
+#x64/
+#x86/
+/config/application.development.properties

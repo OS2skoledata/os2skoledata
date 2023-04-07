@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://wsieksport.unilogin.dk/eksport/fullmyndighed" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://wsieksport.unilogin.dk/eksport/fullmyndighed" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="https://wsieksport.unilogin.dk/eksport" />
+  <xs:import namespace="https://unilogin.dk/data" />
+  <xs:import namespace="https://unilogin.dk/data/transitional" />
+  <xs:import namespace="https://wsieksport.unilogin.dk/eksport/full" />
+  <xs:element name="UNILoginExportFullMyndighed">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q1="https://wsieksport.unilogin.dk/eksport" ref="q1:ImportSource" />
+        <xs:element name="Institution">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element xmlns:q2="https://unilogin.dk/data" ref="q2:InstitutionNumber" />
+              <xs:element xmlns:q3="https://unilogin.dk/data" ref="q3:InstitutionName" />
+              <xs:element maxOccurs="unbounded" xmlns:q4="https://unilogin.dk/data" ref="q4:Group" />
+              <xs:element maxOccurs="unbounded" name="InstitutionPerson">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element xmlns:q5="https://unilogin.dk/data" ref="q5:LocalPersonId" />
+                    <xs:element xmlns:q6="https://wsieksport.unilogin.dk/eksport" ref="q6:UNILogin" />
+                    <xs:element name="Person">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:choice maxOccurs="unbounded">
+                            <xs:element xmlns:q7="https://unilogin.dk/data" ref="q7:FirstName" />
+                            <xs:element xmlns:q8="https://unilogin.dk/data" ref="q8:FamilyName" />
+                            <xs:element xmlns:q9="https://unilogin.dk/data/transitional" ref="q9:CivilRegistrationNumber" />
+                            <xs:element xmlns:q10="https://unilogin.dk/data/transitional" ref="q10:EmailAddress" />
+                            <xs:element xmlns:q11="https://unilogin.dk/data" ref="q11:BirthDate" />
+                            <xs:element xmlns:q12="https://unilogin.dk/data" ref="q12:Gender" />
+                            <xs:element xmlns:q13="https://unilogin.dk/data" ref="q13:PhotoId" />
+                            <xs:element xmlns:q14="https://unilogin.dk/data" ref="q14:Address" />
+                            <xs:element xmlns:q15="https://wsieksport.unilogin.dk/eksport/full" ref="q15:WorkPhoneNumber" />
+                            <xs:element xmlns:q16="https://wsieksport.unilogin.dk/eksport/full" ref="q16:HomePhoneNumber" />
+                            <xs:element xmlns:q17="https://wsieksport.unilogin.dk/eksport/full" ref="q17:MobilePhoneNumber" />
+                            <xs:element name="AliasFirstName" type="xs:string" />
+                            <xs:element name="AliasFamilyName" type="xs:string" />
+                          </xs:choice>
+                        </xs:sequence>
+                        <xs:attribute name="protected" type="xs:boolean" use="required" />
+                        <xs:attribute name="verificationLevel" type="xs:unsignedByte" use="required" />
+                      </xs:complexType>
+                    </xs:element>
+                    <xs:element minOccurs="0" xmlns:q18="https://unilogin.dk/data/transitional" ref="q18:Employee" />
+                    <xs:element minOccurs="0" name="Student">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element xmlns:q19="https://unilogin.dk/data/transitional" ref="q19:Role" />
+                          <xs:element xmlns:q20="https://unilogin.dk/data/transitional" ref="q20:Level" />
+                          <xs:element xmlns:q21="https://unilogin.dk/data/transitional" ref="q21:MainGroupId" />
+                          <xs:element maxOccurs="unbounded" name="ContactPerson">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="Person">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element xmlns:q22="https://unilogin.dk/data" ref="q22:FirstName" />
+                                      <xs:element xmlns:q23="https://unilogin.dk/data" ref="q23:FamilyName" />
+                                      <xs:element xmlns:q24="https://unilogin.dk/data/transitional" ref="q24:CivilRegistrationNumber" />
+                                      <xs:element minOccurs="0" xmlns:q25="https://unilogin.dk/data/transitional" ref="q25:EmailAddress" />
+                                      <xs:element xmlns:q26="https://unilogin.dk/data" ref="q26:BirthDate" />
+                                      <xs:element xmlns:q27="https://unilogin.dk/data" ref="q27:Gender" />
+                                      <xs:element xmlns:q28="https://unilogin.dk/data" ref="q28:PhotoId" />
+                                      <xs:element xmlns:q29="https://unilogin.dk/data" ref="q29:Address" />
+                                      <xs:element minOccurs="0" xmlns:q30="https://wsieksport.unilogin.dk/eksport/full" ref="q30:HomePhoneNumber" />
+                                      <xs:element minOccurs="0" xmlns:q31="https://wsieksport.unilogin.dk/eksport/full" ref="q31:WorkPhoneNumber" />
+                                      <xs:element minOccurs="0" xmlns:q32="https://wsieksport.unilogin.dk/eksport/full" ref="q32:MobilePhoneNumber" />
+                                      <xs:element minOccurs="0" name="AliasFirstName" type="xs:string" />
+                                      <xs:element minOccurs="0" name="AliasFamilyName" type="xs:string" />
+                                    </xs:sequence>
+                                    <xs:attribute name="protected" type="xs:boolean" use="required" />
+                                    <xs:attribute name="verificationLevel" type="xs:unsignedByte" use="required" />
+                                  </xs:complexType>
+                                </xs:element>
+                                <xs:element name="UNILogin">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element xmlns:q33="https://unilogin.dk/data" ref="q33:UserId" />
+                                      <xs:element xmlns:q34="https://unilogin.dk/data" ref="q34:Name" />
+                                      <xs:element xmlns:q35="https://unilogin.dk/data" ref="q35:InitialPassword" />
+                                      <xs:element xmlns:q36="https://unilogin.dk/data/transitional" ref="q36:CivilRegistrationNumber" />
+                                      <xs:element xmlns:q37="https://unilogin.dk/data" ref="q37:PasswordState" />
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                              <xs:attribute name="relation" type="xs:string" use="required" />
+                              <xs:attribute name="childCustody" type="xs:boolean" use="required" />
+                              <xs:attribute name="accessLevel" type="xs:unsignedByte" use="required" />
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                  <xs:attribute name="source" type="xs:string" use="required" />
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+      <xs:attribute name="exportDateTime" type="xs:dateTime" use="required" />
+      <xs:attribute name="accessLevel" type="xs:string" use="required" />
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

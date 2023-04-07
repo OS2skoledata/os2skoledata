@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://wsieksport.unilogin.dk/eksport" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://wsieksport.unilogin.dk/eksport" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="https://unilogin.dk/data" />
+  <xs:import namespace="https://unilogin.dk/data/transitional" />
+  <xs:element name="ImportSource">
+    <xs:complexType>
+      <xs:attribute name="sourceDateTime" type="xs:dateTime" use="required" />
+      <xs:attribute name="source" type="xs:string" use="required" />
+      <xs:attribute name="schoolYear" type="xs:string" use="required" />
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="UNILogin">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q1="https://unilogin.dk/data" ref="q1:UserId" />
+        <xs:element xmlns:q2="https://unilogin.dk/data" ref="q2:Name" />
+        <xs:element xmlns:q3="https://unilogin.dk/data" ref="q3:InitialPassword" />
+        <xs:element xmlns:q4="https://unilogin.dk/data/transitional" ref="q4:CivilRegistrationNumber" />
+        <xs:element xmlns:q5="https://unilogin.dk/data" ref="q5:PasswordState" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

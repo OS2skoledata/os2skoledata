@@ -1,0 +1,99 @@
+<th:block th:fragment="modal" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<!-- client modal -->
+	<div class="modal fade" id="modal-client" role="dialog">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h4 th:text="#{html.page.client.new.modal.header}"></h4>
+					<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span class="sr-only">Close</span></button>
+				</div>
+	
+				<div class="modal-body">
+					<form id="newClientForm" class="form-horizontal">
+						<div class="form-group row">
+							<label class="col-sm-2 col-form-label" th:text="#{html.page.client.new.modal.name}" />
+							<div class="col-sm-8">
+								<input type="text" id="name" name="name" class="form-control" th:placeholder="#{html.page.client.new.modal.name.placeholder}" autofocus="autofocus" />
+							</div>
+						</div>
+					</form>
+				</div>
+	
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary" onclick="clientModal.postNewClient();" th:text="#{html.control.button.create}"></button>
+					<button type="button" class="btn btn-danger" data-dismiss="modal" th:text="#{html.control.button.cancel}"></button>
+				</div>
+			</div>
+		</div>
+	</div>
+</th:block>
+
+<th:block th:fragment="scripts" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+			var postNewClientUrl = [[@{/rest/clients/create}]];
+
+			var msgFailure = [[#{html.page.client.new.modal.msgFailure}]];
+		+]*/
+		
+		var clientModal;
+		
+		$(document).ready(function(){
+			clientModal = new ClientModal();
+			
+			$('#newClientForm').on("submit", function(event) {
+				event.preventDefault();
+				clientModal.postNewClient();
+			});
+		});
+
+		function ClientModal() {
+			this.show =function() {
+				$('#newClientForm input').val('');
+				$("#modal-client").modal("show");
+			};
+			this.hide = function() {
+				$("#modal-client").modal("hide");
+			};
+			this.postNewClient = function() {
+				var formData = {
+					name : $('#newClientForm #name').val()
+				};
+
+				$.ajax({
+					contentType : 'application/json',
+					url : postNewClientUrl,
+					method : "POST",
+					headers: {
+						'X-CSRF-TOKEN': token
+					},
+					data : JSON.stringify(formData),
+					error : function(response) {
+						if (response.status == 400
+								&& response.responseText != "") {
+							swal({
+								title : response.responseText,
+								type : 'warning',
+								confirmButtonColor : '#3085d6'
+							});
+						} else {
+							swal({
+								title : msgFailure,
+								type : 'error',
+								confirmButtonColor : '#3085d6'
+							});
+						}
+					},
+					success : function(response) {
+						clientModal.hide();
+						loadClientTable();
+					}
+				});
+			}
+		}
+
+		/*]]>*/
+	</script>
+</th:block>

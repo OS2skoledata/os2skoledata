@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:expfm="https://wsieksport.unilogin.dk/eksport/fullmyndighed" xmlns:data="https://unilogin.dk/data" xmlns:wie="https://wsieksport.unilogin.dk/ws" xmlns:trans="https://unilogin.dk/data/transitional" xmlns:expm="https://wsieksport.unilogin.dk/eksport/medium" xmlns:expf="https://wsieksport.unilogin.dk/eksport/full" xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:exp="https://wsieksport.unilogin.dk/eksport" xmlns:exps="https://wsieksport.unilogin.dk/eksport/small" xmlns:uni="https://unilogin.dk" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="http://www.w3.org/2003/05/soap-envelope" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="https://wsieksport.unilogin.dk/ws" />
+  <xs:element name="Envelope">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="Body">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element ref="wie:eksporterXmlFuldMyndighedResponse" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

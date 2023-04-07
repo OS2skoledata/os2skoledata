@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Created with Liquid Technologies Online Tools 1.0 (https://www.liquid-technologies.com) -->
+<xs:schema xmlns:tns="https://wsieksport.unilogin.dk/ws" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://wsieksport.unilogin.dk/ws" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import schemaLocation="schema2.xsd" namespace="https://unilogin.dk" />
+  <xs:element name="eksporterXmlFuldMyndighed">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element xmlns:q1="https://unilogin.dk" ref="q1:wsBrugerid" />
+        <xs:element xmlns:q2="https://unilogin.dk" ref="q2:wsPassword" />
+        <xs:element name="instnr" type="xs:string" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

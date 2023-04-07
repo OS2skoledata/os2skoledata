@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://wsieksport.unilogin.dk/eksport/full" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://wsieksport.unilogin.dk/eksport/full" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="HomePhoneNumber">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:unsignedLong">
+          <xs:attribute name="protected" type="xs:boolean" use="required" />
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="WorkPhoneNumber">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:string">
+          <xs:attribute name="protected" type="xs:boolean" use="required" />
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+  <xs:element name="MobilePhoneNumber">
+    <xs:complexType>
+      <xs:simpleContent>
+        <xs:extension base="xs:unsignedInt">
+          <xs:attribute name="protected" type="xs:boolean" use="required" />
+        </xs:extension>
+      </xs:simpleContent>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

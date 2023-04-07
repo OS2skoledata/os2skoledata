@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true, checkbox = true)" />
+<body class="top-navigation">
+	<div id="wrapper">
+		<div id="page-wrapper" class="gray-bg">
+			<div th:replace="fragments/topbar :: topbar (page = 'client.list')" />
+
+			<div class="wrapper wrapper-content">
+				<div class="row">
+
+					<div class="col-lg-8 offset-lg-2">
+						<div class="ibox">
+							<div class="ibox-title">
+								<h5><em class="fa fa-users"></em> &nbsp; Clients</h5>
+							</div>
+
+							<div class="ibox-content">
+								<div style="margin-bottom:20px;">
+									<button type="button" class="btn btn-lg btn-primary" style="width:auto; margin-right:10px" onClick="newClient();">
+										<em class="fa fa-plus"></em>
+										<span th:text="#{html.navbar.client.new}"></span>
+									</button>
+								</div>
+							
+								<div id="clientTable"></div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<div th:replace="client/fragments/clientModal :: modal" />
+
+	<div th:replace="fragments/footer :: scripts (datatables = true, checkbox = true)" />
+	<div th:replace="client/fragments/clientTable :: scripts" />
+	<div th:replace="client/fragments/clientModal :: scripts" />
+
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+	
+		var clientTableUrl = [[@{/ui/clients/clientTable}]];
+
+		+]*/
+
+		var token = $("meta[name='_csrf']").attr("content");
+
+		$(document).ready(function(){
+			loadClientTable();
+		});
+		
+		function newClient() {
+			clientModal.show();
+		}
+
+		function loadClientTable() {
+			$("#clientTable").load(clientTableUrl, function () {clientTable.init();});
+		}
+
+		/*]]>*/
+	</script>
+</body>
+</html>

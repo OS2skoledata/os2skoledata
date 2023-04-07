@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://wsieksport.unilogin.dk/ws" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://wsieksport.unilogin.dk/ws" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="https://wsieksport.unilogin.dk/eksport/fullmyndighed" />
+  <xs:element name="eksporterXmlFuldMyndighedResponse">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="xml">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element xmlns:q1="https://wsieksport.unilogin.dk/eksport/fullmyndighed" ref="q1:UNILoginExportFullMyndighed" />
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>

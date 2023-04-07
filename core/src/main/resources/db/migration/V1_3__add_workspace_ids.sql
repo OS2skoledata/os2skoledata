@@ -1,0 +1,12 @@
+ALTER TABLE `group` ADD COLUMN google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE group_aud ADD COLUMN google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE `group` ADD COLUMN drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE group_aud ADD COLUMN drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution ADD COLUMN google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution_aud ADD COLUMN google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution ADD COLUMN employee_drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution_aud ADD COLUMN employee_drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution ADD COLUMN all_drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution_aud ADD COLUMN all_drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution ADD COLUMN student_drive_google_workspace_id VARCHAR(64) NULL;
+ALTER TABLE institution_aud ADD COLUMN student_drive_google_workspace_id VARCHAR(64) NULL;

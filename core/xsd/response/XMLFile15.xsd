@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:tns="https://unilogin.dk/data/transitional" attributeFormDefault="unqualified" elementFormDefault="qualified" targetNamespace="https://unilogin.dk/data/transitional" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:import namespace="https://unilogin.dk/data" />
+  <xs:element name="CivilRegistrationNumber" type="xs:unsignedInt" />
+  <xs:element name="Role" type="xs:string" />
+  <xs:element name="Level" type="xs:unsignedByte" />
+  <xs:element name="MainGroupId" type="xs:unsignedInt" />
+  <xs:element name="EmailAddress" type="xs:string" />
+  <xs:element name="Employee">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" name="Role" type="xs:string" />
+        <xs:element xmlns:q1="https://unilogin.dk/data" ref="q1:ShortName" />
+        <xs:element minOccurs="0" xmlns:q2="https://unilogin.dk/data" ref="q2:Occupation" />
+        <xs:element maxOccurs="unbounded" xmlns:q3="https://unilogin.dk/data" ref="q3:GroupId" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
