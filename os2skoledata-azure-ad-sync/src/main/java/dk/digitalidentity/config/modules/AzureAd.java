@@ -9,4 +9,5 @@ public class AzureAd {
 	private String clientID;
 	private String clientSecret;
 	private String tenantID;
+	private boolean userDryRun;
 }

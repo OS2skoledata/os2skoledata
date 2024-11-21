@@ -4,8 +4,8 @@ import com.microsoft.graph.models.User;
 import dk.digitalidentity.config.OS2skoledataAzureADConfiguration;
 import dk.digitalidentity.config.modules.UsernameStandard;
 import dk.digitalidentity.service.model.DBGroup;
-import dk.digitalidentity.service.model.Institution;
 import dk.digitalidentity.service.model.DBUser;
+import dk.digitalidentity.service.model.Institution;
 import dk.digitalidentity.service.model.ModificationHistory;
 import dk.digitalidentity.service.model.enums.EmployeeRole;
 import dk.digitalidentity.service.model.enums.EntityType;
@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -36,10 +37,11 @@ public class SyncService {
 	@Autowired
 	private OS2skoledataAzureADConfiguration config;
 
-	private final char[] first = "0123456789abcdefghjklmnpqrstuvxyz".toCharArray();
-	private final char[] second = "abcdefghjklmnpqrstuvxyz".toCharArray();
-	private final char[] third = "0123456789".toCharArray();
+	private final char[] first = "23456789abcdefghjkmnpqrstuvxyz".toCharArray();
+	private final char[] second = "abcdefghjkmnpqrstuvxyz".toCharArray();
+	private final char[] third = "23456789".toCharArray();
 	private Map<Integer, String> uniqueIds = new HashMap<>();
+	private List<String> globalLockedInstitutionNumbers = new ArrayList<>();
 
 	@PostConstruct
 	public void init() {
@@ -65,35 +67,59 @@ public class SyncService {
 			if (allUsernames == null) {
 				throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
 			}
-			Map<String, List<String>> usernameMap = azureADService.generateUsernameMap(allUsernames);
+
+			List<String> allUsernamesOS2skoledata = os2skoledataService.getAllUsernames();
+			Map<String, List<String>> usernameMap = azureADService.generateUsernameMap(allUsernames, allUsernamesOS2skoledata);
 			if (usernameMap == null) {
 				throw new Exception("Failed to generate username map from AD. Will not perform sync.");
 			}
 
 			// institutions
 			List<Institution> institutions = os2skoledataService.getInstitutions();
+			List<String> lockedInstitutionNumbers = institutions.stream().filter(Institution::isLocked).map(Institution::getInstitutionNumber).collect(Collectors.toList());
+
+			// add locked institutions to global list
+			// institutions that are no longer locked will be removed from the list when the full sync is done (to make sure first sync of unlocked institutions is a full sync)
+			globalLockedInstitutionNumbers.addAll(lockedInstitutionNumbers);
 
 			// pr institution update users
 			Map<String, List<DBUser>> institutionUserMap = new HashMap<>();
 			List<DBUser> allDBUsers = new ArrayList<>();
 			for (Institution institution : institutions) {
+				if (institution.isLocked()) {
+					continue;
+				}
 				List<DBUser> users = os2skoledataService.getUsersForInstitution(institution);
 				institutionUserMap.put(institution.getInstitutionNumber(), users);
 				allDBUsers.addAll(users);
 			}
 
-			// delete users
-			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata);
+			// fetch locked usernames to make sure they are not disabled - then check if others should be deleted
+			List<String> lockedUsernames = os2skoledataService.getLockedUsernames();
+			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata, lockedUsernames);
 
 			List<String> securityGroupIds = new ArrayList<>();
+			List<String> securityGroupIdsForRenamedGroups = new ArrayList<>();
+			List<String> teamIds = new ArrayList<>();
+			List<String> teamIdsForRenamedTeams = new ArrayList<>();
 			List<DBUser> allDBUsersForGlobalGroups = new ArrayList<>();
 			for (Institution institution : institutions) {
+				if (institution.isLocked()) {
+					log.info("Not updating users for institution " + institution.getInstitutionNumber() +  ". Institution is locked due to school year change.");
+					continue;
+				}
+
 				List<String> excludedRoles = getExcludedRoles(institution.getInstitutionNumber());
 				List<DBUser> users = institutionUserMap.get(institution.getInstitutionNumber());
 
 				for (DBUser user : users) {
 					log.info("Checking if user with databaseId " + user.getDatabaseId() + " should be created or updated");
-					User match = allUsers.stream().filter(u -> u.employeeId != null && u.employeeId.equals(user.getCpr())).findAny().orElse(null);
+					User match;
+					if (config.getSyncSettings().isUseUsernameAsKey()) {
+						match = allUsers.stream().filter(u -> u.mailNickname != null && u.mailNickname.equals(user.getUsername())).findAny().orElse(null);
+					} else {
+						match = allUsers.stream().filter(u -> u.employeeId != null && u.employeeId.equals(user.getCpr())).findAny().orElse(null);
+					}
 
 					if (match == null) {
 						// should user be created?
@@ -104,22 +130,40 @@ public class SyncService {
 						}
 
 						// find available username and create
-						String username = generateUsername(user.getFirstName(), usernameMap);
+						String username = null;
+						if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) && user.getStilUsername() != null)
+						{
+							boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
+							if (!exists)
+							{
+								username = user.getStilUsername();
+								addUsernameToMap(user.getStilUsername(), usernameMap);
+							} else
+							{
+								username = generateUsername(user.getFirstName(), usernameMap);
+							}
+						} else
+						{
+							username = generateUsername(user.getFirstName(), usernameMap);
+						}
+
 						if (username == null) {
 							throw new Exception("Failed to generate username for user with LocalPersonId " + user.getLocalPersonId());
 						}
 
 						user.setUsername(username);
-						os2skoledataService.setUsernameOnUser(user.getLocalPersonId(), username);
+						os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 						log.info("Generated username " + username + " for user with databaseId " + user.getDatabaseId());
 						User createdUser = azureADService.createAccount(username, user);
-						allUsersManagedByOS2skoledata.add(createdUser);
-						allUsers.add(createdUser);
-						log.info("Created Account for user with databaseId " + user.getDatabaseId() + " and username " + username + ".");
+
+						// is null if userDryRun
+						if (createdUser != null) {
+							allUsersManagedByOS2skoledata.add(createdUser);
+							allUsers.add(createdUser);
+							log.info("Created Account for user with databaseId " + user.getDatabaseId() + " and username " + username + ".");
+						}
 					}
 					else {
-						user.setAzureId(match.id);
-
 						String username = null;
 						if (match.userPrincipalName != null) {
 							username = match.userPrincipalName.replace("@" + config.getSyncSettings().getDomain(), "");
@@ -129,86 +173,123 @@ public class SyncService {
 							throw new Exception("UserPrincipalName / username on user was null. Something is wrong. Azure user with id " + match.id);
 						}
 
-						// delete if the user should be excluded
+						// delete if the user is managed by OS2skoledata and should be excluded
 						boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
 						if (shouldBeExcluded) {
-							azureADService.disableUser(match.id, username);
-						}
+							if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
+								azureADService.disableUser(match.id, username);
+							}
+						} else {
+							user.setAzureId(match.id);
 
-						// update username in OS2skoledata
-						if (user.getUsername() == null || !username.equals(user.getUsername())) {
-							user.setUsername(username);
-							os2skoledataService.setUsernameOnUser(user.getLocalPersonId(), username);
-						}
+							// update username in OS2skoledata
+							if (user.getUsername() == null || !username.equals(user.getUsername())) {
+								user.setUsername(username);
+								os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
+							}
 
-						azureADService.updateAccount(user, match);
+							azureADService.updateAccount(user, match);
+						}
 					}
 				}
 
 				// security groups for institution
 				List<DBGroup> classes = os2skoledataService.getClassesForInstitution(institution);
-				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds);
+				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups);
+
+				// teams for institution
+				azureADService.updateTeams(institution, users, classes, teamIds, teamIdsForRenamedTeams, allDBUsers);
 
 				allDBUsersForGlobalGroups.addAll(users);
 			}
 
 			// global security groups
-			azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds);
+			azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames);
 
-			// delete groups that are not needed anymore
-			azureADService.deleteNotNeededGroups(securityGroupIds);
+			// fetch group ids from locked institutions to make sure they are not deleted and delete groups that are not needed anymore
+			List<String> lockedGroupIds = os2skoledataService.getLockedGroupIds();
+			azureADService.deleteNotNeededGroups(securityGroupIds, lockedGroupIds, securityGroupIdsForRenamedGroups);
 
-			// set head
-			os2skoledataService.setHead(head);
+			// fetch team ids from locked institutions to make sure they are not deleted and delete teams that are not needed anymore
+			List<String> lockedTeamIds = os2skoledataService.getLockedTeamIds();
+			azureADService.archiveAndDeleteNotNeededTeams(teamIds, lockedTeamIds, teamIdsForRenamedTeams);
+
+			// set head on not locked institutions
+			for (Institution institution : institutions) {
+				if (!institution.isLocked()) {
+					os2skoledataService.setHead(head, institution.getInstitutionNumber());
+				}
+			}
+
+			// full sync was a success - update the locked institution list to only have the current locked institutions
+			globalLockedInstitutionNumbers = lockedInstitutionNumbers;
+
+			log.info("Finished executing fullsyncjob");
 		}
 		catch (Exception e) {
 			os2skoledataService.reportError(e.getMessage());
 			log.error("Failed to perform full sync. Exception happened: " + e.getMessage());
+			e.printStackTrace();
 		}
 
 	}
 
 	public void deltaSync() {
 		try {
-			List<ModificationHistory> changes = os2skoledataService.getChanges();
-			if (!changes.isEmpty()) {
-
-				// init
-				azureADService.initializeClient();
-
-				// all usernames
-				List<User> allUsers = azureADService.getAllUsers();
-				List<String> allUsernames = azureADService.getAllUsernames();
-				if (allUsernames == null) {
-					throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
-				}
-				Map<String, List<String>> usernameMap = azureADService.generateUsernameMap(allUsernames);
-				if (usernameMap == null) {
-					throw new Exception("Failed to generate username map from AD. Will not perform sync.");
+			List<Institution> institutions = os2skoledataService.getInstitutions();
+			for (Institution institution : institutions) {
+				if (institution.isLocked() || globalLockedInstitutionNumbers.contains(institution.getInstitutionNumber()))
+				{
+					log.info("Not performing delta sync on institution with number " + institution.getInstitutionNumber() + ". Institution is locked.");
+					if (institution.isLocked() && !globalLockedInstitutionNumbers.contains(institution.getInstitutionNumber()))
+					{
+						globalLockedInstitutionNumbers.add(institution.getInstitutionNumber());
+					}
+					continue;
 				}
 
-				changes.sort((c1, c2) -> c2.getId().compareTo(c1.getId()));
+				List<ModificationHistory> changes = os2skoledataService.getChanges(institution.getInstitutionNumber());
+				if (!changes.isEmpty()) {
 
-				// we only handle person changes right now. We are not using ous.
-				List<ModificationHistory> typePerson = changes.stream().filter(c -> c.getEntityType().equals(EntityType.INSTITUTION_PERSON)).toList();
-				//				List<ModificationHistory> typeInstitution = changes.stream().filter(c -> c.getEntityType().equals(EntityType.INSTITUTION)).toList();
-				//				List<ModificationHistory> typeGroup = changes.stream().filter(c -> c.getEntityType().equals(EntityType.GROUP)).toList();
+					// init
+					azureADService.initializeClient();
 
-				List<Long> changedPersonIds = typePerson.stream().map(ModificationHistory::getEntityId).toList();
-				//				List<Long> changedInstitutionIds = typeInstitution.stream().map(ModificationHistory::getEntityId).toList();
-				//				List<Long> changedGroupIds = typeGroup.stream().map(ModificationHistory::getEntityId).toList();
+					// all usernames
+					List<User> allUsers = azureADService.getAllUsers();
+					List<String> allUsernames = azureADService.getAllUsernames();
+					if (allUsernames == null) {
+						throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
+					}
 
-				List<DBUser> changedUsers = os2skoledataService.getChangedUsers(changedPersonIds);
-				//				List<Institution> changedInstitutions = os2skoledataService.getChangedInstitutions(changedInstitutionIds);
-				//				List<DBGroup> changedGroups = os2skoledataService.getChangedGroups(changedGroupIds);
+					List<String> allUsernamesOS2skoledata = os2skoledataService.getAllUsernames();
+					Map<String, List<String>> usernameMap = azureADService.generateUsernameMap(allUsernames, allUsernamesOS2skoledata);
+					if (usernameMap == null) {
+						throw new Exception("Failed to generate username map from AD. Will not perform sync.");
+					}
 
-				// handle changes
-				//				handleInstitutionChanges(typeInstitution, changedInstitutions);
-				//				handleGroupChanges(typeGroup, changedGroups);
-				handlePersonChanges(typePerson, changedUsers, usernameMap, allUsers);
+					changes.sort((c1, c2) -> c2.getId().compareTo(c1.getId()));
 
-				// setting head last
-				os2skoledataService.setHead(changes.get(0).getId());
+					// we only handle person changes right now. We are not using ous.
+					List<ModificationHistory> typePerson = changes.stream().filter(c -> c.getEntityType().equals(EntityType.INSTITUTION_PERSON)).toList();
+					//				List<ModificationHistory> typeInstitution = changes.stream().filter(c -> c.getEntityType().equals(EntityType.INSTITUTION)).toList();
+					//				List<ModificationHistory> typeGroup = changes.stream().filter(c -> c.getEntityType().equals(EntityType.GROUP)).toList();
+
+					List<Long> changedPersonIds = typePerson.stream().map(ModificationHistory::getEntityId).toList();
+					//				List<Long> changedInstitutionIds = typeInstitution.stream().map(ModificationHistory::getEntityId).toList();
+					//				List<Long> changedGroupIds = typeGroup.stream().map(ModificationHistory::getEntityId).toList();
+
+					List<DBUser> changedUsers = os2skoledataService.getChangedUsers(changedPersonIds);
+					//				List<Institution> changedInstitutions = os2skoledataService.getChangedInstitutions(changedInstitutionIds);
+					//				List<DBGroup> changedGroups = os2skoledataService.getChangedGroups(changedGroupIds);
+
+					// handle changes
+					//				handleInstitutionChanges(typeInstitution, changedInstitutions);
+					//				handleGroupChanges(typeGroup, changedGroups);
+					handlePersonChanges(typePerson, changedUsers, usernameMap, allUsers);
+
+					// setting head last
+					os2skoledataService.setHead(changes.get(0).getId(), institution.getInstitutionNumber());
+				}
 			}
 		}
 		catch (Exception e) {
@@ -225,14 +306,25 @@ public class SyncService {
 
 	private void handlePersonChanges(List<ModificationHistory> typePerson, List<DBUser> changedUsers, Map<String, List<String>> usernameMap, List<User> allUsers) throws Exception {
 		for (DBUser user : changedUsers) {
+			if (user.getInstitutions().stream().anyMatch(i -> i.isLocked() || globalLockedInstitutionNumbers.contains(i.getInstitutionNumber()))) {
+				log.info("Skipping deltasync for user with db id " + user.getDatabaseId() + ". User is in at least one locked institution.");
+				continue;
+			}
+
 			List<ModificationHistory> userChanges = typePerson.stream().filter(c -> c.getEntityId() == user.getDatabaseId()).toList();
 			boolean create = userChanges.stream().anyMatch(c -> c.getEventType().equals(EventType.CREATE));
 			boolean update = userChanges.stream().anyMatch(c -> c.getEventType().equals(EventType.UPDATE));
 			boolean delete = userChanges.stream().anyMatch(c -> c.getEventType().equals(EventType.DELETE));
 
 			log.info("Delta sync handling user with databaseId " + user.getDatabaseId());
-			User match = allUsers.stream().filter(u -> u.employeeId != null && u.employeeId.equals(user.getCpr())).findAny().orElse(null);
-			if (create && match == null) {
+			User match;
+			if (config.getSyncSettings().isUseUsernameAsKey()) {
+				match = allUsers.stream().filter(u -> u.mailNickname != null && u.mailNickname.equals(user.getUsername())).findAny().orElse(null);
+			} else {
+				match = allUsers.stream().filter(u -> u.employeeId != null && u.employeeId.equals(user.getCpr())).findAny().orElse(null);
+			}
+
+			if (!user.isDeleted() && create && match == null) {
 				// should user be created?
 				List<String> excludedRoles = getExcludedRoles(user.getCurrentInstitutionNumber());
 				boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
@@ -241,23 +333,43 @@ public class SyncService {
 				}
 
 				// find available username and create
-				String username = generateUsername(user.getFirstName(), usernameMap);
+				String username = null;
+				if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) && user.getStilUsername() != null)
+				{
+					boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
+					if (!exists)
+					{
+						username = user.getStilUsername();
+						addUsernameToMap(user.getStilUsername(), usernameMap);
+					} else
+					{
+						username = generateUsername(user.getFirstName(), usernameMap);
+					}
+				} else
+				{
+					username = generateUsername(user.getFirstName(), usernameMap);
+				}
+
 				if (username == null) {
 					throw new Exception("Failed to generate username for user with LocalPersonId " + user.getLocalPersonId());
 				}
 
 				user.setUsername(username);
-				os2skoledataService.setUsernameOnUser(username, user.getLocalPersonId());
+				os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 				log.info("Delta sync generated username " + username + " for user with databaseId " + user.getDatabaseId());
 				User createdUser = azureADService.createAccount(username, user);
-				allUsers.add(createdUser);
-				log.info("Delta sync created account for user with databaseId " + user.getDatabaseId() + " and username" + username);
+
+				// is null if userDryRun
+				if (createdUser != null) {
+					allUsers.add(createdUser);
+					log.info("Delta sync created account for user with databaseId " + user.getDatabaseId() + " and username" + username);
+				}
 			}
-			else if (create && match != null) {
+			else if (!user.isDeleted() && create && match != null) {
 				update = true;
 			}
 
-			if (update && match != null) {
+			if (!user.isDeleted() && update && match != null) {
 				String username = null;
 				if (match.userPrincipalName != null) {
 					username = match.userPrincipalName.replace("@" + config.getSyncSettings().getDomain(), "");
@@ -267,24 +379,28 @@ public class SyncService {
 					throw new Exception("UserPrincipalName / username on user was null. Something is wrong. Azure user with id " + match.id);
 				}
 
-				// delete if the user should be excluded
+				// delete if the user should be excluded and is managed by OS2skoledata
 				List<String> excludedRoles = getExcludedRoles(user.getCurrentInstitutionNumber());
 				boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
 				if (shouldBeExcluded) {
-					azureADService.disableUser(match.id, "" + user.getDatabaseId());
-				}
+					if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
+						azureADService.disableUser(match.id, username);
+					}
+				} else {
+					// update username in OS2skoledata
+					if (user.getUsername() == null || !username.equals(user.getUsername())) {
+						user.setUsername(username);
+						os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
+					}
 
-				// update username in OS2skoledata
-				if (user.getUsername() == null || !username.equals(user.getUsername())) {
-					user.setUsername(username);
-					os2skoledataService.setUsernameOnUser(username, user.getLocalPersonId());
+					azureADService.updateAccount(user, match);
 				}
-
-				azureADService.updateAccount(user, match);
 			}
 
 			if (delete && match != null) {
-				azureADService.disableUser(match.id, "" + user.getDatabaseId());
+				if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
+					azureADService.disableUser(match.id, "" + user.getDatabaseId());
+				}
 			}
 		}
 	}
@@ -310,30 +426,38 @@ public class SyncService {
 	}
 
 	private boolean shouldBeExcluded(DBUser user, List<String> excludedRoles) {
-		if (user.getRole().equals(Role.STUDENT)) {
-			if (excludedRoles.contains(user.getStudentRole().toString())) {
+		if (user.getGlobalRole().equals(Role.STUDENT)) {
+			if (excludedRoles.contains(user.getGlobalStudentRole().toString())) {
 				return true;
 			}
 		}
-		else if (user.getRole().equals(Role.EMPLOYEE)) {
-			for (EmployeeRole role : user.getEmployeeRoles()) {
+		else if (user.getGlobalRole().equals(Role.EMPLOYEE)) {
+			for (EmployeeRole role : user.getGlobalEmployeeRoles()) {
 				if (!excludedRoles.contains(role.toString())) {
 					return false;
 				}
 			}
 			return true;
 		}
-		else if (user.getRole().equals(Role.EXTERNAL)) {
-			if (excludedRoles.contains(user.getExternalRole().toString())) {
+		else if (user.getGlobalRole().equals(Role.EXTERNAL)) {
+			if (excludedRoles.contains(user.getGlobalExternalRole().toString())) {
 				return true;
 			}
 		}
 		else {
-			log.info("Unknow role " + user.getRole() + " for user with username " + user.getUsername() + ". Disabling user / not creating user.");
+			log.info("Unknown role " + user.getRole() + " for user with username " + user.getUsername() + ". Disabling user / not creating user.");
 			return true;
 		}
 
 		return false;
+	}
+
+	private void addUsernameToMap(String stilUsername, Map<String, List<String>> usernameMap) {
+		String key = stilUsername.substring(0,4);
+		if (!usernameMap.containsKey(key)) {
+			usernameMap.put(key, new ArrayList<>());
+		}
+		usernameMap.get(key).add(stilUsername);
 	}
 
 	private String generateUsername(String firstName, Map<String, List<String>> usernameMap) throws Exception {
@@ -389,36 +513,46 @@ public class SyncService {
 	}
 
 	private int getNamePartLength() {
-		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN)) {
+		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
 			return 4;
 		}
 		return 3;
 	}
 
 	private String getPrefix() {
-		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN)) {
+		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
 			return "";
 		}
 		return config.getSyncSettings().getUsernameSettings().getUsernamePrefix() == null ? "" : config.getSyncSettings().getUsernameSettings().getUsernamePrefix();
 	}
 
 	private boolean isNameFirst() {
-		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.PREFIX_NAME_LAST)) {
+		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.PREFIX_NAME_LAST) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.THREE_NUMBERS_THREE_CHARS_FROM_NAME)) {
 			return false;
 		}
 		return true;
 	}
 
 	private void populateTable() {
-		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN)) {
+		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
 			int idx = 0;
-
-			for (int i = 0; i < third.length; i++) {
-				for (int j = 0; j < third.length; j++) {
-					for (int k = 0; k < third.length; k++) {
-						for (int l = 0; l < third.length; l++) {
-							uniqueIds.put(idx++, ("" + third[i] + third[j] + third[k] + third[l]));
+			char[] possibleNumbers = "0123456789".toCharArray();
+			for (int i = 0; i < possibleNumbers.length; i++) {
+				for (int j = 0; j < possibleNumbers.length; j++) {
+					for (int k = 0; k < possibleNumbers.length; k++) {
+						for (int l = 0; l < possibleNumbers.length; l++) {
+							uniqueIds.put(idx++, ("" + possibleNumbers[i] + possibleNumbers[j] + possibleNumbers[k] + possibleNumbers[l]));
 						}
+					}
+				}
+			}
+		} else if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.THREE_NUMBERS_THREE_CHARS_FROM_NAME)) {
+			int idx = 0;
+			char[] possibleNumbers = "23456789".toCharArray();
+			for (int i = 0; i < possibleNumbers.length; i++) {
+				for (int j = 0; j < possibleNumbers.length; j++) {
+					for (int k = 0; k < possibleNumbers.length; k++) {
+						uniqueIds.put(idx++, ("" + possibleNumbers[i] + possibleNumbers[j] + possibleNumbers[k]));
 					}
 				}
 			}

@@ -13,8 +13,6 @@ public class DeltaSync {
 	@Autowired
 	private SyncService syncService;
 
-	// @Scheduled(fixedRate = 60 * 1000) // for testing
-	// run daily at 01:10 unless something else is in the application.properties
 	@Scheduled(cron = "${cron.deltaSync:0 0/5 * * * ?}")
 	public void sync() throws Exception {
 		syncService.deltaSync();

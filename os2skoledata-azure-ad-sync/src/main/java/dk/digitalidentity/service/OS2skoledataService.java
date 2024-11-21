@@ -32,7 +32,7 @@ public class OS2skoledataService {
 	private OS2skoledataAzureADConfiguration config;
 
 	public List<Institution> getInstitutions() throws Exception {
-		log.debug("Fetching institutions");
+		log.info("Fetching institutions");
 		HttpEntity<String> request = new HttpEntity<>(getHeaders());
 		String query = config.getOs2skoledata().getBaseUrl() + "/api/institutions";
 
@@ -41,12 +41,12 @@ public class OS2skoledataService {
 			throw new Exception("Failed to fetch institutions. Will not update");
 		}
 
-		log.debug("Finished fetching institutions");
+		log.info("Finished fetching institutions");
 		return Arrays.asList(response.getBody());
 	}
 
 	public List<DBGroup> getClassesForInstitution(Institution institution) throws Exception {
-		log.debug("Fetching classes for institutions " + institution.getInstitutionName());
+		log.info("Fetching classes for institutions " + institution.getInstitutionName());
 		HttpEntity<String> request = new HttpEntity<>(getHeaders());
 		String query = config.getOs2skoledata().getBaseUrl() + "/api/groups?institutionNumber=" + institution.getInstitutionNumber();
 
@@ -55,7 +55,7 @@ public class OS2skoledataService {
 			throw new Exception("Failed to fetch groups for institution " + institution.getInstitutionName() + ". Will not update");
 		}
 
-		log.debug("Finished fetching classes for institutions " + institution.getInstitutionName());
+		log.info("Finished fetching classes for institutions " + institution.getInstitutionName());
 		return Arrays.asList(response.getBody());
 	}
 
@@ -69,13 +69,17 @@ public class OS2skoledataService {
 			throw new Exception("Failed to fetch institutions. Will not update");
 		}
 
-		log.debug("Finished fetching users for institutions " + institution.getInstitutionName());
+		log.info("Finished fetching users for institutions " + institution.getInstitutionName());
 		return Arrays.asList(response.getBody());
 	}
 
-	record UsernameRequest(String localPersonId, String username) {}
-	public void setUsernameOnUser(String localPersonId, String username) throws Exception {
-		UsernameRequest usernameRequest = new UsernameRequest(localPersonId, username);
+	record UsernameRequest(long personDatabaseId, String username) {}
+	public void setUsernameOnUser(long databaseId, String username) throws Exception {
+		if (config.getAzureAd().isUserDryRun()) {
+			log.info("UserDryRun: Would set username " + username + " on user with database id " + databaseId + " in OS2skoledata.");
+			return;
+		}
+		UsernameRequest usernameRequest = new UsernameRequest(databaseId, username);
 		HttpEntity<UsernameRequest> request = new HttpEntity<>(usernameRequest, getHeaders());
 		String query = config.getOs2skoledata().getBaseUrl() + "/api/person/username";
 
@@ -98,14 +102,18 @@ public class OS2skoledataService {
 	}
 
 	record HeadRequest(long head) {}
-	public void setHead(long head) throws Exception {
+	public void setHead(long head, String institutionNumber) throws Exception {
+		if (config.getAzureAd().isUserDryRun()) {
+			log.info("UserDryRun: Would set head " + head + " on institution " + institutionNumber);
+			return;
+		}
 		HeadRequest headRequest = new HeadRequest(head);
 		HttpEntity<HeadRequest> request = new HttpEntity<>(headRequest, getHeaders());
-		String query = config.getOs2skoledata().getBaseUrl() + "/api/head";
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/head/" + institutionNumber;
 
 		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
 		if (!response.getStatusCode().equals(HttpStatus.OK)) {
-			throw new Exception("Failed to set head in OS2skoledata. Message: " + response.getBody());
+			throw new Exception("Failed to set head in OS2skoledata for institution: " + institutionNumber + ". Message: " + response.getBody());
 		}
 	}
 
@@ -133,9 +141,9 @@ public class OS2skoledataService {
 		}
 	}
 
-	public List<ModificationHistory> getChanges() throws Exception {
+	public List<ModificationHistory> getChanges(String institutionNumber) throws Exception {
 		HttpEntity<String> request = new HttpEntity<>(getHeaders());
-		String query = config.getOs2skoledata().getBaseUrl() + "/api/changes";
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/changes/" + institutionNumber;
 
 		ResponseEntity<ModificationHistory[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, ModificationHistory[].class);
 		if (response.getStatusCode().equals(HttpStatus.OK) && response.getBody() != null) {
@@ -183,6 +191,62 @@ public class OS2skoledataService {
 		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
 			throw new Exception("Failed to fetch changed groups. Will not delta update");
 		}
+		return Arrays.asList(response.getBody());
+	}
+
+	public List<String> getLockedUsernames() throws Exception {
+		log.info("Fetching locked usernames");
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/locked/usernames";
+
+		ResponseEntity<String[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String[].class);
+		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
+			throw new Exception("Failed to fetch locked usernames. Will not update");
+		}
+
+		log.info("Finished fetching locked usernames");
+		return Arrays.asList(response.getBody());
+	}
+
+	public List<String> getAllUsernames() throws Exception {
+		log.info("Fetching all usernames");
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/usernames/all";
+
+		ResponseEntity<String[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String[].class);
+		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
+			throw new Exception("Failed to fetch all usernames. Will not update");
+		}
+
+		log.info("Finished fetching all usernames");
+		return Arrays.asList(response.getBody());
+	}
+
+	public List<String> getLockedGroupIds() throws Exception {
+		log.info("Fetching locked group ids");
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/locked/groups/azure";
+
+		ResponseEntity<String[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String[].class);
+		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
+			throw new Exception("Failed to fetch locked group ids. Will not update");
+		}
+
+		log.info("Finished fetching locked group ids");
+		return Arrays.asList(response.getBody());
+	}
+
+	public List<String> getLockedTeamIds() throws Exception {
+		log.info("Fetching locked team ids");
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/locked/teams/azure";
+
+		ResponseEntity<String[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String[].class);
+		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
+			throw new Exception("Failed to fetch locked team ids. Will not update");
+		}
+
+		log.info("Finished fetching locked team ids");
 		return Arrays.asList(response.getBody());
 	}
 

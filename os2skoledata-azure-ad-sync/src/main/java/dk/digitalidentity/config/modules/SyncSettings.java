@@ -9,6 +9,8 @@ public class SyncSettings {
 	private String domain;
 	private UsernameSettings usernameSettings = new UsernameSettings();
 	private FilteringSettings filteringSettings = new FilteringSettings();
-	private LicenseSettings licenseSettings = new LicenseSettings();
 	private NameStandards nameStandards = new NameStandards();
+	private boolean useUsernameAsKey = false;
+	private AzureField uniIdField = AzureField.NONE;
+	private AzureTeamsSettings azureTeamsSettings = new AzureTeamsSettings();
 }

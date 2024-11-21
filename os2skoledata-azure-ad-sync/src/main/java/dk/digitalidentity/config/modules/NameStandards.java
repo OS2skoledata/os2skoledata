@@ -10,6 +10,13 @@ public class NameStandards {
 	private String allStudentsInInstitutionSecurityGroupNameStandard;
 	private String allEmployeesInInstitutionSecurityGroupNameStandard;
 	private String classSecurityGroupNameStandard;
+	private String classSecurityGroupNameStandardNoClassYear;
 	private String globalEmployeeSecurityGroupName;
 	private String globalStudentSecurityGroupName;
+	private String allEmployeesInInstitutionTeamNameStandard;
+	private String allEmployeesInInstitutionTeamMailStandard;
+	private String classTeamNameStandard;
+	private String classTeamNameStandardNoClassYear;
+	private String classTeamMailStandard;
+	private String classTeamMailStandardNoClassYear;
 }

@@ -15,4 +15,7 @@ public class Institution {
 	private String allAzureSecurityGroupId;
 	private String studentAzureSecurityGroupId;
 	private String employeeAzureSecurityGroupId;
+	private boolean locked;
+	private String employeeAzureTeamId;
+	private String teamAdminUsername;
 }

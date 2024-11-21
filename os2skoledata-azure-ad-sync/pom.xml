@@ -64,6 +64,8 @@
 				</configuration>
 			</plugin>
 		</plugins>
+
+		<finalName>os2skoledata-azure</finalName>
 	</build>
 
 </project>
