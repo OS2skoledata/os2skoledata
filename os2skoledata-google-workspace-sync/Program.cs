@@ -1,7 +1,8 @@
-using Microsoft.Extensions.Hosting;
-using os2skoledata_google_workspace_sync.Config;
-using Quartz;
 using Serilog;
+using Microsoft.Extensions.Hosting;
+using Quartz;
+using Microsoft.Extensions.Configuration;
+using os2skoledata_google_workspace_sync.Config;
 
 namespace os2skoledata_google_workspace_sync
 {
@@ -14,6 +15,11 @@ namespace os2skoledata_google_workspace_sync
 
         public static IHostBuilder CreateHostBuilder(string[] args) =>
             Host.CreateDefaultBuilder(args)
+                .ConfigureAppConfiguration((hostingContext, config) =>
+                {
+                    config.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: false);
+                    config.AddJsonFile("/settings/appsettings.json", optional: true, reloadOnChange: false);
+                })
                 .UseSerilog()
                 .ConfigureServices((hostContext, services) =>
                 {

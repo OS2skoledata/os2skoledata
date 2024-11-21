@@ -1,6 +1,4 @@
-﻿
-using Newtonsoft.Json;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
 {
@@ -14,21 +12,30 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string Username { get; set; }
         // TODO skal EXTERNAL håndteres anerledes end employee?
         public DBRole Role { get; set; }
+        public DBRole GlobalRole { get; set; }
         public List<string> GroupIds { get; set; }
         public List<Institution> Institutions { get; set; }
         public Institution CurrentInstitution { get; set; }
+        public bool Deleted;
+        public List<string> TotalRoles { get; set; }
+        public string StilUsername { get; set; }
+        public string UniId { get; set; }
+        public List<DBContactCard> ContactCards { get; set; }
 
         // empty for all other than students
         public List<string> StudentMainGroups { get; set; }
         public List<string> StudentMainGroupsGoogleWorkspaceIds { get; set; }
         public StudentRole StudentRole { get; set; }
+        public StudentRole GlobalStudentRole { get; set; }
         public long StudentMainGroupStartYearForInstitution { get; set; }
 
         // empty for all other than employees
         public List<EmployeeRole> EmployeeRoles { get; set; }
+        public List<EmployeeRole> GlobalEmployeeRoles { get; set; }
 
         // empty for all other than externals
         public ExternalRole ExternalRole { get; set; }
+        public ExternalRole GlobalExternalRole { get; set; }
 
         // not from api, only for keeping track of members of security groups
         public bool IsExcluded {get; set; } = false;

@@ -27,7 +27,7 @@ namespace os2skoledata_google_workspace_sync.Jobs
                 stopWatch.Start();
                 syncService.Synchronize();
                 stopWatch.Stop();
-                logger.LogInformation($"Finsihed executing SyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds");
+                logger.LogInformation($"Finished executing SyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds");
                 return Task.CompletedTask;
             }
             catch (Exception e)

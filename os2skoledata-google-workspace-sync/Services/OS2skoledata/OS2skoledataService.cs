@@ -14,12 +14,14 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
     {
         private readonly Uri baseUri;
         private readonly string apiKey;
+        private readonly bool userDryRun;
         private readonly JsonSerializerSettings jsonSerializerSettings = new JsonSerializerSettings() { NullValueHandling = NullValueHandling.Ignore };
 
         public OS2skoledataService(IServiceProvider sp) : base(sp)
         {
             baseUri = new Uri(settings.OS2skoledataSettings.BaseUrl);
             apiKey = settings.OS2skoledataSettings.ApiKey;
+            userDryRun = settings.WorkspaceSettings.UserDryRun;
         }
 
         public List<Institution> GetInstitutions()
@@ -34,7 +36,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             var institutionsArray = JsonConvert.DeserializeObject<Institution[]>(responseString.Result, jsonSerializerSettings);
 
-            logger.LogInformation("Finshed fetching institutions from OS2skoledata");
+            logger.LogInformation("finished fetching institutions from OS2skoledata");
             return new List<Institution>(institutionsArray);
         }
 
@@ -50,7 +52,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             var groupArray = JsonConvert.DeserializeObject<DBGroup[]>(responseString.Result, jsonSerializerSettings);
 
-            logger.LogInformation($"Finshed fetching groups from {institution.InstitutionName} in OS2skoledata");
+            logger.LogInformation($"finished fetching groups from {institution.InstitutionName} in OS2skoledata");
             return new List<DBGroup>(groupArray);
         }
 
@@ -66,7 +68,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             var userArray = JsonConvert.DeserializeObject<DBUser[]>(responseString.Result, jsonSerializerSettings);
 
-            logger.LogInformation($"Finshed fetching people from {institution.InstitutionName} in OS2skoledata");
+            logger.LogInformation($"finished fetching people from {institution.InstitutionName} in OS2skoledata");
             return new List<DBUser>(userArray);
         }
 
@@ -125,26 +127,33 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             var head = JsonConvert.DeserializeObject<long>(responseString.Result, jsonSerializerSettings);
 
-            logger.LogInformation("Finshed fetching head from OS2skoledata");
+            logger.LogInformation("finished fetching head from OS2skoledata");
             return head;
         }
 
-        public void SetHead(long head)
+        public void SetHead(long head, string institutionNumber)
         {
-            HeadRequest request = new HeadRequest();
-            request.Head = head;
+            if (userDryRun)
+            {
+                logger.LogInformation($"DryRun: would have sat head {head} for institution with number {institutionNumber} in OS2skoledata");
+            }
+            else
+            {
+                HeadRequest request = new HeadRequest();
+                request.Head = head;
 
-            using var httpClient = GetHttpClient();
-            var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
-            var response = httpClient.PostAsync(new Uri(baseUri + "api/head"), content);
-            response.Wait();
-            response.Result.EnsureSuccessStatusCode();
+                using var httpClient = GetHttpClient();
+                var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
+                var response = httpClient.PostAsync(new Uri(baseUri + "api/head/" + institutionNumber), content);
+                response.Wait();
+                response.Result.EnsureSuccessStatusCode();
+            }
         }
 
-        public List<ModificationHistory> GetChanges()
+        public List<ModificationHistory> GetChangesForInstitution(string institutionNumber)
         {
             using var httpClient = GetHttpClient();
-            var response = httpClient.GetAsync(new Uri(baseUri, $"api/changes"));
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/changes/" + institutionNumber));
             response.Wait();
             if (response.Result.IsSuccessStatusCode)
             {
@@ -218,6 +227,83 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             var changeArray = JsonConvert.DeserializeObject<DBGroup[]>(responseString.Result, jsonSerializerSettings);
 
             return new List<DBGroup>(changeArray);
+        }
+
+        public List<string> GetLockedUsernames()
+        {
+            logger.LogInformation($"Fetching locked usernames from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/locked/usernames"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var stringArray = JsonConvert.DeserializeObject<string[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation($"finished locked usernames from OS2skoledata");
+            return new List<string>(stringArray);
+        }
+
+        public List<string> GetLockedGroupEmails()
+        {
+            logger.LogInformation($"Fetching locked group emails from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/locked/groups/workspace"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var stringArray = JsonConvert.DeserializeObject<string[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation($"finished locked group emails from OS2skoledata");
+            return new List<string>(stringArray);
+        }
+
+        public List<string> GetLockedDriveIds()
+        {
+            logger.LogInformation($"Fetching locked drive ids from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/locked/drives/workspace"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var stringArray = JsonConvert.DeserializeObject<string[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation($"finished locked drive ids from OS2skoledata");
+            return new List<string>(stringArray);
+        }
+
+        public void SetUsernameOnUser(string username, long id)
+        {
+            UsernameRequest request = new UsernameRequest();
+            request.PersonDatabaseId = id;
+            request.Username = username;
+
+            using var httpClient = GetHttpClient();
+            var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
+            var response = httpClient.PostAsync(new Uri(baseUri + "api/person/username"), content);
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+        }
+
+        public List<string> GetAllUsernames()
+        {
+            logger.LogInformation($"Fetching all usernames from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/usernames/all"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var usernameArray = JsonConvert.DeserializeObject<string[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation($"finished fetching all usernames OS2skoledata");
+            return new List<string>(usernameArray);
         }
 
         private HttpClient GetHttpClient()
