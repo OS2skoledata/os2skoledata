@@ -3,17 +3,16 @@ package dk.digitalidentity.os2skoledata.api;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import dk.digitalidentity.os2skoledata.dao.model.Client;
-import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
-import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
-import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
-import dk.digitalidentity.os2skoledata.security.SecurityUtil;
-import dk.digitalidentity.os2skoledata.service.SettingService;
+import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
+import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,15 +34,19 @@ import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBRole;
 import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
+import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBGender;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.EntityType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
+import dk.digitalidentity.os2skoledata.service.SettingService;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -62,7 +65,8 @@ public class ReadApiController {
 	@Autowired
 	private SettingService settingService;
 
-	record InstitutionRecord(long databaseId, String name, String number, String googleWorkspaceId, String allDriveGoogleWorkspaceId, String studentDriveGoogleWorkspaceId, String employeeDriveGoogleWorkspaceId, String allAzureSecurityGroupId, String studentAzureSecurityGroupId, String employeeAzureSecurityGroupId, String employeeGroupGoogleWorkspaceEmail, InstitutionType type, Map<String, String> googleWorkspaceEmailMappings) {}
+	// TODO lav records om til dto klasser, det tror jeg vi bliver glade for
+	record InstitutionRecord(long databaseId, String name, String number, boolean locked, String googleWorkspaceId, String allDriveGoogleWorkspaceId, String studentDriveGoogleWorkspaceId, String employeeDriveGoogleWorkspaceId, String allAzureSecurityGroupId, String studentAzureSecurityGroupId, String employeeAzureSecurityGroupId, String employeeGroupGoogleWorkspaceEmail, String studentInstitutionGoogleWorkspaceId, String employeeInstitutionGoogleWorkspaceId, InstitutionType type, Map<String, String> googleWorkspaceEmailMappings, String currentSchoolYear, String employeeAzureTeamId, String teamAdminUsername) {}
 
 	@GetMapping("/api/institutions")
 	public ResponseEntity<?> getInstitutions() {
@@ -71,6 +75,7 @@ public class ReadApiController {
 						i.getId(),
 						i.getInstitutionName(),
 						i.getInstitutionNumber(),
+						settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + i.getInstitutionNumber()),
 						i.getGoogleWorkspaceId(),
 						i.getAllDriveGoogleWorkspaceId(),
 						i.getStudentDriveGoogleWorkspaceId(),
@@ -79,16 +84,23 @@ public class ReadApiController {
 						i.getStudentAzureSecurityGroupId(),
 						i.getEmployeeAzureSecurityGroupId(),
 						i.getEmployeeGroupGoogleWorkspaceEmail(),
+						i.getStudentInstitutionGoogleWorkspaceId(),
+						i.getEmployeeInstitutionGoogleWorkspaceId(),
 						i.getType(),
-						institutionService.generateEmailMap(i)
+						institutionService.generateEmailMap(i),
+						institutionService.findCurrentSchoolYearForGWEmails(i),
+						i.getEmployeeAzureTeamId(),
+						i.getAzureEmployeeTeamAdmin() != null ? i.getAzureEmployeeTeamAdmin().getUsername() : null
 				)).toList();
 		return ResponseEntity.ok(institutions);
 	}
 
+	public record MiniGroupRecord(long databaseId, int startYear) {}
 	record InstitutionPersonRecord(long databaseId, String localPersonId, String source, @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified,
-								   String firstName, String familyName, DBGender gender, String cpr, String username, PersonRole role, List<Long> groupIds,
-								   List<Long> studentMainGroups, List<String> studentMainGroupsGoogleWorkspaceIds, List<InstitutionRecord> institutions, String currentInstitutionNumber, DBStudentRole studentRole,
-								   List<DBEmployeeRole> employeeRoles, DBExternalRoleType externalRole, InstitutionRecord currentInstitution, int studentMainGroupStartYearForInstitution) {}
+								   String firstName, String familyName, DBGender gender, String cpr, String username, String stilUsername, String uniId, PersonRole role, PersonRole globalRole, List<Long> groupIds,
+								   List<Long> studentMainGroups, List<MiniGroupRecord> studentMainGroupsAsObjects, List<String> studentMainGroupsGoogleWorkspaceIds, String stilMainGroupCurrentInstitution, List<String> stilGroupsCurrentInstitution, List<InstitutionRecord> institutions, String currentInstitutionNumber, DBStudentRole studentRole, DBStudentRole globalStudentRole,
+								   List<DBEmployeeRole> employeeRoles, Set<DBEmployeeRole> globalEmployeeRoles, DBExternalRoleType externalRole, DBExternalRoleType globalExternalRole, InstitutionRecord currentInstitution, int studentMainGroupStartYearForInstitution,
+								   String studentMainGroupLevelForInstitution, boolean deleted, List<String> totalRoles, List<ContactCardDTO> contactCards) {}
 
 	@GetMapping("/api/persons")
 	public ResponseEntity<?> getInstitutionPersons(@RequestParam(name = "institutionNumber") String institutionNumber) {
@@ -97,85 +109,176 @@ public class ReadApiController {
 			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " not found.");
 		}
 
+		boolean locked = settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institution.getInstitutionNumber());
+		if (locked) {
+			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " is locked due to school year change.");
+		}
+
 		int currentYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
 		List<DBInstitutionPerson> persons = institutionPersonService.findByInstitution(institution);
 		List<DBGroup> groups = groupService.findAllNotDeleted();
 		List<InstitutionPersonRecord> result = new ArrayList<>();
+
+		List<DBInstitutionPerson> allInstitutionPerson = institutionPersonService.findAllIncludingDeleted();
+
+		Map<String, List<DBInstitutionPerson>> institutionPersonMap = allInstitutionPerson.stream().collect(Collectors.groupingBy(i -> i.getPerson().getCivilRegistrationNumber()));
+
 		for (DBInstitutionPerson person : persons) {
 			if (person.isDeleted()) {
 				continue;
 			}
 
+			List<ContactCardDTO> contactCardRecords = new ArrayList<>();
 			List<Long> studentMainGroup = new ArrayList<>();
+			List<MiniGroupRecord> studentMainGroupsAsObjects = new ArrayList<>();
 			List<String> studentMainGroupsWorkspace = new ArrayList<>();
+			List<DBGroup> studentMainGroupGroups = new ArrayList<>();
+			String stilMainGroupCurrentInstitution = null;
+			List<String> stilGroupsCurrentInstitution = new ArrayList<>();
 			PersonRole role = null;
 			List<Long> groupIds = new ArrayList<>();
 			DBStudentRole studentRole = null;
 			List<DBEmployeeRole> employeeRole = new ArrayList<>();
 			DBExternalRoleType externalRole = null;
 			int studentMainGroupStartYearForInstitution = 0;
-			List<DBInstitutionPerson> matchingPeople = institutionPersonService.findByPersonCivilRegistrationNumber(person.getPerson().getCivilRegistrationNumber());
-			List<InstitutionRecord> institutions = new ArrayList<>(matchingPeople.stream().map(p -> new InstitutionRecord(p.getInstitution().getId(), p.getInstitution().getInstitutionName(), p.getInstitution().getInstitutionNumber(), p.getInstitution().getGoogleWorkspaceId(), p.getInstitution().getAllDriveGoogleWorkspaceId(), p.getInstitution().getStudentDriveGoogleWorkspaceId(), p.getInstitution().getEmployeeDriveGoogleWorkspaceId(), p.getInstitution().getAllAzureSecurityGroupId(), p.getInstitution().getStudentAzureSecurityGroupId(), p.getInstitution().getEmployeeAzureSecurityGroupId(), p.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), p.getInstitution().getType(), institutionService.generateEmailMap(p.getInstitution()))).toList());
-			if (person.getExtern() != null) {
+			String studentMainGroupLevelForInstitution = null;
+			// load all of them into memory, and then do lookup in-mem instead
+			List<DBInstitutionPerson> matchingPeopleIncludingDeleted = institutionPersonMap.get(person.getPerson().getCivilRegistrationNumber());
+
+			List<DBInstitutionPerson> matchingPeople = matchingPeopleIncludingDeleted.stream().filter(m -> !m.isDeleted()).collect(Collectors.toList());
+			List<DBInstitutionPerson> matchingPeopleDeleted = matchingPeopleIncludingDeleted.stream().filter(m -> m.isDeleted()).collect(Collectors.toList());
+			List<InstitutionRecord> institutions = new ArrayList<>(matchingPeople.stream().map(p -> new InstitutionRecord(p.getInstitution().getId(), p.getInstitution().getInstitutionName(), p.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + p.getInstitution().getInstitutionNumber()), p.getInstitution().getGoogleWorkspaceId(), p.getInstitution().getAllDriveGoogleWorkspaceId(), p.getInstitution().getStudentDriveGoogleWorkspaceId(), p.getInstitution().getEmployeeDriveGoogleWorkspaceId(), p.getInstitution().getAllAzureSecurityGroupId(), p.getInstitution().getStudentAzureSecurityGroupId(), p.getInstitution().getEmployeeAzureSecurityGroupId(), p.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), p.getInstitution().getStudentInstitutionGoogleWorkspaceId(), p.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), p.getInstitution().getType(), institutionService.generateEmailMap(p.getInstitution()), institutionService.findCurrentSchoolYearForGWEmails(p.getInstitution()), p.getInstitution().getEmployeeAzureTeamId(), p.getInstitution().getAzureEmployeeTeamAdmin() != null ? p.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null)).toList());
+			String stilUsername = null;
+			String uniId = null;
+
+			if (person.getEmployee() != null) {
+				role = PersonRole.EMPLOYEE;
+				stilGroupsCurrentInstitution.addAll(person.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList()));
+				for (DBEmployeeGroupId groupId : person.getEmployee().getGroupIds()) {
+					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
+				}
+				employeeRole = person.getEmployee().getRoles().stream().map(DBRole::getEmployeeRole).toList();
+			}
+			else if (person.getStudent() != null) {
+				role = PersonRole.STUDENT;
+				stilGroupsCurrentInstitution.addAll(person.getStudent().getGroupIds().stream().map(DBStudentGroupId::getGroupId).collect(Collectors.toList()));
+				for (DBStudentGroupId groupId : person.getStudent().getGroupIds()) {
+					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
+				}
+				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+					if (matchingPerson.getStudent() != null) {
+						DBGroup group = groups.stream().filter(g -> g.getInstitution().getId() == matchingPerson.getInstitution().getId() && g.getGroupId().equals(matchingPerson.getStudent().getMainGroupId())).findAny().orElse(null);
+						if (group != null) {
+							studentMainGroupGroups.add(group);
+						}
+					}
+				}
+				studentRole = person.getStudent().getRole();
+				DBGroup mainGroupForInstitution = groups.stream().filter(g -> g.getInstitution().getId() == person.getInstitution().getId() && g.getGroupId().equals(person.getStudent().getMainGroupId())).findAny().orElse(null);
+				if (mainGroupForInstitution != null) {
+					studentMainGroupStartYearForInstitution = groupService.getStartYear(mainGroupForInstitution.getGroupLevel(), currentYear, mainGroupForInstitution.getId());
+					studentMainGroupLevelForInstitution = mainGroupForInstitution.getGroupLevel();
+					stilMainGroupCurrentInstitution = mainGroupForInstitution.getGroupId();
+				}
+			}
+			else if (person.getExtern() != null) {
+				stilGroupsCurrentInstitution.addAll(person.getExtern().getGroupIds().stream().map(DBExternGroupId::getGroupId).collect(Collectors.toList()));
 				role = PersonRole.EXTERNAL;
 				for (DBExternGroupId groupId : person.getExtern().getGroupIds()) {
 					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
 				}
 				externalRole = person.getExtern().getRole();
 			}
-			else if (person.getStudent() != null) {
-				role = PersonRole.STUDENT;
-				for (DBStudentGroupId groupId : person.getStudent().getGroupIds()) {
-					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
-				}
-				for (DBInstitutionPerson matchingPerson : matchingPeople) {
-					if (matchingPerson.getStudent() != null) {
-						DBGroup group = groups.stream().filter(g ->  g.getInstitution().getId() == matchingPerson.getInstitution().getId() && g.getGroupId().equals(matchingPerson.getStudent().getMainGroupId())).findAny().orElse(null);
-						if (group != null) {
-							studentMainGroup.add(group.getId());
-							studentMainGroupsWorkspace.add(group.getGoogleWorkspaceId());
-						}
-					}
-				}
-				studentRole = person.getStudent().getRole();
-				DBGroup mainGroupForInstitution = groups.stream().filter(g ->  g.getInstitution().getId() == person.getInstitution().getId() && g.getGroupId().equals(person.getStudent().getMainGroupId())).findAny().orElse(null);
-				if (mainGroupForInstitution != null) {
-					studentMainGroupStartYearForInstitution = groupService.getStartYear(mainGroupForInstitution.getGroupLevel(), currentYear, mainGroupForInstitution.getId());
-				}
-			}
-			else if (person.getEmployee() != null) {
-				role = PersonRole.EMPLOYEE;
-				for (DBEmployeeGroupId groupId : person.getEmployee().getGroupIds()) {
-					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
-				}
-				employeeRole = person.getEmployee().getRoles().stream().map(DBRole::getEmployeeRole).toList();
-			}
 			else {
 				log.warn("Person with id " + person.getId() + " is not student, employee or extern. Not returning it through API.");
 				continue;
 			}
 
+			groupService.sortAndAddStudentMainGroups(studentMainGroupGroups, studentMainGroup, studentMainGroupsWorkspace, studentMainGroupsAsObjects, currentYear);
+
+			if (person.getUniLogin() != null) {
+				uniId = person.getUniLogin().getUserId();
+
+				// length = 8
+				// this is to sort out the new uniLogin userIds that could look something like this 1000846a98
+				if (person.getUniLogin().getUserId().length() == 8) {
+					stilUsername = person.getUniLogin().getUserId();
+				}
+			}
+
+			// if username is null (institutionPerson is new) check if any other institutionPerson with same cpr has an username - if so use the same
+			if (person.getUsername() == null) {
+
+				// check for username on active people
+				String usernameMatch = null;
+				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+					if (matchingPerson.getUsername() != null) {
+						usernameMatch = matchingPerson.getUsername();
+						break;
+					}
+				}
+
+				if (usernameMatch != null) {
+					person.setUsername(usernameMatch);
+					institutionPersonService.save(person);
+				}
+				else {
+					// if no active people with username then check inactive people
+					for (DBInstitutionPerson matchingPerson : matchingPeopleDeleted) {
+						if (matchingPerson.getUsername() != null) {
+							usernameMatch = matchingPerson.getUsername();
+							break;
+						}
+					}
+
+					if (usernameMatch != null) {
+						person.setUsername(usernameMatch);
+						institutionPersonService.save(person);
+					}
+				}
+			}
+
+			// contactCards in Google Workspace
+			institutionPersonService.handleContactCard(matchingPeople, groups, contactCardRecords);
+
+			// prioritise name from school institution over daycare if multiple institutions
+			NameDTO calculatedName = institutionPersonService.calculateName(matchingPeople);
+
 			InstitutionPersonRecord personRecord = new InstitutionPersonRecord(
-				person.getId(),
-				person.getLocalPersonId(),
-				person.getSource(),
-				person.getLastModified(),
-				person.getPerson().getFirstName(),
-				person.getPerson().getFamilyName(),
-				person.getPerson().getGender(),
-				person.getPerson().getCivilRegistrationNumber(),
-				person.getUsername(),
-				role,
-				groupIds,
-				studentMainGroup,
-				studentMainGroupsWorkspace,
-				institutions,
-				person.getInstitution().getInstitutionNumber(),
-				studentRole,
-				employeeRole,
-				externalRole,
-				new InstitutionRecord(person.getInstitution().getId(), person.getInstitution().getInstitutionName(), person.getInstitution().getInstitutionNumber(), person.getInstitution().getGoogleWorkspaceId(), person.getInstitution().getAllDriveGoogleWorkspaceId(), person.getInstitution().getStudentDriveGoogleWorkspaceId(), person.getInstitution().getEmployeeDriveGoogleWorkspaceId(), person.getInstitution().getAllAzureSecurityGroupId(), person.getInstitution().getStudentAzureSecurityGroupId(), person.getInstitution().getEmployeeAzureSecurityGroupId(), person.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), person.getInstitution().getType(), institutionService.generateEmailMap(person.getInstitution())),
-				studentMainGroupStartYearForInstitution
+					person.getId(),
+					person.getLocalPersonId(),
+					person.getSource(),
+					person.getLastModified(),
+					calculatedName.getFirstname(),
+					calculatedName.getSurname(),
+					person.getPerson().getGender(),
+					person.getPerson().getCivilRegistrationNumber(),
+					person.getUsername(),
+					stilUsername,
+					uniId,
+					role,
+					institutionPersonService.findGlobalRole(person, matchingPeople),
+					groupIds,
+					studentMainGroup,
+					studentMainGroupsAsObjects,
+					studentMainGroupsWorkspace,
+					stilMainGroupCurrentInstitution,
+					stilGroupsCurrentInstitution,
+					institutions,
+					person.getInstitution().getInstitutionNumber(),
+					studentRole,
+					institutionPersonService.findGlobalStudentRole(matchingPeople),
+					employeeRole,
+					institutionPersonService.findGlobalEmployeeRoles(matchingPeople),
+					externalRole,
+					institutionPersonService.findGlobalExternalRole(matchingPeople),
+					new InstitutionRecord(person.getInstitution().getId(), person.getInstitution().getInstitutionName(), person.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + person.getInstitution().getInstitutionNumber()), person.getInstitution().getGoogleWorkspaceId(), person.getInstitution().getAllDriveGoogleWorkspaceId(), person.getInstitution().getStudentDriveGoogleWorkspaceId(), person.getInstitution().getEmployeeDriveGoogleWorkspaceId(), person.getInstitution().getAllAzureSecurityGroupId(), person.getInstitution().getStudentAzureSecurityGroupId(), person.getInstitution().getEmployeeAzureSecurityGroupId(), person.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), person.getInstitution().getStudentInstitutionGoogleWorkspaceId(), person.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), person.getInstitution().getType(), institutionService.generateEmailMap(person.getInstitution()),
+							institutionService.findCurrentSchoolYearForGWEmails(person.getInstitution()), person.getInstitution().getEmployeeAzureTeamId(), person.getInstitution().getAzureEmployeeTeamAdmin() != null ? person.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null),
+					studentMainGroupStartYearForInstitution,
+					studentMainGroupLevelForInstitution,
+					person.isDeleted(),
+					institutionPersonService.findTotalRoles(matchingPeople),
+					contactCardRecords
 			);
 
 			result.add(personRecord);
@@ -185,11 +288,11 @@ public class ReadApiController {
 	}
 
 	record GroupRecord(long databaseId, @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified, LocalDate fromDate, LocalDate toDate, String groupId,
-			String groupLevel, String groupName, DBImportGroupType groupType, String line, String institutionNumber, String institutionName, String institutionGoogleWorkspaceId,
-			String googleWorkspaceId, String driveGoogleWorkspaceId, String azureSecurityGroupId, int startYear, String groupGoogleWorkspaceEmail) {}
+			String groupLevel, String groupName, DBImportGroupType groupType, String line, String institutionNumber, String institutionName, boolean institutionLocked, String institutionGoogleWorkspaceId, String studentInstitutionGoogleWorkspaceId, String employeeInstitutionGoogleWorkspaceId,
+			String googleWorkspaceId, String driveGoogleWorkspaceId, String azureSecurityGroupId, int startYear, String groupGoogleWorkspaceEmail, String groupOnlyStudentsGoogleWorkspaceEmail, String azureTeamId) {}
 	
 	@GetMapping("/api/groups")
-	public ResponseEntity<?> getGroups(@RequestParam(name = "institutionNumber")  String institutionNumber) {
+	public ResponseEntity<?> getGroups(@RequestParam(name = "institutionNumber")  String institutionNumber, @RequestParam(name = "alltypes", required = false) boolean allTypes) {
 		DBInstitution institution = institutionService.findByInstitutionNumber(institutionNumber);
 		if (institution == null) {
 			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " not found.");
@@ -197,9 +300,19 @@ public class ReadApiController {
 
 		int currentYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
 
+		List<DBGroup> dbGroups;
+		if (allTypes) {
+			dbGroups = groupService.findByInstitution(institution).stream()
+					.filter(g -> !g.isDeleted())
+					.collect(Collectors.toList());
+		} else {
+			dbGroups = groupService.findByInstitution(institution).stream()
+					.filter(g -> !g.isDeleted() && g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
+					.collect(Collectors.toList());
+		}
+
 		// only main groups
-		List<GroupRecord> groups = groupService.findByInstitution(institution).stream()
-				.filter(g -> !g.isDeleted() && g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
+		List<GroupRecord> groups = dbGroups.stream()
 				.map(g -> new GroupRecord(
 						g.getId(),
 						g.getLastModified(),
@@ -212,23 +325,28 @@ public class ReadApiController {
 						g.getLine(),
 						g.getInstitution().getInstitutionNumber(),
 						g.getInstitution().getInstitutionName(),
+						settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + g.getInstitution().getInstitutionNumber()),
 						g.getInstitution().getGoogleWorkspaceId(),
+						g.getInstitution().getStudentInstitutionGoogleWorkspaceId(),
+						g.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(),
 						g.getGoogleWorkspaceId(),
 						g.getDriveGoogleWorkspaceId(),
 						g.getAzureSecurityGroupId(),
 						groupService.getStartYear(g.getGroupLevel(), currentYear, g.getId()),
-						g.getGroupGoogleWorkspaceEmail()
+						g.getGroupGoogleWorkspaceEmail(),
+						g.getGroupOnlyStudentsGoogleWorkspaceEmail(),
+						g.getAzureTeamId()
 						))
 				.collect(Collectors.toList());
 
 		return ResponseEntity.ok(groups);
 	}
 
-	record UsernameRecord(String username, String localPersonId) {}
+	record UsernameRecord(String username, long personDatabaseId) {}
 
 	@PostMapping("/api/person/username")
 	public ResponseEntity<?> getInstitutionPersons(@RequestBody UsernameRecord usernameRecord) {
-		DBInstitutionPerson institutionPerson = institutionPersonService.findByLocalPersonId(usernameRecord.localPersonId());
+		DBInstitutionPerson institutionPerson = institutionPersonService.findByIdAndNotDeleted(usernameRecord.personDatabaseId());
 
 		if (institutionPerson == null) {
 			return new ResponseEntity<>(HttpStatus.NOT_FOUND);
@@ -240,21 +358,6 @@ public class ReadApiController {
 		institutionPerson.setUsername(usernameRecord.username());
 		institutionPersonService.save(institutionPerson);
 		
-		return new ResponseEntity<>(HttpStatus.OK);
-	}
-
-	record ErrorRecord(String message) {}
-
-	@PostMapping("/api/reporterror")
-	public ResponseEntity<?> getInstitutionPersons(@RequestBody ErrorRecord errorRecord) {
-		Client client = SecurityUtil.getClient();
-		if (client == null) {
-			log.error("Could not extract client from request!");
-			return new ResponseEntity<>("Unknown client", HttpStatus.FORBIDDEN);
-		}
-
-		log.error("Received error from Client with id " + client.getId() + " and name " + client.getName() + ". Error message: " + errorRecord.message());
-
 		return new ResponseEntity<>(HttpStatus.OK);
 	}
 
@@ -292,6 +395,15 @@ public class ReadApiController {
 			else if (SetFieldType.INSTITUTION_EMPLOYEE_GROUP_WORKSPACE_EMAIL.equals(setFieldRecord.fieldType)) {
 				institution.setEmployeeGroupGoogleWorkspaceEmail(setFieldRecord.value());
 			}
+			else if (SetFieldType.INSTITUTION_STUDENT_WORKSPACE_ID.equals(setFieldRecord.fieldType)) {
+				institution.setStudentInstitutionGoogleWorkspaceId(setFieldRecord.value());
+			}
+			else if (SetFieldType.INSTITUTION_EMPLOYEE_WORKSPACE_ID.equals(setFieldRecord.fieldType)) {
+				institution.setEmployeeInstitutionGoogleWorkspaceId(setFieldRecord.value());
+			}
+			else if (SetFieldType.INSTITUTION_EMPLOYEE_AZURE_TEAM_ID.equals(setFieldRecord.fieldType)) {
+				institution.setEmployeeAzureTeamId(setFieldRecord.value());
+			}
 			else {
 				return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
 			}
@@ -317,6 +429,12 @@ public class ReadApiController {
 			}
 			else if (SetFieldType.GROUP_GROUP_WORKSPACE_EMAIL.equals(setFieldRecord.fieldType)) {
 				group.setGroupGoogleWorkspaceEmail(setFieldRecord.value());
+			}
+			else if (SetFieldType.GROUP_ONLY_STUDENTS_GROUP_WORKSPACE_EMAIL.equals(setFieldRecord.fieldType)) {
+				group.setGroupOnlyStudentsGoogleWorkspaceEmail(setFieldRecord.value());
+			}
+			else if (SetFieldType.GROUP_AZURE_TEAM_ID.equals(setFieldRecord.fieldType)) {
+				group.setAzureTeamId(setFieldRecord.value());
 			}
 			else {
 				return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
@@ -361,5 +479,110 @@ public class ReadApiController {
 
 		institutionService.save(institution);
 		return new ResponseEntity<>(HttpStatus.OK);
+	}
+
+	@GetMapping("/api/locked/usernames")
+	public ResponseEntity<?> getLockedUsernames() {
+		Set<String> lockedUsernames = new HashSet<>();
+		List<DBInstitution> lockedInstitutions = getLockedIntitutions();
+
+		for (DBInstitution institution : lockedInstitutions) {
+			List<DBInstitutionPerson> persons = institutionPersonService.findByInstitution(institution);
+			lockedUsernames.addAll(persons.stream().filter(p -> p.getUsername() != null).map(p -> p.getUsername()).collect(Collectors.toSet()));
+		}
+
+		return ResponseEntity.ok(lockedUsernames);
+	}
+
+	@GetMapping("/api/locked/groups/workspace")
+	public ResponseEntity<?> getLockedGroupEmails() {
+		Set<String> groupEmails = new HashSet<>();
+		List<DBInstitution> lockedInstitutions = getLockedIntitutions();
+
+		for (DBInstitution institution : lockedInstitutions) {
+			if (institution.getEmployeeGroupGoogleWorkspaceEmail() != null) {
+				groupEmails.add(institution.getEmployeeGroupGoogleWorkspaceEmail());
+			}
+			groupEmails.addAll(institution.getGoogleWorkspaceGroupEmailMappings().stream().map(g -> g.getGroupEmail()).collect(Collectors.toList()));
+			groupEmails.addAll(institution.getGroups().stream().filter(g -> g.getGroupGoogleWorkspaceEmail() != null).map(DBGroup::getGroupGoogleWorkspaceEmail).collect(Collectors.toSet()));
+		}
+
+		groupEmails = groupEmails.stream().map(String::toLowerCase).collect(Collectors.toSet());
+
+		return ResponseEntity.ok(groupEmails);
+	}
+
+	@GetMapping("/api/locked/groups/azure")
+	public ResponseEntity<?> getLockedAzureGroupIds() {
+		Set<String> groupIds = new HashSet<>();
+		List<DBInstitution> lockedInstitutions = getLockedIntitutions();
+
+		for (DBInstitution institution : lockedInstitutions) {
+			if (institution.getAllAzureSecurityGroupId() != null) {
+				groupIds.add(institution.getAllAzureSecurityGroupId());
+			}
+			if (institution.getEmployeeAzureSecurityGroupId() != null) {
+				groupIds.add(institution.getEmployeeAzureSecurityGroupId());
+			}
+			if (institution.getStudentAzureSecurityGroupId() != null) {
+				groupIds.add(institution.getStudentAzureSecurityGroupId());
+			}
+
+			groupIds.addAll(institution.getGroups().stream().filter(g -> g.getAzureSecurityGroupId() != null).map(DBGroup::getAzureSecurityGroupId).collect(Collectors.toSet()));
+		}
+
+		return ResponseEntity.ok(groupIds);
+	}
+
+	@GetMapping("/api/locked/teams/azure")
+	public ResponseEntity<?> getLockedAzureTeamIds() {
+		Set<String> teamIds = new HashSet<>();
+		List<DBInstitution> lockedInstitutions = getLockedIntitutions();
+
+		for (DBInstitution institution : lockedInstitutions) {
+			if (institution.getEmployeeAzureTeamId() != null) {
+				teamIds.add(institution.getEmployeeAzureTeamId());
+			}
+
+			teamIds.addAll(institution.getGroups().stream().filter(g -> g.getAzureTeamId() != null).map(DBGroup::getAzureTeamId).collect(Collectors.toSet()));
+		}
+
+		return ResponseEntity.ok(teamIds);
+	}
+
+	@GetMapping("/api/locked/drives/workspace")
+	public ResponseEntity<?> getLockedDrives() {
+		Set<String> driveIds = new HashSet<>();
+		List<DBInstitution> lockedInstitutions = getLockedIntitutions();
+
+		for (DBInstitution institution : lockedInstitutions) {
+			if (institution.getAllDriveGoogleWorkspaceId() != null) {
+				driveIds.add(institution.getAllDriveGoogleWorkspaceId());
+			}
+			if (institution.getEmployeeDriveGoogleWorkspaceId() != null) {
+				driveIds.add(institution.getEmployeeDriveGoogleWorkspaceId());
+			}
+			if (institution.getStudentDriveGoogleWorkspaceId() != null) {
+				driveIds.add(institution.getStudentDriveGoogleWorkspaceId());
+			}
+
+			driveIds.addAll(institution.getGroups().stream().filter(g -> g.getDriveGoogleWorkspaceId() != null).map(DBGroup::getDriveGoogleWorkspaceId).collect(Collectors.toSet()));
+		}
+
+		return ResponseEntity.ok(driveIds);
+	}
+
+	@GetMapping("/api/usernames/all")
+	public ResponseEntity<?> getAllUsernames() {
+		List<DBInstitutionPerson> institutionPeople = institutionPersonService.findAllIncludingDeleted();
+		List<String> allUsernames = institutionPeople.stream().filter(i -> i.getUsername() != null).map(i -> i.getUsername()).collect(Collectors.toList());
+
+		return ResponseEntity.ok(allUsernames);
+	}
+
+	private List<DBInstitution> getLockedIntitutions() {
+		List<DBInstitution> allInstitutions = institutionService.findAll();
+		List<DBInstitution> lockedInstitutions = allInstitutions.stream().filter(i -> settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + i.getInstitutionNumber())).collect(Collectors.toList());
+		return lockedInstitutions;
 	}
 }

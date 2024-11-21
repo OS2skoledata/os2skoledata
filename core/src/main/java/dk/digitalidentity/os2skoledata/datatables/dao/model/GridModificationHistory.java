@@ -46,6 +46,9 @@ public class GridModificationHistory {
 	private String institutionName;
 
 	@Column
+	private long institutionId;
+
+	@Column
 	@Convert(converter = StringListConverter.class)
 	private List<String> groups;
 }

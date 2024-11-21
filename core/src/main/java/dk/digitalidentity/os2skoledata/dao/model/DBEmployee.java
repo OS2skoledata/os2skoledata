@@ -16,6 +16,7 @@ import javax.persistence.Id;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
@@ -48,9 +49,11 @@ public class DBEmployee {
 	@Column
 	private String shortName;
 
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "employee", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<DBRole> roles;
 
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "employee", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<DBEmployeeGroupId> groupIds;
 

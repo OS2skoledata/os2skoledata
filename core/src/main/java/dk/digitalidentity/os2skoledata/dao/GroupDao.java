@@ -12,6 +12,7 @@ public interface GroupDao extends JpaRepository<DBGroup, Long> {
 	
 	List<DBGroup> findAll();
 	List<DBGroup> findByInstitution(DBInstitution institution);
+	List<DBGroup> findByInstitutionIdInAndDeletedFalse(List<Long> institutionIds);
 	List<DBGroup> findByDeletedFalse();
 	List<DBGroup> findByIdIn(List<Long> ids);
 }

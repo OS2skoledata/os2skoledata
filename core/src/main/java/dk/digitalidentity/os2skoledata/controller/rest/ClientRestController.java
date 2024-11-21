@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import javax.validation.Valid;
 
+import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.service.ClientService;
 
+@RequireAdministratorRole
 @RestController
 public class ClientRestController {
 

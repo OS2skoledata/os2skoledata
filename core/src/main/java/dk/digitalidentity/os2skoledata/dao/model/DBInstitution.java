@@ -2,7 +2,9 @@ package dk.digitalidentity.os2skoledata.dao.model;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -15,15 +17,19 @@ import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
+import javax.persistence.JoinColumn;
+import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
+import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
-import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 import org.springframework.data.annotation.LastModifiedDate;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import https.unilogin_dk.data.Group;
 import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
 import lombok.Getter;
@@ -63,6 +69,12 @@ public class DBInstitution {
 	private String googleWorkspaceId;
 
 	@Column
+	private String studentInstitutionGoogleWorkspaceId;
+
+	@Column
+	private String employeeInstitutionGoogleWorkspaceId;
+
+	@Column
 	private String allDriveGoogleWorkspaceId;
 
 	@Column
@@ -87,12 +99,29 @@ public class DBInstitution {
 	@Column
 	private InstitutionType type;
 
+	@Column
+	private boolean bypassTooFewPeople;
+
+	@Column
+	private boolean ignoreEmptyError;
+
+	@Column
+	private String employeeAzureTeamId;
+
+	@BatchSize(size = 100)
+	@OneToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "azure_employee_team_admin_id")
+	private DBInstitutionPerson azureEmployeeTeamAdmin;
+
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "institution", fetch = FetchType.LAZY)
 	private List<DBInstitutionPerson> institutionPersons;
 
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "institution", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<DBGroup> groups;
 
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "institution", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<InstitutionGoogleWorkspaceGroupMapping> googleWorkspaceGroupEmailMappings;
 
@@ -160,7 +189,27 @@ public class DBInstitution {
 		List<Group> toBeAdded = new ArrayList<Group>();
 		List<Group> toBeUpdated = new ArrayList<Group>();
 
+		// to avoid duplicate names on groups in incoming data
+		Map<String, Integer> counterMap = new HashMap<>();
+
 		for (Group group : other.getGroup()) {
+
+			// start by fixing name, in case there are duplicates in input
+			
+			int count = 0;
+			
+			if (counterMap.containsKey(group.getGroupName().toLowerCase())) {
+				count = counterMap.get(group.getGroupName().toLowerCase());
+			}
+			
+			counterMap.put(group.getGroupName().toLowerCase(), ++count);
+			
+			if (count > 1) {
+				group.setGroupName(group.getGroupName() + " " + count);
+			}
+
+			// then split into update/create scenario
+
 			if (existingGroupIds.contains(group.getGroupId())) {
 				toBeUpdated.add(group);
 			}
@@ -194,6 +243,19 @@ public class DBInstitution {
 		}
 		
 		// remove groups
-		toBeDeleted.forEach(group -> group.setDeleted(true));
+		for (DBGroup group : toBeDeleted) {
+			group.setDeleted(true);
+			group.setAzureSecurityGroupId(null);
+		}
+	}
+
+
+	public void copyFieldsWithoutGroups(InstitutionFullMyndighed other) {
+		if (other == null) {
+			return;
+		}
+
+		this.institutionName = other.getInstitutionName();
+		this.institutionNumber = other.getInstitutionNumber();
 	}
 }

@@ -1,11 +1,22 @@
 package dk.digitalidentity.os2skoledata.dao.model.enums;
 
 import https.unilogin.Elevrolle;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
+@Getter
 @Slf4j
 public enum DBStudentRole {
-	BARN, ELEV, STUDERENDE, UNKNOWN;
+	BARN("Barn"),
+	ELEV("Elev"),
+	STUDERENDE("Studerende"),
+	UNKNOWN("Ukendt");
+
+	private String message;
+	DBStudentRole(String message) {
+		this.message = message;
+	}
+
 
 	public static DBStudentRole from(Elevrolle role) {
 		try {

@@ -1,24 +1,30 @@
 package dk.digitalidentity.os2skoledata.security;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import dk.digitalidentity.os2skoledata.config.Constants;
+import dk.digitalidentity.os2skoledata.dao.model.Client;
+import dk.digitalidentity.samlmodule.model.TokenUser;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 
-import dk.digitalidentity.os2skoledata.dao.model.Client;
-
+@Component
 public class SecurityUtil {
 
-	public static String getUser() {
-		String name = null;
-
-		if (isUserLoggedIn()) {
-			name = (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+	public static String getUserId() {
+		TokenUser tokenUser = getTokenUser();
+		if (tokenUser == null) {
+			return null;
 		}
 
-		return name;
+		return tokenUser.getUsername();
+	}
+
+	public static TokenUser getTokenUser() {
+		if (!isAuthenticated()) {
+			return null;
+		}
+
+		return (TokenUser) SecurityContextHolder.getContext().getAuthentication().getDetails();
 	}
 
 	public static Client getClient() {
@@ -31,24 +37,22 @@ public class SecurityUtil {
 		return client;
 	}
 
-	public static List<String> getUserRoles() {
-		List<String> roles = new ArrayList<>();
-
-		if (isUserLoggedIn()) {
-			for (GrantedAuthority grantedAuthority : (SecurityContextHolder.getContext().getAuthentication()).getAuthorities()) {
-				roles.add(grantedAuthority.getAuthority());
-			}
-		}
-
-		return roles;
+	public static boolean isAuthenticated() {
+		return SecurityContextHolder.getContext().getAuthentication() != null &&
+				SecurityContextHolder.getContext().getAuthentication().getDetails() != null &&
+				SecurityContextHolder.getContext().getAuthentication().getDetails() instanceof TokenUser;
 	}
 
-	public static boolean isUserLoggedIn() {
-		if (isLoggedIn() && SecurityContextHolder.getContext().getAuthentication() instanceof UsernamePasswordAuthenticationToken) {
-			return true;
+	public static boolean hasRole(String role) {
+		boolean hasRole = false;
+		if (isLoggedIn()) {
+			for (GrantedAuthority grantedAuthority : (SecurityContextHolder.getContext().getAuthentication()).getAuthorities()) {
+				if (grantedAuthority.getAuthority().equals(role)) {
+					hasRole = true;
+				}
+			}
 		}
-		
-		return false;
+		return hasRole;
 	}
 
 	public static boolean isClientLoggedIn() {
@@ -59,26 +63,19 @@ public class SecurityUtil {
 		return false;
 	}
 	
-	
-	public static boolean hasRole(String role) {
-		boolean hasRole = false;
-
-		if (isUserLoggedIn()) {
-			for (GrantedAuthority authority : SecurityContextHolder.getContext().getAuthentication().getAuthorities()) {
-				if (authority.getAuthority().equals(role)) {
-					hasRole = true;
-				}
-			}
-		}
-
-		return hasRole;
-	}
-	
 	private static boolean isLoggedIn() {
-		if (SecurityContextHolder.getContext().getAuthentication() != null/* && SecurityContextHolder.getContext().getAuthentication() instanceof ClientToken*/) {
+		if (SecurityContextHolder.getContext().getAuthentication() != null) {
 			return true;
 		}
 
 		return false;
+	}
+
+	public String getCpr() {
+		if (!isAuthenticated()) {
+			return null;
+		}
+
+		return (String) getTokenUser().getAttributes().getOrDefault(Constants.CPR_ATTRIBUTE_KEY, null);
 	}
 }

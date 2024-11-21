@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true, checkbox = true)" />
+<body class="top-navigation">
+	<div id="wrapper">
+		<div id="page-wrapper" class="gray-bg">
+			<div th:replace="fragments/topbar :: topbar (page = 'teamadmin')" />
+
+			<div class="wrapper wrapper-content">
+				<div class="row">
+
+					<div class="col-lg-12">
+						<div class="ibox">
+							<div class="ibox-title">
+								<h5><em class="fa fa-list"></em> &nbsp; <span th:text="#{html.navbar.teamadmins}"></span></h5>
+							</div>
+
+							<div class="ibox-content">
+								<p th:text="#{html.teamadmin.explainer}"></p>
+								<table id="institutionTable" class="table table-striped table-hover listTable">
+									<thead>
+										<tr>
+											<th class="col-md-5" th:text="#{html.entity.institution.name}"></th>
+											<th class="col-md-1" th:text="#{html.entity.institution.number}"></th>
+											<th class="col-md-5" th:text="#{html.entity.institution.teamadmin}"></th>
+											<th class="col-md-1" th:text="#{html.control.operations}"></th>
+										</tr>
+									</thead>
+
+									<tbody>
+										<tr th:each="institution : ${institutions}">
+											<td>
+												<span th:text="${institution.institutionName}"></span>
+											</td>
+											<td>
+												<span th:text="${institution.institutionNumber}"></span>
+											</td>
+											<td>
+												<span th:if="${institution.azureEmployeeTeamAdmin != null}" th:text="${institution.azureEmployeeTeamAdmin.person.firstName + ' ' + institution.azureEmployeeTeamAdmin.person.familyName + ' (' + institution.azureEmployeeTeamAdmin.username + ')'}"></span>
+											</td>
+											<td>
+												<a th:id="'changeTeamAdmin' + ${institution.institutionNumber}" href="#" onclick="institutionService.changeTeamAdmin(this);"
+														th:attr="data-institutionnumber=${institution.institutionNumber}, data-institutionname=${institution.institutionName}"
+														style="color:black;">
+													<em th:title="#{html.entity.institution.changeTeamAdmin.title}" class="fa fa-fw fa-pencil"></em>
+												</a>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+
+		</div>
+
+		<!-- team admin modal -->
+		<div class="modal fade" id="modal-team-admin" role="dialog">
+			<div class="modal-dialog modal-lg">
+				<div class="modal-content">
+					<div class="modal-header">
+						<h4 id="modalHeaderText"></h4>
+						<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span class="sr-only" th:text="#{html.control.button.cancel}"></span></button>
+					</div>
+
+					<div class="modal-body">
+						<input id="modalInstitutionNumber" hidden>
+
+						<div class="form-horizontal">
+							<div class="form-group">
+								<div class="col-lg-12">
+									<input type="checkbox" id="searchOutsideInstitution" class="form-control i-checks"> &nbsp;
+									<label class="control-label" th:text="#{html.teamadmin.modal.search.checkbox}"></label>
+								</div>
+							</div>
+							<div class="form-group">
+								<div class="col-sm-12">
+									<input type="text" class="form-control" id="searchBoxPerson" autocomplete="off" th:placeholder="#{html.control.search}"/>
+									<div id="inputAddonPerson" hidden="true">
+                        				<span class="input-group-addon">
+                        					<em class="fa fa-fw fa-times" onclick="$('#searchBoxPerson').val(''); $('#dropdownResultPerson').removeClass('open'); $('#searchBoxPerson').focus(); $('#inputAddonPerson').hide();"></em>
+                        				</span>
+									</div>
+
+									<div id="dropdownResultPerson" class="dropdown">
+										<ul id="searchResultDropDownMenuPerson" class="dropdown-menu" style="width: 100%; padding-left: 15px; padding-right: 15px; line-height: 25px;">
+										</ul>
+									</div>
+								</div>
+							</div>
+						</div>
+
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- team admin modal end -->
+
+	</div>
+
+	<style>
+		.dropdown.open .dropdown-menu {
+            display: block;
+        }
+        .dropdown-menu {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+	</style>
+
+	<div th:replace="fragments/footer :: scripts (datatables = true, checkbox = true)" />
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+			var searchTxt = [[#{html.datatables.search}]];
+			var dropdownTxt = [[#{html.datatables.dropdown}]];
+			var infoDefaultTxt = [[#{html.datatables.info.default}]];
+			var infoEmptyTxt = [[#{html.datatables.info.empty}]];
+			var infoFilteredTxt = [[#{html.datatables.info.filtered}]];
+			var prevTxt = [[#{html.datatables.prev}]];
+			var nextTxt = [[#{html.datatables.next}]];
+
+			var modalHeader = [[#{html.teamadmin.modal.header}]];
+
+			var institutionSuccess = [[#{html.entity.institution.success}]];
+			var institutionError = [[#{html.entity.institution.error}]];
+
+			var personSearchRestUrl = [[@{/rest/institution/teamadmins/}]];
+		+]*/
+
+		var token = $("meta[name='_csrf']").attr("content");
+
+		var institutionService;
+		$(document).ready(function(){
+			institutionService = new InstitutionService();
+			institutionService.initTable();
+
+			searchService = new SearchService();
+			$('#searchBoxPerson').on('input', function() {
+				searchService.executeQuery();
+			});
+		});
+
+		function InstitutionService() {
+			this.initTable = function() {
+				$('#institutionTable').DataTable({
+					'columnDefs': [{
+						"targets": 3,
+						"orderable": false
+					}],
+					'paging':    false,
+					'ordering':  true,
+					'info':      true,
+					'language': {
+						"search":       searchTxt,
+						"lengthMenu":   dropdownTxt,
+						"info":         infoDefaultTxt,
+						"zeroRecords":  infoEmptyTxt,
+						"infoEmpty":    "",
+						"infoFiltered": infoFilteredTxt,
+						"paginate": {
+							"next": nextTxt,
+							"previous": prevTxt
+						}
+					}
+				});
+			}
+
+			this.changeTeamAdmin = function(elem) {
+				var institutionNumber = $(elem).data("institutionnumber");
+				var institutionName = $(elem).data("institutionname");
+				$("#modalInstitutionNumber").val(institutionNumber);
+				$("#modalHeaderText").text(modalHeader + " " + institutionName);
+				$("#searchBoxPerson").val("");
+				searchService.updateDropdown(null);
+
+				$("#modal-team-admin").modal("show");
+			}
+		}
+
+		function SearchService() {
+			this.executeQuery = function() {
+				$('#inputAddonPerson').show();
+				var value = $('#searchBoxPerson').val();
+				if (value.length >= 3) {
+					var query = personSearchRestUrl + "search?institution=" + $("#modalInstitutionNumber").val() + "&outside=" + $("#searchOutsideInstitution").prop('checked') + "&query=" + $('#searchBoxPerson').val();
+					$.ajax({
+						url: query,
+						method: "GET",
+						success: function(response) {
+							if (response == null || response.length < 1) {
+								searchService.updateDropdown(null);
+							}
+							var resultSet = [];
+							for (var j = 0; j < response.length; j++) {
+								var hit = {
+									id: response[j].id,
+									firstName: response[j].firstName,
+									familyName: response[j].familyName,
+									username: response[j].username,
+									institutionName: response[j].institutionName,
+								};
+								resultSet.push(hit);
+							}
+							searchService.updateDropdown(resultSet);
+						}
+					});
+				} else {
+					searchService.updateDropdown(null);
+				}
+			}
+
+			this.updateDropdown = function(resultSet) {
+				if (resultSet && resultSet.length > 0) {
+					$("#searchResultDropDownMenuPerson").empty();
+					for (var i = 0; i < resultSet.length; i++) {
+						var guiValue = resultSet[i].firstName + " " + resultSet[i].familyName + " (" + resultSet[i].username + ") - " + resultSet[i].institutionName;
+						var id = resultSet[i].id;
+						$("#searchResultDropDownMenuPerson").append("<a href='#' style='color: black;' onclick=\"searchService.select('" + id + "')\"><li>" + guiValue + "</li></a>");
+					}
+					$("#dropdownResultPerson").addClass("open");
+				} else {
+					$("#dropdownResultPerson").removeClass("open");
+				}
+			}
+
+			this.select = function(id) {
+				$.ajax({
+					url: personSearchRestUrl + "select?institution=" + $("#modalInstitutionNumber").val() + "&id=" + id,
+					method: "GET",
+					success: function(response) {
+						window.location.reload();
+					}
+				});
+			}
+		}
+
+		/*]]>*/
+	</script>
+</body>
+</html>

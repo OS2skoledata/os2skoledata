@@ -1,15 +1,16 @@
 package dk.digitalidentity.os2skoledata.service;
 
-import java.util.Calendar;
 import java.util.List;
 
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import dk.digitalidentity.os2skoledata.dao.GroupDao;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
+import lombok.extern.slf4j.Slf4j;
+
+import dk.digitalidentity.os2skoledata.api.ReadApiController.MiniGroupRecord;
 
 @Slf4j
 @Service
@@ -29,6 +30,10 @@ public class GroupService {
 	// TODO deleted?
 	public List<DBGroup> findByInstitution(DBInstitution institution) {
 		return groupDao.findByInstitution(institution);
+	}
+
+	public List<DBGroup> findByInstitutionIdIn(List<Long> ids) {
+		return groupDao.findByInstitutionIdInAndDeletedFalse(ids);
 	}
 
 	public List<DBGroup> findAllNotDeleted() {
@@ -51,11 +56,44 @@ public class GroupService {
 		int level;
 		try {
 			level = Integer.parseInt(levelString);
-		} catch (Exception e) {
-			log.warn("Failed to parse level to integer for group with database id " + classDatabaseId);
+		}
+		catch (Exception ignored) {
+			log.debug("Failed to parse level to integer for group with database id " + classDatabaseId);
 			return 0;
 		}
 
 		return currentYear - level;
+	}
+
+	public void sortAndAddStudentMainGroups(List<DBGroup> studentMainGroupGroups, List<Long> studentMainGroup, List<String> studentMainGroupsWorkspace, List<MiniGroupRecord> studentMainGroupsAsObjects, int currentYear) {
+		sortByLevel(studentMainGroupGroups);
+		studentMainGroup.addAll(studentMainGroupGroups.stream().map(DBGroup::getId).toList());
+		studentMainGroupsAsObjects.addAll(studentMainGroupGroups.stream().map(g -> new MiniGroupRecord(g.getId(), getStartYear(g.getGroupLevel(), currentYear, g.getId()))).toList());
+		studentMainGroupsWorkspace.addAll(studentMainGroupGroups.stream().map(DBGroup::getGoogleWorkspaceId).toList());
+	}
+
+	private void sortByLevel(List<DBGroup> studentMainGroupGroups) {
+		studentMainGroupGroups.sort(
+			(o1, o2) -> {
+				Integer level1;
+				Integer level2;
+				
+				try {
+					level1 = Integer.parseInt(o1.getGroupLevel());
+				}
+				catch (Exception e) {
+					level1 = Integer.MIN_VALUE;
+				}
+				
+				try {
+					level2 = Integer.parseInt(o2.getGroupLevel());
+				}
+				catch (Exception e) {
+					level2 = Integer.MIN_VALUE;
+				}
+
+				return level2.compareTo(level1);
+			}
+		);
 	}
 }

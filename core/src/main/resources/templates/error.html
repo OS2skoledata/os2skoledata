@@ -9,13 +9,17 @@
 			<div class="wrapper wrapper-content">
 				<div class="row">
 
-					<div class="col-lg-8 offset-lg-2">
+					<div class="col-lg-12">
 						<div class="ibox">
-							<div class="ibox-title">
-								<h5><em class="fa fa-lock"></em> &nbsp; Error</h5>
-							</div>
 							<div class="ibox-content">
-								Some error occurred :(
+								<h1 style="font-size: 40px;">Noget gik galt <em class="fa fa-frown-o"></em></h1>
+
+								<div th:if="${message == null}" class="error-desc">
+									Der opstod en teknisk fejl. Forsøg igen, og hvis fejlen fortsat opstår,
+									så kontakt Digital Identity <a href="mailto:kontakt@digital-identity.dk">her</a>.
+								</div>
+
+								<div th:unless="${message == null}" class="error-desc" th:text="${message}">
 							</div>
 						</div>
 					</div>

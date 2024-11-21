@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.task;
 
+import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -29,7 +30,11 @@ public class SyncTask {
 		}
 
 		log.info("Running STIL synchronization");
-		syncService.sync();
+
+		for (InstitutionDTO institutionDTO : configuration.getInstitutions()) {
+			syncService.sync(institutionDTO);
+		}
+
 		log.info("STIL synchronization: Done");
 	}
 }

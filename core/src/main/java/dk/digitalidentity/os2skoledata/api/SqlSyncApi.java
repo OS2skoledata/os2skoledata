@@ -5,7 +5,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +31,7 @@ import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBRelationType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
 
 @RestController
@@ -39,7 +39,7 @@ public class SqlSyncApi {
 
 	@Autowired
 	private InstitutionService institutionService;
-	
+
 	record InstitutionFullRecord(@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified, boolean deleted, String institutionName,
 								 String institutionNumber, InstitutionType type, List<InstitutionPersonFullRecord> institutionPersons,
 								 List<GroupFullRecord> groups) {	}
@@ -191,7 +191,7 @@ public class SqlSyncApi {
 			groups.add(groupRecord);
 		}
 
-		InstitutionFullRecord result = new InstitutionFullRecord(institution.getLastModified(), institution.isDeleted(), institution.getInstitutionName(), 
+		InstitutionFullRecord result = new InstitutionFullRecord(institution.getLastModified(), institution.isDeleted(), institution.getInstitutionName(),
 				institution.getInstitutionNumber(), institution.getType(), institutionPersons, groups);
 		
 		return ResponseEntity.ok(result);

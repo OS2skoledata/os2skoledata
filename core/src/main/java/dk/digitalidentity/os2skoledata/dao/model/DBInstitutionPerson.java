@@ -14,6 +14,7 @@ import javax.persistence.JoinColumn;
 import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 import org.springframework.data.annotation.LastModifiedDate;
 
@@ -58,26 +59,32 @@ public class DBInstitutionPerson {
 
 	//Person can be one of the 3 types Employee, Extern, Student
 	
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "employee_id", nullable = true)
 	private DBEmployee employee;
 
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "extern_id", nullable = true)
 	private DBExtern extern;
 
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "student_id", nullable = true)
 	private DBStudent student;
 
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "person_id", nullable = true)
 	private DBPerson person;
 	
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "unilogin_id", nullable = false)
 	private DBUniLogin uniLogin;
 
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "institution_id")
 	private DBInstitution institution;

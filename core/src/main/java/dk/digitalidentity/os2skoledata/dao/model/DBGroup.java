@@ -83,7 +83,14 @@ public class DBGroup {
 	private String azureSecurityGroupId;
 
 	@Column
+	private String azureTeamId;
+
+	@Column
 	private String groupGoogleWorkspaceEmail;
+
+	// TODO
+	@Column
+	private String groupOnlyStudentsGoogleWorkspaceEmail;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "institution_id")

@@ -1,21 +1,29 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.os2skoledata.dao.InstitutionDao;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
+import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
+import dk.digitalidentity.os2skoledata.dao.model.Setting;
+import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import dk.digitalidentity.os2skoledata.dao.InstitutionDao;
-import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
-
+@Slf4j
 @Service
 public class InstitutionService {
 
 	@Autowired
 	private InstitutionDao institutionDao;
+
+	@Autowired
+	private SettingService settingService;
 
 	// TODO this is used in api. should we filter deleted?
 	public DBInstitution findByInstitutionNumber(String institutionNumber) {
@@ -48,5 +56,16 @@ public class InstitutionService {
 			}
 		}
 		return result;
+	}
+
+	public String findCurrentSchoolYearForGWEmails(DBInstitution institution) {
+		Setting setting = settingService.getByKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institution.getInstitutionNumber());
+		if (setting == null || setting.getValue() == null) {
+			log.error("Institution missing school year from STIL: " + institution.getInstitutionNumber());
+			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institution missing school year from STIL: " + institution.getInstitutionNumber());
+		}
+
+		String[] years = setting.getValue().split("-");
+		return years[0].substring(2, 4) + "/" + years[1].substring(2, 4);
 	}
 }

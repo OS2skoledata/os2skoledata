@@ -20,7 +20,7 @@
 						<em onclick="clientTable.togglePassword(this.getAttribute('data-client-id'));" th:data-client-id="${client.id}" class="fa fa-fw fa-eye"></em>&nbsp;&nbsp;
 						<span th:attr="data-key=${client.apiKey}" th:id="'pwd-' + ${client.id}">********</span>
 					</td>
-					<td th:text="${#dates.format(client.lastActive, 'yyyy-MM-dd HH:mm')}"></td>
+					<td th:text="${#temporals.format(client.lastActive, 'yyyy-MM-dd HH:mm')}"></td>
 					<td>
 						<a
 							href="#"

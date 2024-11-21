@@ -1,0 +1,1 @@
+alter table modification_history modify column entity_name varchar(255) not null;

@@ -1,9 +1,15 @@
 package dk.digitalidentity.os2skoledata.controller.rest;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import javax.persistence.criteria.Predicate;
 import javax.validation.Valid;
 
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
+import dk.digitalidentity.os2skoledata.dao.model.InstitutionModificationHistoryOffset;
+import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
+import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.datatables.mapping.DataTablesInput;
 import org.springframework.data.jpa.datatables.mapping.DataTablesOutput;
@@ -20,6 +26,7 @@ import dk.digitalidentity.os2skoledata.datatables.dao.model.GridModificationHist
 import dk.digitalidentity.os2skoledata.service.ClientService;
 import lombok.extern.slf4j.Slf4j;
 
+@RequireAdministratorRole
 @Slf4j
 @RestController
 public class ModificationHistoryRestController {
@@ -29,6 +36,9 @@ public class ModificationHistoryRestController {
 
 	@Autowired
 	private ClientService clientService;
+
+	@Autowired
+	private InstitutionService institutionService;
 
 	@SuppressWarnings("unchecked")
 	@PostMapping("/rest/modificationhistory/list/{clientId}")
@@ -49,9 +59,30 @@ public class ModificationHistoryRestController {
 			return new DataTablesOutput<>();
 		}
 
-		long offset = client.getModificationHistoryOffset();
-		
-		DataTablesOutput<?> result = modificationHistoryDatatableDao.findAll(input, getByIdGreaterThan(offset));
+		List<DBInstitution> institutions = institutionService.findAll();
+		Specification<GridModificationHistory> specification = (Specification<GridModificationHistory>) (root, query, criteriaBuilder) -> {
+			List<Predicate> predicates = new ArrayList<>();
+			for (DBInstitution institution : institutions) {
+				InstitutionModificationHistoryOffset match = client.getInstitutionModificationHistoryOffsets().stream().filter(i -> i.getInstitution().getId() == institution.getId()).findAny().orElse(null);
+				long offset = 0;
+				if (match != null) {
+					offset = match.getModificationHistoryOffset();
+				}
+
+				Predicate predicateForId = criteriaBuilder.equal(root.get("institutionId"), institution.getId());
+				Predicate predicateForOffset = criteriaBuilder.gt(root.get("id").as(Long.class), offset);
+				Predicate predicateForInstitution = criteriaBuilder.and(predicateForId, predicateForOffset);
+				predicates.add(predicateForInstitution);
+			}
+
+			Predicate finalPredicate = criteriaBuilder.or(predicates.toArray(new Predicate[predicates.size()]));
+
+			return finalPredicate;
+		};
+
+
+		DataTablesOutput<?> result = modificationHistoryDatatableDao.findAll(input, specification);
+
 
 		DataTablesOutput<GridModificationHistory> output = new DataTablesOutput<>();
 		output.setDraw(result.getDraw());
@@ -61,9 +92,5 @@ public class ModificationHistoryRestController {
 		output.setData((List<GridModificationHistory>) result.getData());
 
 		return output;
-	}
-	
-	private Specification<GridModificationHistory> getByIdGreaterThan(long offset) {
-		return (root, query, criteriaBuilder) -> criteriaBuilder.gt(root.get("id").as(Long.class), offset);
 	}
 }

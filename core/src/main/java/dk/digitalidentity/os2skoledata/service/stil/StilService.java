@@ -1,21 +1,19 @@
 package dk.digitalidentity.os2skoledata.service.stil;
 
-import dk.digitalidentity.os2skoledata.dao.model.Client;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.service.ClientService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
 import https.wsieksport_unilogin_dk.eksport.ImportSource;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-
-import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
 import https.wsieksport_unilogin_dk.ws.WsiEksportPortType;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
 import java.util.List;
-
+import java.util.Objects;
 @Slf4j
 @Service
 public class StilService {
@@ -28,20 +26,23 @@ public class StilService {
 
 	@Autowired
 	private SettingService settingService;
-
 	@Autowired
 	private ClientService clientService;
 
-	public InstitutionFullMyndighed getInstitution(String institutionCode) {
+	public record InstitutionYearChangeDTO(InstitutionFullMyndighed institutionFullMyndighed, boolean yearChange) {}
+	public InstitutionYearChangeDTO getInstitution(String institutionCode) {
 		try {
 			var response = stilService.eksporterXmlFuldMyndighed(configuration.getStilUsername(), configuration.getStilPassword(), institutionCode);
+			boolean yearChange = false;
 
 			// for some reason there is more than one schoolYear
 			// fx "2022-2023"
 			List<String> importSourceSchoolYears = response.getUNILoginExportFullMyndighed().getImportSource().stream().map(ImportSource::getSchoolYear).toList();
-			handleSchoolYears(importSourceSchoolYears, institutionCode);
+			if (!importSourceSchoolYears.isEmpty()) {
+				yearChange = handleSchoolYearsAndCheckForSchoolYearChange(importSourceSchoolYears, institutionCode);
+			}
 
-			return response.getUNILoginExportFullMyndighed().getInstitution();
+			return new InstitutionYearChangeDTO(response.getUNILoginExportFullMyndighed().getInstitution(), yearChange);
 		}
 		catch (Exception ex) {
 			log.error("Failed to call with institutionCode " + institutionCode, ex);
@@ -49,9 +50,11 @@ public class StilService {
 		}
 	}
 
-	private void handleSchoolYears(List<String> importSourceSchoolYears, String institutionCode) {
+	private boolean handleSchoolYearsAndCheckForSchoolYearChange(List<String> importSourceSchoolYears, String institutionCode) {
+		boolean yearChange = false;
 		int maxSchoolYear = 0;
 		String maxImportSourceSchoolYear = null;
+
 		for (String importSourceSchoolYear : importSourceSchoolYears) {
 			if (importSourceSchoolYear.length() > 4) {
 				try {
@@ -60,32 +63,60 @@ public class StilService {
 						maxSchoolYear = year;
 						maxImportSourceSchoolYear = importSourceSchoolYear;
 					}
-				} catch (Exception e) {
+				}
+				catch (Exception e) {
 					continue;
 				}
 			}
 		}
 
-		Setting maxImportSourceSchoolYearDatabaseSetting = settingService.getByKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institutionCode);
-		if (maxImportSourceSchoolYearDatabaseSetting != null) {
-			String maxImportSourceSchoolYearDatabaseValue = maxImportSourceSchoolYearDatabaseSetting.getValue();
-			if (!maxImportSourceSchoolYearDatabaseValue.equals(maxImportSourceSchoolYear)) {
-				log.error("The import source school year was different from the one in the database. Disabling all clients.");
-				for (Client client : clientService.findAll()) {
-					client.setPaused(true);
-					clientService.save(client);
-				}
+		// detect year change and lock institution if year change
+		Setting dbSchoolYearSetting = settingService.getByKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institutionCode);
+		if (dbSchoolYearSetting != null) {
+			String dbSchoolYear = dbSchoolYearSetting.getValue();
+			if (!Objects.equals(dbSchoolYear, maxImportSourceSchoolYear)) {
+				yearChange = true;
+				lockInstitution(institutionCode);
+				log.error(institutionCode + ": Year change. Locking institution (db: " + dbSchoolYear + " vs stil:" + maxImportSourceSchoolYear + ")");
 			}
-		} else {
-			Setting settingCurrentYear = new Setting();
-			settingCurrentYear.setValue(maxSchoolYear + "");
-			settingCurrentYear.setKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionCode);
-			settingService.save(settingCurrentYear);
+		}
 
-			Setting settingImportSource = new Setting();
-			settingImportSource.setValue(maxImportSourceSchoolYear);
+		updateDatabaseSettings(institutionCode, maxSchoolYear, maxImportSourceSchoolYear);
+
+		return yearChange;
+	}
+
+	private void updateDatabaseSettings(String institutionCode, int maxSchoolYear, String maxImportSourceSchoolYear) {
+		Setting currentYearSetting = settingService.getByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionCode);
+		if (currentYearSetting == null) {
+			currentYearSetting = new Setting();
+			currentYearSetting.setKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionCode);
+		}
+		currentYearSetting.setValue(maxSchoolYear + "");
+		settingService.save(currentYearSetting);
+
+		Setting settingImportSource = settingService.getByKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institutionCode);
+		if (settingImportSource == null) {
+			settingImportSource = new Setting();
 			settingImportSource.setKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institutionCode);
-			settingService.save(settingImportSource);
+		}
+		settingImportSource.setValue(maxImportSourceSchoolYear);
+		settingService.save(settingImportSource);
+	}
+
+	private void lockInstitution(String institutionCode) {
+		boolean locked = settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institutionCode);
+		if (!locked) {
+			Setting lockedSetting = settingService.getByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institutionCode);
+			if (lockedSetting == null) {
+				lockedSetting = new Setting();
+				lockedSetting.setValue("true");
+				lockedSetting.setKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institutionCode);
+			} else {
+				lockedSetting.setValue("true");
+			}
+
+			settingService.save(lockedSetting);
 		}
 	}
 }

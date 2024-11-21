@@ -30,12 +30,12 @@ public class ClientController {
 		return "client/list";
 	}
 
-	record ClientRecord(long id, String name, String apiKey, LocalDateTime lastActive, long modificationHistoryOffset, boolean paused) {}
+	record ClientRecord(long id, String name, String apiKey, LocalDateTime lastActive, boolean paused) {}
 
 	@RequestMapping(value = "/ui/clients/clientTable")
 	public String clientListFragment(Model model) {
 		
-		List<ClientRecord> clients = clientService.findAll().stream().map(c -> new ClientRecord(c.getId(), c.getName(), c.getApiKey(), c.getLastActive(), c.getModificationHistoryOffset(), c.isPaused())).collect(Collectors.toList());
+		List<ClientRecord> clients = clientService.findAll().stream().map(c -> new ClientRecord(c.getId(), c.getName(), c.getApiKey(), c.getLastActive(), c.isPaused())).collect(Collectors.toList());
 		model.addAttribute("clients", clients);
 
 		return "client/fragments/clientTable :: clientTable";

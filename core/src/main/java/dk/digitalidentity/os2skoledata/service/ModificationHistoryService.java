@@ -29,7 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ModificationHistoryService {
 	private static final String maxQuery = "SELECT MAX(rev) FROM revinfo";
 	private static final String insertQuery = "INSERT INTO modification_history (`tts`,`entity_id`,`entity_type`,`entity_name`,`event_type`, `institution_id`, `institution_name`, `groups`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
-	private static final String deleteQuery = "DELETE FROM modification_history WHERE changed < NOW() - INTERVAL ? DAY";
+	private static final String deleteQuery = "DELETE FROM modification_history WHERE tts < NOW() - INTERVAL ? DAY";
 	private static final String getHeadQuery = "SELECT IFNULL(MAX(id),0) FROM modification_history;";
 	
 	@Qualifier("defaultTemplate")

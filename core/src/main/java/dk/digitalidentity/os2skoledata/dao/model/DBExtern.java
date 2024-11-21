@@ -18,6 +18,7 @@ import javax.persistence.Id;
 import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
@@ -40,6 +41,7 @@ public class DBExtern {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private long id;
 
+	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "extern", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<DBExternGroupId> groupIds;
 

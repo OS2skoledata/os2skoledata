@@ -20,9 +20,8 @@ public class ModificationHistoryCleanupTask {
 	@Autowired
 	private ModificationHistoryService modificationHistoryService;
 
-	// TODO: add some fuzz
-    // At 00:25:00am, every 7 days starting on the 1st, every month
-	@Scheduled(cron = "0 25 0 */7 * ?")
+    // At 00:xx:00am, every 7 days starting on the 1st, every month
+	@Scheduled(cron = "0 #{new java.util.Random().nextInt(59)} 0 */7 * ?")
 	public void processChanges() {
 		if (!configuration.getScheduled().isEnabled()) {
 			log.debug("ModificationHistoryCleanupTask: Scheduled jobs are disabled on this instance");

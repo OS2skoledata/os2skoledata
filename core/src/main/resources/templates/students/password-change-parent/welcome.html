@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header" />
+<body class="top-navigation">
+<div id="wrapper">
+    <div id="page-wrapper" class="gray-bg">
+        <div th:replace="fragments/topbar :: topbar (page = 'student.parents.welcome')" />
+        <div class="wrapper wrapper-content">
+            <div class="row">
+                <div class="col-lg-12">
+                    <div class="ibox">
+                        <div class="ibox-title">
+                            <h5><em class="fa fa-info"></em> &nbsp; <span th:text="#{html.students.changepassword.parents.welcome.title}"></span></h5>
+                        </div>
+
+                        <div class="ibox-content" >
+                            <p th:text="#{html.students.changepassword.parents.welcome.text}"></p>
+                            <p><a th:href="@{/elevkode/skiftkodeord}" role="button" class="btn btn-primary btn-lg">Login</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="fragments/footer :: scripts" />
+
+	<style>
+		ul.error li {
+			color: red;
+		}
+	</style>
+</body>
+</html>

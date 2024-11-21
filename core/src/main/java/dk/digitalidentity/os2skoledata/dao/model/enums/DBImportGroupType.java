@@ -17,4 +17,17 @@ public enum DBImportGroupType {
 		
 		return UNKNOWN;
 	}
+
+	public static DBImportGroupType fromPasswordFilter(String type) {
+		return switch (type) {
+			case "MAIN_GROUP" -> HOVEDGRUPPE;
+			case "YEAR" -> ÅRGANG;
+			case "DIRECTION" -> RETNING;
+			case "UNIT" -> HOLD;
+			case "SFO" -> SFO;
+			case "TEAM" -> TEAM;
+			case "OTHER" -> ANDET;
+			default -> null;
+		};
+	}
 }

@@ -1,6 +1,7 @@
 package dk.digitalidentity.os2skoledata.dao.model;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Objects;
 
 import javax.persistence.CascadeType;
@@ -13,9 +14,11 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
+import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBGender;
@@ -76,21 +79,29 @@ public class DBPerson {
 	@Column(name = "protected")
 	private boolean _protected;
 
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "address_id", nullable = true)
 	private DBAddress address;
 	
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "home_phone_number_id", nullable = true)
 	private DBPhoneNumber homePhoneNumber;
 	
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "mobile_phone_number_id", nullable = true)
 	private DBPhoneNumber mobilePhoneNumber;
 	
+	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "work_phone_number_id", nullable = true)
 	private DBPhoneNumber workPhoneNumber;
+
+	@BatchSize(size = 100)
+	@OneToMany(mappedBy = "person", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+	private List<Affiliation> affiliations;
 
 	public boolean apiEquals(PersonFullMyndighed person) {
 		if (person == null) {
@@ -256,7 +267,10 @@ public class DBPerson {
 			return "";
 		}
 
-		//TODO what about alias name?
-		return person.getFirstName() + " " + person.getFamilyName();
+		if (person.isProtected()) {
+			return person.getAliasFirstName() + " " + person.getAliasFamilyName();
+		} else {
+			return person.getFirstName() + " " + person.getFamilyName();
+		}
 	}
 }

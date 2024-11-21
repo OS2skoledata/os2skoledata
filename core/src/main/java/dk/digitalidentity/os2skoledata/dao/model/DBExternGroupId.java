@@ -10,6 +10,7 @@ import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import lombok.Getter;
@@ -26,6 +27,7 @@ public class DBExternGroupId {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private long id;
 
+	@BatchSize(size = 100)
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "extern_id")
 	private DBExtern extern;

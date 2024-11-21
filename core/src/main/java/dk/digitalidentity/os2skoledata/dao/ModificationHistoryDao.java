@@ -13,4 +13,6 @@ public interface ModificationHistoryDao extends JpaRepository<ModificationHistor
 	List<ModificationHistory> findAll();
 
 	List<ModificationHistory> findByIdGreaterThan(long offset);
+
+	List<ModificationHistory> findByinstitutionIdAndIdGreaterThan(long institutionId, long offset);
 }

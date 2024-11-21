@@ -41,6 +41,17 @@ public class SettingService {
 		return 0;
 	}
 
+	public boolean getBooleanValueByKey(String customerSetting) {
+		Setting setting = getByKey(customerSetting);
+		if (setting != null) {
+			if (setting.getValue().equalsIgnoreCase("true")) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	public Setting getByKey(CustomerSetting key) {
 		return getByKey(key.toString());
 	}

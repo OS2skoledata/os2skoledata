@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true, checkbox = true)" />
+<body class="top-navigation">
+	<div id="wrapper">
+		<div id="page-wrapper" class="gray-bg">
+			<div th:replace="fragments/topbar :: topbar (page = 'institutions.list')" />
+
+			<div class="wrapper wrapper-content">
+				<div class="row">
+
+					<div class="col-lg-12">
+						<div class="ibox">
+							<div class="ibox-title">
+								<h5><em class="fa fa-list"></em> &nbsp; <span th:text="#{html.navbar.institutions}"></span></h5>
+							</div>
+
+							<div class="ibox-content">
+								<table id="institutionTable" class="table table-striped table-hover listTable">
+									<thead>
+										<tr>
+											<th class="col-md-6" th:text="#{html.entity.institution.name}"></th>
+											<th class="col-md-2" th:text="#{html.entity.institution.number}"></th>
+											<th class="col-md-2" th:text="#{html.entity.institution.locked}"></th>
+											<th class="col-md-2" th:text="#{html.control.operations}"></th>
+										</tr>
+									</thead>
+
+									<tbody>
+										<tr th:each="institution : ${institutions}">
+											<td>
+												<span th:text="${institution.name}"></span>
+											</td>
+											<td>
+												<span th:text="${institution.number}"></span>
+											</td>
+											<td>
+												<em th:id="'locked' + ${institution.number}" th:if="${institution.locked}" class="fa fa-fw fa-lock" th:title="#{html.entity.institution.locked.title}"></em>
+											</td>
+											<td>
+												<a
+														th:if="${institution.locked && institution.unlockPossible}"
+														th:id="'unlock' + ${institution.number}"
+														href="#"
+														onclick="institutionService.unlockInstitution(this);"
+														th:attr="data-institutionnumber=${institution.number}"
+														style="color:black;">
+													<em th:title="#{html.entity.institution.unlock.title}" class="fa fa-fw fa-unlock"></em>
+												</a>
+											</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<div th:replace="fragments/footer :: scripts (datatables = true)" />
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+			var searchTxt = [[#{html.datatables.search}]];
+			var dropdownTxt = [[#{html.datatables.dropdown}]];
+			var infoDefaultTxt = [[#{html.datatables.info.default}]];
+			var infoEmptyTxt = [[#{html.datatables.info.empty}]];
+			var infoFilteredTxt = [[#{html.datatables.info.filtered}]];
+			var prevTxt = [[#{html.datatables.prev}]];
+			var nextTxt = [[#{html.datatables.next}]];
+
+			var institutionSuccess = [[#{html.entity.institution.success}]];
+			var institutionError = [[#{html.entity.institution.error}]];
+			var unlockUrl = [[@{/rest/institutions/unlock/}]];
+		+]*/
+
+		var token = $("meta[name='_csrf']").attr("content");
+
+		var institutionService;
+		$(document).ready(function(){
+			institutionService = new InstitutionService();
+			institutionService.initTable();
+		});
+
+		function InstitutionService() {
+			this.initTable = function() {
+				$('#institutionTable').DataTable({
+					'columnDefs': [{
+						"targets": 3,
+						"orderable": false
+					}],
+					'paging':    false,
+					'ordering':  true,
+					'info':      true,
+					'language': {
+						"search":       searchTxt,
+						"lengthMenu":   dropdownTxt,
+						"info":         infoDefaultTxt,
+						"zeroRecords":  infoEmptyTxt,
+						"infoEmpty":    "",
+						"infoFiltered": infoFilteredTxt,
+						"paginate": {
+							"next": nextTxt,
+							"previous": prevTxt
+						}
+					}
+				});
+			}
+
+			this.unlockInstitution = function(elem) {
+				var institutionNumber = $(elem).data("institutionnumber");
+				$.ajax({
+					contentType : 'application/json',
+					url : unlockUrl + institutionNumber,
+					method : "POST",
+					headers: {
+						'X-CSRF-TOKEN': token
+					},
+					error : function(response) {
+						toastr.error();
+					},
+					success : function(response) {
+						toastr.success(institutionSuccess);
+						$("#locked" + institutionNumber).hide();
+						$("#unlock" + institutionNumber).hide();
+					}
+				});
+			}
+		}
+
+		/*]]>*/
+	</script>
+</body>
+</html>
