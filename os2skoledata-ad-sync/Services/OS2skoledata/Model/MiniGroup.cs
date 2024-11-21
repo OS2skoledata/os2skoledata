@@ -1,0 +1,8 @@
+﻿namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
+{
+    public class MiniGroup
+    {
+        public long DatabaseId { get; set; }
+        public int StartYear { get; set; }
+    }
+}

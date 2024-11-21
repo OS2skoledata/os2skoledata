@@ -9,8 +9,10 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory.Model
         public string Name { get; set; }
         public string Level { get; set; }
         public string StilId { get; set; }
+        public string Line { get; set; }
         public int StartYear { get; set; }
         public InstitutionType Type { get; set; }
+        public bool InstitutionLocked { get; set; }
 
         public OUDTO(Group c)
         {
@@ -19,6 +21,8 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory.Model
             this.Level = c.GroupLevel;
             this.StilId = c.GroupId;
             this.StartYear = c.StartYear;
+            this.InstitutionLocked = c.InstitutionLocked;
+            this.Line = c.Line;
         }
 
         public OUDTO(Institution i)
@@ -27,6 +31,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory.Model
             this.Name = i.InstitutionName;
             this.StilId = i.InstitutionNumber;
             this.Type = i.Type;
+            this.InstitutionLocked = i.Locked;
         }
     }
 }

@@ -1,14 +1,9 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using os2skoledata_ad_sync.Services.ActiveDirectory;
 using os2skoledata_ad_sync.Services.OS2skoledata;
-using os2skoledata_ad_sync.Services.OS2skoledata.Model;
 using Quartz;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.DirectoryServices;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace os2skoledata_ad_sync.Jobs

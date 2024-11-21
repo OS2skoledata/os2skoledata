@@ -3,5 +3,6 @@
     public class RequiredUserFields
     {
         public string CprField { get; set; }
+        public string InstitutionNumberField { get; set; }
     }
 }

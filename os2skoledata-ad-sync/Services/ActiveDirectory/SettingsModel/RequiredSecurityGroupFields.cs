@@ -3,5 +3,6 @@
     public class RequiredSecurityGroupFields
     {
         public string SecurityGroupIdField { get; set; }
+        public string InstitutionNumberField { get; set; }
     }
 }

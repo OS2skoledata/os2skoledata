@@ -8,8 +8,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
         public string GroupName { get; set; }
         public string GroupId { get; set; }
         public string GroupLevel { get; set; }
+        public string Line { get; set; }
         public string InstitutionNumber { get; set; }
         public string InstitutionName { get; set; }
+        public bool InstitutionLocked { get; set; }
         public int StartYear { get; set; }
     }
 }

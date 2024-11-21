@@ -9,7 +9,9 @@ using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using Unidecode.NET;
+using Group = os2skoledata_ad_sync.Services.OS2skoledata.Model.Group;
 
 namespace os2skoledata_ad_sync.Services.ActiveDirectory
 {
@@ -29,22 +31,49 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly string usernamePrefix;
         private readonly string cprField;
         private readonly string classOUNameStandard;
+        private readonly string classOUNameStandardNoClassYear;
         private readonly string institutionOUNameStandard;
         private readonly string securityGroupIdField;
+        private readonly string securityGroupInstitutionNumberField;
         private readonly string globalStudentSecurityGroupName;
         private readonly string globalEmployeeSecurityGroupName;
+        private readonly string globalSecurityGroupForEmployeeTypeSchoolNameStandard;
+        private readonly string globalSecurityGroupForEmployeeTypeDaycareNameStandard;
         private readonly string allInInstitutionSecurityGroupNameStandard;
         private readonly string allStudentsInInstitutionSecurityGroupNameStandard;
         private readonly string allEmployeesInInstitutionSecurityGroupNameStandard;
         private readonly string classSecurityGroupNameStandard;
+        private readonly string classSecurityGroupNameStandardNoClassYear;
         private readonly string securityGroupForEmployeeTypeNameStandard;
         private readonly string securityGroupForYearNameStandard;
+        private readonly string securityGroupForLevelNameStandard;
         private readonly string[] globallyExcludedRoles;
         private readonly Dictionary<string, string[]> exludedRolesInInstitution;
         private readonly string institutionNumberField;
         private readonly string institutionNameField;
+        private readonly string uniIdField;
+        private readonly string mailField;
         private readonly string schoolOUName;
         private readonly string daycareOUName;
+        private readonly bool moveUsersEnabled;
+        private readonly bool dryRun;
+        private readonly bool useUsernameAsKey;
+        private readonly string usernameKeyField;
+        private readonly UsernameKeyType usernameKeyType;
+        private readonly bool useDanishCharacters;
+        private readonly bool createOUHierarchy;
+        private readonly Dictionary<string, string> institutionUserOUPath;
+        private readonly string allSecurityGroupsOU;
+        private readonly string adFieldForOS2skoledataMark;
+        private readonly List<string> institutionWhitelist;
+        private readonly bool setSamAccountName;
+        private readonly string samAccountPrefix;
+        private readonly List<string> usersToIgnore;
+        private readonly List<string> usersToInclude;
+        private readonly string os2skoledataMark;
+        private readonly string stilRolesField;
+        private readonly string ignoreField;
+        private readonly string studentStartYearField;
 
         private char[] first;
         private char[] second;
@@ -69,29 +98,61 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             usernamePrefix = settings.ActiveDirectorySettings.usernameSettings.UsernamePrefix;
             cprField = settings.ActiveDirectorySettings.requiredUserFields.CprField;
             classOUNameStandard = settings.ActiveDirectorySettings.namingSettings.ClassOUNameStandard;
+            classOUNameStandardNoClassYear = settings.ActiveDirectorySettings.namingSettings.ClassOUNameStandardNoClassYear;
             institutionOUNameStandard = settings.ActiveDirectorySettings.namingSettings.InstitutionOUNameStandard;
             securityGroupIdField = settings.ActiveDirectorySettings.requiredSecurityGroupFields.SecurityGroupIdField;
+            securityGroupInstitutionNumberField = settings.ActiveDirectorySettings.requiredSecurityGroupFields.InstitutionNumberField;
             globalStudentSecurityGroupName = settings.ActiveDirectorySettings.namingSettings.GlobalStudentSecurityGroupName;
             globalEmployeeSecurityGroupName = settings.ActiveDirectorySettings.namingSettings.GlobalEmployeeSecurityGroupName;
+            globalSecurityGroupForEmployeeTypeSchoolNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeSchoolNameStandard;
+            globalSecurityGroupForEmployeeTypeDaycareNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeDaycareNameStandard;
             allInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllInInstitutionSecurityGroupNameStandard;
             allStudentsInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllStudentsInInstitutionSecurityGroupNameStandard;
             allEmployeesInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllEmployeesInInstitutionSecurityGroupNameStandard;
             classSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.ClassSecurityGroupNameStandard;
+            classSecurityGroupNameStandardNoClassYear = settings.ActiveDirectorySettings.namingSettings.ClassSecurityGroupNameStandardNoClassYear;
             securityGroupForEmployeeTypeNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForEmployeeTypeNameStandard;
             securityGroupForYearNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForYearNameStandard;
+            securityGroupForLevelNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForLevelNameStandard;
             globallyExcludedRoles = settings.ActiveDirectorySettings.filteringSettings.GloballyExcludedRoles;
             exludedRolesInInstitution = settings.ActiveDirectorySettings.filteringSettings.ExludedRolesInInstitution;
-            institutionNumberField = settings.ActiveDirectorySettings.optionalUserFields.InstitutionNumberField;
+            institutionNumberField = settings.ActiveDirectorySettings.requiredUserFields.InstitutionNumberField;
             institutionNameField = settings.ActiveDirectorySettings.optionalUserFields.InstitutionNameField;
+            uniIdField = settings.ActiveDirectorySettings.optionalUserFields.UNIIdField;
+            mailField = settings.ActiveDirectorySettings.optionalUserFields.MailField;
             schoolOUName = settings.ActiveDirectorySettings.namingSettings.SchoolOUName;
             daycareOUName = settings.ActiveDirectorySettings.namingSettings.DaycareOUName;
+            moveUsersEnabled = settings.ActiveDirectorySettings.MoveUsersEnabled;
+            dryRun = settings.ActiveDirectorySettings.DryRun;
+            useUsernameAsKey = settings.ActiveDirectorySettings.UseUsernameAsKey;
+            usernameKeyField = settings.ActiveDirectorySettings.UsernameKeyField;
+            usernameKeyType = settings.ActiveDirectorySettings.UsernameKeyType;
+            useDanishCharacters = settings.ActiveDirectorySettings.UseDanishCharacters;
+            createOUHierarchy = settings.ActiveDirectorySettings.CreateOUHierarchy;
+            institutionUserOUPath = settings.ActiveDirectorySettings.InstitutionUserOUPath;
+            allSecurityGroupsOU = settings.ActiveDirectorySettings.AllSecurityGroupsOU;
+            adFieldForOS2skoledataMark = settings.ActiveDirectorySettings.ADFieldForOS2skoledataMark;
+            institutionWhitelist = settings.OS2skoledataSettings.InstitutionWhitelist;
+            setSamAccountName = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? false : settings.ActiveDirectorySettings.optionalSecurityGroupFields.SetSamAccountName;
+            samAccountPrefix = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.SamAccountPrefix;
+            usersToIgnore = settings.ActiveDirectorySettings.UsersToIgnore == null ? new List<string>() : settings.ActiveDirectorySettings.UsersToIgnore;
+            usersToInclude = settings.ActiveDirectorySettings.UsersToInclude == null ? new List<string>() : settings.ActiveDirectorySettings.UsersToInclude;
+            os2skoledataMark = "OS2skoledata";
+            stilRolesField = settings.ActiveDirectorySettings.optionalUserFields.STILRolesField;
+            ignoreField = settings.ActiveDirectorySettings.optionalUserFields.IgnoreField;
+            studentStartYearField = settings.ActiveDirectorySettings.optionalUserFields.StudentStartYearField;
 
-            first = "0123456789abcdefghjklmnpqrstuvxyz".ToCharArray();
-            second = "abcdefghjklmnpqrstuvxyz".ToCharArray();
-            third = "0123456789".ToCharArray();
+            first = "23456789abcdefghjkmnpqrstuvxyz".ToCharArray();
+            second = "abcdefghjkmnpqrstuvxyz".ToCharArray();
+            third = "23456789".ToCharArray();
             uniqueIds = new Dictionary<long, string>();
 
             PopulateTable();
+            if (!String.IsNullOrEmpty(ignoreField))
+            {
+                List<string> additionalUsersToIgnore = GetAllUsernamesWithIgnoreFieldFilled();
+                usersToIgnore.AddRange(additionalUsersToIgnore);
+            }
 
             powerShellRunner = sp.GetService<PowerShellRunnerService>();
         }
@@ -132,23 +193,60 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return null;
         }
 
-        public void DisableInactiveUsers(List<User> usersShouldBeInInstitution, Institution institution, List<string> excludedRoles)
+        public void DisableInactiveUsersFromRoot(List<User> users, List<string> lockedUsernames)
         {
             using DirectoryEntry rootOUEntry = new DirectoryEntry(@"LDAP://" + rootOU);
-            using DirectoryEntry institutionEntry = GetOUFromId("inst" + institution.InstitutionNumber);
-                
+            using DirectoryEntry deletedOusEntry = new DirectoryEntry(@"LDAP://" + rootDeletedOusOu);
+            using DirectoryEntry disabledUsersEntry = new DirectoryEntry(@"LDAP://" + disabledUsersOU);
+
             // it only works with usernames because we delete before we create/update
-            List<string> usernamesInInstitution = GetAllUsernames(institutionEntry);
-            foreach (string username in usernamesInInstitution)
+            List<string> usernamesInAD = new List<string>();
+            usernamesInAD.AddRange(GetAllUsernames(rootOUEntry, false));
+            usernamesInAD.AddRange(GetAllUsernames(deletedOusEntry, false));
+            usernamesInAD.AddRange(GetAllUsernames(disabledUsersEntry, false));
+
+            foreach (string username in usernamesInAD)
             {
-                User user = usersShouldBeInInstitution.Where(u => username.Equals(u.Username)).FirstOrDefault();
-                if (user != null)
+                // if user is in locked institution, skip
+                if (lockedUsernames != null && lockedUsernames.Contains(username))
                 {
-                    if (shouldBeExcluded(user, excludedRoles))
-                    {
-                        DisableAccount(username);
-                    }
-                } else
+                    continue;
+                }
+
+                if (usersToIgnore.Contains(username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(username)))
+                {
+                    continue;
+                }
+
+                User user = users.Where(u => username.Equals(u.Username)).FirstOrDefault();
+                if (user == null)
+                {
+                    DisableAccount(username);
+                }
+            }
+        }
+
+        public void DisableInactiveUsersNoHierarchy(List<User> users, List<string> lockedUsernames)
+        {
+            // it only works with usernames because we delete before we create/update
+            // only return usernames that previously has been marked by OS2skoledata because no OU hierarchy - but from the entire AD
+            List<string> usernamesInAD = GetAllUsernames(new DirectoryEntry(), true);
+
+            foreach (string username in usernamesInAD)
+            {
+                // if user is in locked institution, skip
+                if (lockedUsernames != null && lockedUsernames.Contains(username))
+                {
+                    continue;
+                }
+
+                if (usersToIgnore.Contains(username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(username)))
+                {
+                    continue;
+                }
+
+                User user = users.Where(u => username.Equals(u.Username)).FirstOrDefault();
+                if (user == null)
                 {
                     DisableAccount(username);
                 }
@@ -157,16 +255,16 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         public bool shouldBeExcluded(User user, List<string> excludedRoles)
         {
-            if (user.Role.Equals(Role.STUDENT))
+            if (user.GlobalRole.Equals(Role.STUDENT))
             {
-                if (excludedRoles.Contains(user.StudentRole.ToString()))
+                if (excludedRoles.Contains(user.GlobalStudentRole.ToString()))
                 {
                     return true;
                 }
             }
-            else if (user.Role.Equals(Role.EMPLOYEE))
+            else if (user.GlobalRole.Equals(Role.EMPLOYEE))
             {
-                foreach (EmployeeRole role in user.EmployeeRoles ?? new List<EmployeeRole>())
+                foreach (EmployeeRole role in user.GlobalEmployeeRoles ?? new List<EmployeeRole>())
                 {
                     if (!excludedRoles.Contains(role.ToString()))
                     {
@@ -175,9 +273,9 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 }
                 return true;
             }
-            else if (user.Role.Equals(Role.EXTERNAL))
+            else if (user.GlobalRole.Equals(Role.EXTERNAL))
             {
-                if (excludedRoles.Contains(user.ExternalRole.ToString()))
+                if (excludedRoles.Contains(user.GlobalExternalRole.ToString()))
                 {
                     return true;
                 }
@@ -196,14 +294,14 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             List<string> result = new List<string>();
             if (globallyExcludedRoles != null)
             {
-                result.AddRange(globallyExcludedRoles.ToList());
+                result.AddRange(globallyExcludedRoles.Select(g => g.ToUpper()).ToList());
             }
 
             if (exludedRolesInInstitution != null)
             {
                 if (exludedRolesInInstitution.ContainsKey(institutionNumber))
                 {
-                    result.AddRange(exludedRolesInInstitution[institutionNumber].ToList());
+                    result.AddRange(exludedRolesInInstitution[institutionNumber].Select(g => g.ToUpper()).ToList());
                 }
             }
             return result;
@@ -211,6 +309,12 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         public string UpdateAndMoveUser(string username, User user, DirectoryEntry entry)
         {
+            if (usersToIgnore.Contains(username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(username)))
+            {
+                logger.LogInformation("Ignoring " + username);
+                return null;
+            }
+
             // check for updates
             bool nameChanges = false;
             bool changes = false;
@@ -223,32 +327,54 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             }
             else
             {
-                if (!userPrincipal.GivenName.Equals(user.Firstname))
+                var firstname = user.Firstname.Replace(",", "");
+                var familyname = user.FamilyName.Replace(",", "");
+                if (!object.Equals(userPrincipal.GivenName, firstname))
                 {
-                    userPrincipal.GivenName = user.Firstname;
+                    userPrincipal.GivenName = firstname;
+                    logger.LogInformation($"Updated given name on user with username {username} and db id {user.DatabaseId} to {firstname}");
                     changes = true;
                     nameChanges = true;
                 }
-                if (!userPrincipal.Surname.Equals(user.FamilyName))
+                if (!object.Equals(userPrincipal.Surname, familyname))
                 {
-                    userPrincipal.Surname = user.FamilyName;
+                    userPrincipal.Surname = familyname;
+                    logger.LogInformation($"Updated surname on user with username {username} and db id {user.DatabaseId} to {familyname}");
+                    changes = true;
+                    nameChanges = true;
+                }
+                var fullname = firstname + " " + familyname;
+                if (!object.Equals(userPrincipal.DisplayName, fullname))
+                {
+                    userPrincipal.DisplayName = fullname;
+                    logger.LogInformation($"Updated displayname on user with username {username} and db id {user.DatabaseId} to {fullname}");
                     changes = true;
                     nameChanges = true;
                 }
                 if (userPrincipal.Enabled.Equals(false))
                 {
                     userPrincipal.Enabled = true;
+                    logger.LogInformation($"Reactivated user with username {username} and db id {user.DatabaseId}");
                     changes = true;
                     reactivated = true;
                 }
 
                 using DirectoryEntry principalEntry = userPrincipal.GetUnderlyingObject() as DirectoryEntry;
 
-                // optional fields
-                string institutionNumbers = String.Join(", ", user.Institutions.Select(i => i.InstitutionNumber).ToArray());
+                // institution numbers
+                string institutionNumbers = String.Join(",", user.Institutions.Select(i => i.InstitutionNumber).ToArray());
                 if (institutionNumberField != null && !institutionNumberField.Equals("") && !object.Equals(principalEntry.Properties[institutionNumberField].Value, institutionNumbers))
                 {
                     principalEntry.Properties[institutionNumberField].Value = institutionNumbers;
+                    logger.LogInformation($"Updated {institutionNumberField} (institutionNumberField) on user with username {username} and db id {user.DatabaseId} to {institutionNumbers}");
+                    changes = true;
+                }
+
+                // optional fields
+                if (cprField != null && !cprField.Equals("") && !object.Equals(principalEntry.Properties[cprField].Value, user.Cpr))
+                {
+                    principalEntry.Properties[cprField].Value = user.Cpr;
+                    logger.LogInformation($"Updated {cprField} (cprField) on user with username {username} and db id {user.DatabaseId}");
                     changes = true;
                 }
 
@@ -256,26 +382,102 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 if (institutionNameField != null && !institutionNameField.Equals("") && !object.Equals(principalEntry.Properties[institutionNameField].Value, institutionNames))
                 {
                     principalEntry.Properties[institutionNameField].Value = institutionNames;
+                    logger.LogInformation($"Updated {institutionNameField} (institutionNameField) on user with username {username} and db id {user.DatabaseId} to {institutionNames}");
                     changes = true;
                 }
 
+                if (uniIdField != null && !uniIdField.Equals("") && !object.Equals(principalEntry.Properties[uniIdField].Value, user.UniId))
+                {
+                    principalEntry.Properties[uniIdField].Value = user.UniId;
+                    logger.LogInformation($"Updated {uniIdField} (uniIdField) on user with username {username} and db id {user.DatabaseId} to {user.UniId}");
+                    changes = true;
+                }
+
+                string mail = username + emailDomain;
+                if (mailField != null && !mailField.Equals("") && !object.Equals(principalEntry.Properties[mailField].Value, mail))
+                {
+                    principalEntry.Properties[mailField].Value = mail;
+                    logger.LogInformation($"Updated {mailField} (mailField) on user with username {username} and db id {user.DatabaseId} to {mail}");
+                    changes = true;
+                }
+
+                string totalRoles = String.Join(',', user.TotalRoles);
+                if (stilRolesField != null && !stilRolesField.Equals("") && !object.Equals(principalEntry.Properties[stilRolesField].Value, totalRoles))
+                {
+                    principalEntry.Properties[stilRolesField].Value = totalRoles;
+                    logger.LogInformation($"Updated {stilRolesField} (stilRolesField) on user with username {username} and db id {user.DatabaseId} to {totalRoles}");
+                    changes = true;
+                }
+
+                // mark user
+                if (!createOUHierarchy && adFieldForOS2skoledataMark != null && !adFieldForOS2skoledataMark.Equals("") && !object.Equals(principalEntry.Properties[adFieldForOS2skoledataMark].Value, os2skoledataMark))
+                {
+                    principalEntry.Properties[adFieldForOS2skoledataMark].Value = os2skoledataMark;
+                    logger.LogInformation($"Updated {adFieldForOS2skoledataMark} (adFieldForOS2skoledataMark) on user with username {username} and db id {user.DatabaseId} to {os2skoledataMark}");
+                    changes = true;
+                }
+
+
                 if (changes)
                 {
-                    userPrincipal.Save();
-
-                    if (nameChanges)
+                    if (dryRun)
                     {
-                        principalEntry.Rename("CN=" + user.Firstname + " " + user.FamilyName + " (" + username + ")");
+                        logger.LogInformation($"DryRun: would have updated AD account with username {username}. Changes(all kinds of changes) true, nameChanges={nameChanges}, reactivated={reactivated}");
                     }
-                    
-                    principalEntry.CommitChanges();
+                    else
+                    {
+                        userPrincipal.Save();
+
+                        if (nameChanges)
+                        {
+                            var toRenameTo = "CN=" + firstname + " " + familyname + " (" + username + ")";
+                            string unidecodedName = toRenameTo.Unidecode();
+                            if (unidecodedName.Length > 64)
+                            {
+                                int lengthDiff = unidecodedName.Length - 64;
+                                string namePart = firstname + " " + familyname;
+                                if (namePart.Length > lengthDiff)
+                                {
+                                    namePart = namePart.Substring(0, namePart.Length - lengthDiff);
+                                    string fullName = namePart + " (" + username + ")";
+                                    logger.LogInformation($"Renaming user with username {username} and db id {user.DatabaseId} to {fullName.Unidecode()}");
+                                    principalEntry.Rename(fullName.Unidecode());
+                                }
+                                else
+                                {
+                                    throw new Exception($"Way to long name for user {username}. Name {unidecodedName}. Not updating user. Stopping sync.");
+                                }
+                            }
+                            else
+                            {
+                                logger.LogInformation($"Renaming user with username {username} and db id {user.DatabaseId} to {unidecodedName}");
+                                principalEntry.Rename(unidecodedName);
+                            }
+                            
+                        }
+
+                        principalEntry.CommitChanges();
+                    }
                 }
             }
 
             // make sure we have the right dn
             if (nameChanges || changes)
             {
-                entry = GetUserFromCpr(user.Cpr);
+                if (useUsernameAsKey)
+                {
+                    if (UsernameKeyType.UNI_ID.Equals(usernameKeyType))
+                    {
+                        entry = GetUserFromUsername(user.UniId);
+                    } else
+                    {
+                        entry = GetUserFromUsername(username);
+                    }
+                    
+                } else
+                {
+                    entry = GetUserFromCpr(user.Cpr);
+                }
             }
 
             // check if user should be moved
@@ -284,74 +486,165 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             string dn = entry.Properties["distinguishedName"].Value.ToString();
             string ouDN = dn.Replace("CN=" + cn + ",", "");
             using DirectoryEntry currentOU = new DirectoryEntry(@"LDAP://" + ouDN);
-            if (user.Role.Equals(Role.STUDENT))
+            int classYearForOU = 0;
+            if (createOUHierarchy)
             {
-                using DirectoryEntry institutionEntry = GetOUFromId("inst" + user.CurrentInstitutionNumber);
-                using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
-
-                if (user.StudentMainGroups == null || user.StudentMainGroups.Count() == 0)
+                if (user.Role.Equals(Role.STUDENT))
                 {
-                    if (!currentOU.Properties["distinguishedName"].Value.ToString().Equals(emptyGroupsOU.Properties["distinguishedName"].Value.ToString()))
-                    {
-                        MoveUser(username, dn, emptyGroupsOU.Properties["distinguishedName"].Value.ToString());
-                        moved = true;
-                    }
+                    using DirectoryEntry institutionEntry = GetOUFromId("inst" + user.CurrentInstitutionNumber);
+                    using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
 
-                } else
+                    if (!dryRun || (dryRun && institutionEntry != null && emptyGroupsOU != null))
+                    {
+                        if (user.StudentMainGroups == null || user.StudentMainGroups.Count() == 0)
+                        {
+                            if (!currentOU.Properties["distinguishedName"].Value.ToString().Equals(emptyGroupsOU.Properties["distinguishedName"].Value.ToString()))
+                            {
+                                MoveUser(username, dn, emptyGroupsOU.Properties["distinguishedName"].Value.ToString());
+                                moved = true;
+                            }
+
+                        }
+                        else
+                        {
+                            List<string> possibleDns = new List<string>();
+                            Dictionary<string, int> possibleDnsAndStartYear = new Dictionary<string, int>();
+                            foreach (var mainGroup in user.StudentMainGroupsAsObjects)
+                            {
+                                using DirectoryEntry possible = GetOUFromId(mainGroup.DatabaseId.ToString());
+                                if (possible != null)
+                                {
+                                    string currentDn = possible.Properties["distinguishedName"].Value.ToString();
+                                    possibleDns.Add(currentDn);
+                                    possibleDnsAndStartYear.Add(currentDn, mainGroup.StartYear);
+                                }
+                            }
+
+                            // if user is already in one of the possible ous - don't move, else move to first of list
+                            if (possibleDns.Count() == 0 && !ouDN.Equals(emptyGroupsOU.Properties["distinguishedName"].Value.ToString()))
+                            {
+                                MoveUser(username, dn, emptyGroupsOU.Properties["distinguishedName"].Value.ToString());
+                                moved = true;
+                            }
+                            else if (possibleDns.Count() != 0 && !possibleDns.Contains(ouDN))
+                            {
+                                string selectedDn = possibleDns[0];
+                                MoveUser(username, dn, selectedDn);
+                                classYearForOU = possibleDnsAndStartYear[selectedDn];
+                                moved = true;
+                            }
+                            else if (possibleDns.Count() != 0 && possibleDns.Contains(ouDN))
+                            {
+                                classYearForOU = possibleDnsAndStartYear[ouDN];
+                            }
+                        }
+                    } else
+                    {
+                        logger.LogInformation($"DryRun: would have checked if student user with username {username} should be moved, but some ous are missing (maybe because of DryRun)");
+                    }
+                }
+                else if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
                 {
                     List<string> possibleDns = new List<string>();
-                    foreach (var mainGroup in user.StudentMainGroups)
+                    foreach (var institution in user.Institutions)
                     {
-                        using DirectoryEntry possible = GetOUFromId(mainGroup);
-                        if (possible != null)
+                        if (IsWhitelisted(institution))
                         {
-                            possibleDns.Add(possible.Properties["distinguishedName"].Value.ToString());
+                            using var institutionOU = GetOUFromId("inst" + institution.InstitutionNumber);
+                            if (institutionOU != null)
+                            {
+                                using var employeeOU = GetEmployeeOU(institutionOU);
+                                if (employeeOU != null)
+                                {
+                                    possibleDns.Add(employeeOU.Properties["distinguishedName"].Value.ToString());
+                                }
+                            }
                         }
                     }
 
+
                     // if user is already in one of the possible ous - don't move, else move to first of list
-                    if (possibleDns.Count() == 0 && !ouDN.Equals(emptyGroupsOU.Properties["distinguishedName"].Value.ToString()))
+                    if (possibleDns.Count > 0 && !possibleDns.Contains(ouDN))
                     {
-                        MoveUser(username, dn, emptyGroupsOU.Properties["distinguishedName"].Value.ToString());
+                        MoveUser(username, dn, possibleDns[0]);
                         moved = true;
-                    } else if (possibleDns.Count() != 0 && !possibleDns.Contains(ouDN))
+                    }
+
+                    if (possibleDns.Count == 0 && dryRun)
+                    {
+                        logger.LogInformation($"DryRun: would have checked if employee / external user with username {username} should be moved, but some ous are missing (maybe because of DryRun)");
+                    }
+                }
+            } else
+            {
+                // if no hierarchy - don't move user unless reactivated
+                if (reactivated)
+                {
+                    List<string> possibleDns = new List<string>();
+                    foreach (var institution in user.Institutions)
+                    {
+                        if (IsWhitelisted(institution))
+                        {
+                            using var institutionOU = new DirectoryEntry(@"LDAP://" + institutionUserOUPath[institution.InstitutionNumber]);
+                            if (institutionOU != null)
+                            {
+                                possibleDns.Add(institutionOU.Properties["distinguishedName"].Value.ToString());
+                            }
+                        }
+                    }
+
+
+                    // if user is already in one of the possible ous - don't move, else move to first of list
+                    if (possibleDns.Count > 0 && !possibleDns.Contains(ouDN))
                     {
                         MoveUser(username, dn, possibleDns[0]);
                         moved = true;
                     }
                 }
             }
-            else if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
-            {
-                List<string> possibleDns = new List<string>();
-                foreach (var institution in user.Institutions)
-                {
-                    using var institutionOU = GetOUFromId("inst" + institution.InstitutionNumber);
-                    using var employeeOU = GetEmployeeOU(institutionOU);
-                    if (employeeOU != null)
-                    {
-                        possibleDns.Add(employeeOU.Properties["distinguishedName"].Value.ToString());
-                    }
-                }
-
-                // if user is already in one of the possible ous - don't move, else move to first of list
-                if (!possibleDns.Contains(ouDN))
-                {
-                    MoveUser(username, dn, possibleDns[0]);
-                    moved = true;
-                }
-            }
 
             // make sure we have the right dn
             if (moved)
             {
-                entry = GetUserFromCpr(user.Cpr);
+                if (useUsernameAsKey)
+                {
+                    if (UsernameKeyType.UNI_ID.Equals(usernameKeyType))
+                    {
+                        entry = GetUserFromUsername(user.UniId);
+                    }
+                    else
+                    {
+                        entry = GetUserFromUsername(username);
+                    }
+                }
+                else
+                {
+                    entry = GetUserFromCpr(user.Cpr);
+                }
+            }
+
+            // update start year if changed
+            if (studentStartYearField != null && !studentStartYearField.Equals(""))
+            {
+                if (classYearForOU != 0 && !object.Equals(entry.Properties[studentStartYearField].Value, classYearForOU.ToString()))
+                {
+                    entry.Properties[studentStartYearField].Value = classYearForOU.ToString();
+                    logger.LogInformation($"Updated {studentStartYearField} (studentStartYearField) on user with username {username} and db id {user.DatabaseId} to {classYearForOU}");
+                    entry.CommitChanges();
+                    changes = true;
+                } else if (classYearForOU == 0 && !object.Equals(entry.Properties[studentStartYearField].Value, null))
+                {
+                    entry.Properties[studentStartYearField].Value = null;
+                    logger.LogInformation($"Updated {studentStartYearField} (studentStartYearField) on user with username {username} and db id {user.DatabaseId} to be empty (no start year found)");
+                    entry.CommitChanges();
+                    changes = true;
+                }
             }
 
             if (reactivated)
             {
                 // run powerShell
-                powerShellRunner.Run(username, user.Firstname + " " + user.FamilyName);
+                powerShellRunner.RunCreateScript(username, user.Firstname + " " + user.FamilyName, user.Role.ToString(), ctx.ConnectedServer, user);
             }
 
             if (changes || nameChanges || moved || reactivated)
@@ -362,7 +655,20 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return entry.Properties["distinguishedName"].Value.ToString();
         }
 
-        public void UpdateSecurityGroups(Institution institution, List<User> users, List<OS2skoledata.Model.Group> classes)
+        private bool IsWhitelisted(Institution institution)
+        {
+            bool whitelisted = true;
+            if (institutionWhitelist != null && institutionWhitelist.Count != 0)
+            {
+                if (!institutionWhitelist.Contains(institution.InstitutionNumber))
+                {
+                    whitelisted = false;
+                }
+            }
+            return whitelisted;
+        }
+
+        public void UpdateSecurityGroups(Institution institution, List<User> users, List<Group> classes, List<string> allSecurityGroupIds, List<string> allRenamedGroupIds, Dictionary<string,string> usernameADPathMap)
         {
             logger.LogInformation($"Handling security groups for institution {institution.InstitutionName}");
             using var institutionEntry = GetOUFromId("inst" + institution.InstitutionNumber);
@@ -370,38 +676,69 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
             // keeping a list of ids for when we need to delete later
             List<string> securityGroupIds = new List<string>();
+            List<string> renamedOrNewSecurityGroupIds = new List<string>();
 
             // if ADPath is null it means that the user has been excluded
-            foreach (OS2skoledata.Model.Group currentClass in classes) {
-                List<User> usersInClass = users.Where( u => u.GroupIds.Contains(currentClass.DatabaseId) || (u.StudentMainGroups != null && u.StudentMainGroups.Contains("" + currentClass.DatabaseId)) && u.ADPath != null).ToList();
+            // sort classes based on level (highest first) to make sure potential renaming is smooth
+            classes = SortGroupsBasedOnLevel(classes);
+            foreach (Group currentClass in classes) {
+                List<User> usersInClass = users.Where( u => u.ADPath != null && (u.GroupIds.Contains(currentClass.DatabaseId) || (u.StudentMainGroups != null && u.StudentMainGroups.Contains("" + currentClass.DatabaseId)))).ToList();
                 string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_klasse_" + currentClass.DatabaseId;
-                using DirectoryEntry classGroupEntry = UpdateGroup(securityGroupOU, id, GetClassSecurityGroupName(currentClass, institution));
-                securityGroupIds.Add(id);
-                HandleGroupMembers(classGroupEntry, usersInClass);
+                using DirectoryEntry classGroupEntry = UpdateGroup(securityGroupOU, id, GetClassSecurityGroupName(currentClass, institution), institution.InstitutionNumber, GenerateSamAccountName(currentClass, institution, GroupType.CLASS_ALL, null, classes), renamedOrNewSecurityGroupIds);
+
+                if (classGroupEntry != null)
+                {
+                    securityGroupIds.Add(id);
+                    HandleGroupMembers(classGroupEntry, usersInClass, null, usernameADPathMap);
+                }
             }
 
-            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution));
-            using DirectoryEntry institutionStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_elever", GetInstitutionGroupName("STUDENTS", institution));
-            using DirectoryEntry institutionAllGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_alle", GetInstitutionGroupName("ALL", institution));
+            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEES, null, null));
+            using DirectoryEntry institutionStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_elever", GetInstitutionGroupName("STUDENTS", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENTS, null, null));
+            using DirectoryEntry institutionAllGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_alle", GetInstitutionGroupName("ALL", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_ALL, null, null));
 
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte");
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_elever");
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_alle");
 
             // all users in institution security group
-            List<User> usersInAll = users.Where(u=>u.ADPath != null).ToList();
-            HandleGroupMembers(institutionAllGroup, usersInAll);
+            if (institutionAllGroup != null)
+            {
+                List<User> usersInAll = users.Where(u => u.ADPath != null).ToList();
+                HandleGroupMembers(institutionAllGroup, usersInAll, null, usernameADPathMap);
+            }
 
             // all students in institution security group
-            List<User> usersInStudent = users.Where(u => u.ADPath != null && u.Role.Equals(Role.STUDENT)).ToList();
-            HandleGroupMembers(institutionStudentGroup, usersInStudent);
+            if (institutionStudentGroup != null)
+            {
+                List<User> usersInStudent = users.Where(u => u.ADPath != null && u.Role.Equals(Role.STUDENT)).ToList();
+                HandleGroupMembers(institutionStudentGroup, usersInStudent, null, usernameADPathMap);
+            }
 
             // all employees in institution security group
-            List<User> usersInEmployee = users.Where(u => u.ADPath != null && (u.Role.Equals(Role.EMPLOYEE) || u.Role.Equals(Role.EXTERNAL))).ToList();
-            HandleGroupMembers(institutionEmployeeGroup, usersInEmployee);
+            if (institutionEmployeeGroup != null)
+            {
+                List<User> usersInEmployee = users.Where(u => u.ADPath != null && (u.Role.Equals(Role.EMPLOYEE) || u.Role.Equals(Role.EXTERNAL))).ToList();
+                HandleGroupMembers(institutionEmployeeGroup, usersInEmployee, null, usernameADPathMap);
+            }
 
             // securityGroups for adults based on role
-            HandleInstitutionEmployeeTypeSecurityGroups(securityGroupIds, securityGroupOU, institution, users);
+            HandleInstitutionEmployeeTypeSecurityGroups(securityGroupIds, securityGroupOU, institution, users, usernameADPathMap);
+
+            // securityGroups for class levels - the groups never change but the students do
+            List<string> classLevels = GetClassLevels(classes);
+            foreach (string level in classLevels)
+            {
+                List<User> usersInLevel = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupLevelForInstitution != null && u.StudentMainGroupLevelForInstitution.Equals(level)).ToList();
+                string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_level_" + level;
+                using DirectoryEntry levelGroupEntry = UpdateGroup(securityGroupOU, id, GetLevelSecurityGroupName(level, institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_LEVELS, level, null));
+                if (levelGroupEntry != null)
+                {
+                    securityGroupIds.Add(id);
+                    HandleGroupMembers(levelGroupEntry, usersInLevel, null, usernameADPathMap);
+                }
+            }
+
 
             // securityGroups for students in same year
             List<int> classStartYears = GetClassStartYears(classes);
@@ -409,25 +746,54 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             {
                 List<User> usersInYear = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupStartYearForInstitution != 0 && u.StudentMainGroupStartYearForInstitution == year).ToList();
                 string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_år_" + year;
-                using DirectoryEntry yearGroupEntry = UpdateGroup(securityGroupOU, id, GetYearSecurityGroupName(year, institution));
-                securityGroupIds.Add(id);
-                HandleGroupMembers(yearGroupEntry, usersInYear);
+                using DirectoryEntry yearGroupEntry = UpdateGroup(securityGroupOU, id, GetYearSecurityGroupName(year, institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENT_YEARS, year.ToString(), null));
+                if (yearGroupEntry != null)
+                {
+                    securityGroupIds.Add(id);
+                    HandleGroupMembers(yearGroupEntry, usersInYear, null, usernameADPathMap);
+                }
             }
 
             // delete other securityGroups
-            DeleteSecurityGroups(securityGroupIds, securityGroupOU);
+            if (createOUHierarchy)
+            {
+                DeleteSecurityGroups(securityGroupIds, securityGroupOU, null, renamedOrNewSecurityGroupIds);
+            } else
+            {
+                allSecurityGroupIds.AddRange(securityGroupIds);
+                allRenamedGroupIds.AddRange(renamedOrNewSecurityGroupIds);
+            }
 
             logger.LogInformation($"Finished handling security groups for institution {institution.InstitutionName}");
         }
 
-        private string GetYearSecurityGroupName(int year, Institution institution)
+        private List<Group> SortGroupsBasedOnLevel(List<Group> classes)
         {
-            string name = securityGroupForYearNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
-                        .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
-                        .Replace("{YEAR}", year + "");
+            return classes.OrderByDescending(c => ConvertToInt(c.GroupLevel)).ToList();
+        }
 
-            name = EscapeCharactersForAD(name);
+        private string GetLevelSecurityGroupName(string level, Institution institution)
+        {
+            if (securityGroupForLevelNameStandard == null)
+            {
+                return null;
+            }
+
+            string institutionName = "";
+            if (useDanishCharacters)
+            {
+                institutionName = institution.InstitutionName;
+            } else
+            {
+                institutionName = institution.InstitutionName.Unidecode();
+            }
+
+            string name = securityGroupForLevelNameStandard
+                        .Replace("{INSTITUTION_NAME}", institutionName)
+                        .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
+                        .Replace("{LEVEL}", level);
+
+            name = EscapeCharactersForAD(name, true);
 
             if (name.Length > 64)
             {
@@ -437,10 +803,37 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return name;
         }
 
-        private List<int> GetClassStartYears(List<OS2skoledata.Model.Group> classes)
+        private string GetYearSecurityGroupName(int year, Institution institution)
+        {
+            string institutionName = "";
+            if (useDanishCharacters)
+            {
+                institutionName = institution.InstitutionName;
+            }
+            else
+            {
+                institutionName = institution.InstitutionName.Unidecode();
+            }
+
+            string name = securityGroupForYearNameStandard
+                        .Replace("{INSTITUTION_NAME}", institutionName)
+                        .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
+                        .Replace("{YEAR}", year + "");
+
+            name = EscapeCharactersForAD(name, true);
+
+            if (name.Length > 64)
+            {
+                name = name.Substring(0, 64);
+            }
+
+            return name;
+        }
+
+        private List<int> GetClassStartYears(List<Group> classes)
         {
             List<int> years = new List<int>();
-            foreach (OS2skoledata.Model.Group group in classes)
+            foreach (Group group in classes)
             {
                 if (group.StartYear != 0 && !years.Contains(group.StartYear))
                 {
@@ -450,18 +843,37 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return years;
         }
 
-        private void HandleInstitutionEmployeeTypeSecurityGroups(List<string> securityGroupIds, DirectoryEntry securityGroupOU, Institution institution, List<User> users)
+        private List<string> GetClassLevels(List<Group> classes)
         {
-            using DirectoryEntry institutionEmployeeLærerGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER", GetInstitutionEmployeeTypeGroupName("LÆRER", institution));
-            using DirectoryEntry institutionEmployeePædagogGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG", GetInstitutionEmployeeTypeGroupName("PÆDAGOG", institution));
-            using DirectoryEntry institutionEmployeeVikarGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_VIKAR", GetInstitutionEmployeeTypeGroupName("VIKAR", institution));
-            using DirectoryEntry institutionEmployeeLederGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDER", GetInstitutionEmployeeTypeGroupName("LEDER", institution));
-            using DirectoryEntry institutionEmployeeLedelseGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDELSE", GetInstitutionEmployeeTypeGroupName("LEDELSE", institution));
-            using DirectoryEntry institutionEmployeeTapGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_TAP", GetInstitutionEmployeeTypeGroupName("TAP", institution));
-            using DirectoryEntry institutionEmployeeKonsulentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_KONSULENT", GetInstitutionEmployeeTypeGroupName("KONSULENT", institution));
-            using DirectoryEntry institutionEmployeeUnknownGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_UNKNOWN", GetInstitutionEmployeeTypeGroupName("UNKNOWN", institution));
-            using DirectoryEntry institutionEmployeePraktikantGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PRAKTIKANT", GetInstitutionEmployeeTypeGroupName("PRAKTIKANT", institution));
-            using DirectoryEntry institutionEmployeeEksternGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_EKSTERN", GetInstitutionEmployeeTypeGroupName("EKSTERN", institution));
+            List<string> levels = new List<string>();
+            foreach (Group group in classes)
+            {
+                if (group.GroupLevel != null && !levels.Contains(group.GroupLevel))
+                {
+                    levels.Add(group.GroupLevel);
+                }
+            }
+            return levels;
+        }
+
+        private void HandleInstitutionEmployeeTypeSecurityGroups(List<string> securityGroupIds, DirectoryEntry securityGroupOU, Institution institution, List<User> users, Dictionary<string, string> usernameADPathMap)
+        {
+            // check if name is empty. If one name is empty every name will be empty. Do not create groups if name is empty
+            if (String.IsNullOrEmpty(GetInstitutionEmployeeTypeGroupName("LÆRER", institution)))
+            {
+                return;
+            }
+
+            using DirectoryEntry institutionEmployeeLærerGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER", GetInstitutionEmployeeTypeGroupName("LÆRER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LÆRER", null));
+            using DirectoryEntry institutionEmployeePædagogGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG", GetInstitutionEmployeeTypeGroupName("PÆDAGOG", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PÆDAGOG", null));
+            using DirectoryEntry institutionEmployeeVikarGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_VIKAR", GetInstitutionEmployeeTypeGroupName("VIKAR", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "VIKAR", null));
+            using DirectoryEntry institutionEmployeeLederGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDER", GetInstitutionEmployeeTypeGroupName("LEDER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDER", null));
+            using DirectoryEntry institutionEmployeeLedelseGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDELSE", GetInstitutionEmployeeTypeGroupName("LEDELSE", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDELSE", null));
+            using DirectoryEntry institutionEmployeeTapGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_TAP", GetInstitutionEmployeeTypeGroupName("TAP", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "TAP", null));
+            using DirectoryEntry institutionEmployeeKonsulentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_KONSULENT", GetInstitutionEmployeeTypeGroupName("KONSULENT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "KONSULENT", null));
+            using DirectoryEntry institutionEmployeeUnknownGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_UNKNOWN", GetInstitutionEmployeeTypeGroupName("UNKNOWN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "UNKNOWN", null));
+            using DirectoryEntry institutionEmployeePraktikantGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PRAKTIKANT", GetInstitutionEmployeeTypeGroupName("PRAKTIKANT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PRAKTIKANT", null));
+            using DirectoryEntry institutionEmployeeEksternGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_EKSTERN", GetInstitutionEmployeeTypeGroupName("EKSTERN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "EKSTERN", null));
 
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER");
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG");
@@ -475,44 +887,54 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_EKSTERN");
 
             List<User> usersInLærer = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LÆRER)).ToList();
-            HandleGroupMembers(institutionEmployeeLærerGroup, usersInLærer);
+            HandleGroupMembers(institutionEmployeeLærerGroup, usersInLærer, null, usernameADPathMap);
 
             List<User> usersInPædagog = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.PÆDAGOG)).ToList();
-            HandleGroupMembers(institutionEmployeePædagogGroup, usersInPædagog);
+            HandleGroupMembers(institutionEmployeePædagogGroup, usersInPædagog, null, usernameADPathMap);
 
             List<User> usersInVikar = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.VIKAR)).ToList();
-            HandleGroupMembers(institutionEmployeeVikarGroup, usersInVikar);
+            HandleGroupMembers(institutionEmployeeVikarGroup, usersInVikar, null, usernameADPathMap);
 
             List<User> usersInLeder = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LEDER)).ToList();
-            HandleGroupMembers(institutionEmployeeLederGroup, usersInLeder);
+            HandleGroupMembers(institutionEmployeeLederGroup, usersInLeder, null, usernameADPathMap);
 
             List<User> usersInLedelse = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LEDELSE)).ToList();
-            HandleGroupMembers(institutionEmployeeLedelseGroup, usersInLedelse);
+            HandleGroupMembers(institutionEmployeeLedelseGroup, usersInLedelse, null, usernameADPathMap);
 
             List<User> usersInTAP = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.TAP)).ToList();
-            HandleGroupMembers(institutionEmployeeTapGroup, usersInTAP);
+            HandleGroupMembers(institutionEmployeeTapGroup, usersInTAP, null, usernameADPathMap);
 
             List<User> usersInKonsulent = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.KONSULENT)).ToList();
-            HandleGroupMembers(institutionEmployeeKonsulentGroup, usersInKonsulent);
+            HandleGroupMembers(institutionEmployeeKonsulentGroup, usersInKonsulent, null, usernameADPathMap);
 
             List<User> usersInPraktikant = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.PRAKTIKANT)).ToList();
-            HandleGroupMembers(institutionEmployeePraktikantGroup, usersInPraktikant);
+            HandleGroupMembers(institutionEmployeePraktikantGroup, usersInPraktikant, null, usernameADPathMap);
 
             List<User> usersInEkstern = users.Where(u => u.ADPath != null && u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.EKSTERN)).ToList();
-            HandleGroupMembers(institutionEmployeeEksternGroup, usersInEkstern);
+            HandleGroupMembers(institutionEmployeeEksternGroup, usersInEkstern, null, usernameADPathMap);
 
             List<User> usersInUnknown = users.Where(u => u.ADPath != null && ((u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.UNKNOWN)) || (u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.UNKNOWN)))).ToList();
-            HandleGroupMembers(institutionEmployeeUnknownGroup, usersInUnknown);
+            HandleGroupMembers(institutionEmployeeUnknownGroup, usersInUnknown, null, usernameADPathMap);
         }
 
         private string GetInstitutionEmployeeTypeGroupName(string type, Institution institution)
         {
+            string institutionName = "";
+            if (useDanishCharacters)
+            {
+                institutionName = institution.InstitutionName;
+            }
+            else
+            {
+                institutionName = institution.InstitutionName.Unidecode();
+            }
+
             string name = securityGroupForEmployeeTypeNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
+                        .Replace("{INSTITUTION_NAME}", institutionName)
                         .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
                         .Replace("{TYPE}", type);
 
-            name = EscapeCharactersForAD(name);
+            name = EscapeCharactersForAD(name, true);
 
             if (name.Length > 64)
             {
@@ -522,126 +944,383 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return name;
         }
 
-        private void DeleteSecurityGroups(List<string> securityGroupIds, DirectoryEntry securityGroupOU)
+        private string GetGlobalEmployeeTypeGroupName(string type, string nameStandard)
         {
-            PrincipalContext context = new PrincipalContext(ContextType.Domain, null, securityGroupOU.Properties["distinguishedName"].Value.ToString());
-            GroupPrincipal findAllGroups = new GroupPrincipal(context, "*");
-            PrincipalSearcher ps = new PrincipalSearcher(findAllGroups);
-            foreach (var group in ps.FindAll())
+            string name = nameStandard
+                        .Replace("{TYPE}", type);
+
+            if (!useDanishCharacters)
             {
-                using DirectoryEntry entry = group.GetUnderlyingObject() as DirectoryEntry;
-                string id = entry.Properties[securityGroupIdField].Value.ToString();
-                string name = entry.Name;
-                if (id.StartsWith("os2skoledata_klasse_") && !securityGroupIds.Contains(id))
+                name = name.Unidecode();
+            }
+
+            name = EscapeCharactersForAD(name, true);
+
+            if (name.Length > 64)
+            {
+                name = name.Substring(0, 64);
+            }
+
+            return name;
+        }
+
+        public void DeleteSecurityGroups(List<string> securityGroupIds, DirectoryEntry securityGroupOU, List<string> lockedInstitutionNumbers, List<string> allRenamedGroupIds)
+        {
+            if (dryRun)
+            {
+                logger.LogInformation($"DryRun: would have checked if any classes should be deleted");
+            }
+            else
+            {
+                if (securityGroupOU == null)
                 {
-                    securityGroupOU.Children.Remove(entry);
-                    logger.LogInformation($"Deleted class security group with name {name}");
+                    securityGroupOU = GetSecurityGroupOUInEntry(null);
                 }
 
+                logger.LogInformation("Checking if any groups under " + securityGroupOU.Name + " should be deleted");
+                PrincipalContext context = new PrincipalContext(ContextType.Domain, null, securityGroupOU.Properties["distinguishedName"].Value.ToString());
+                GroupPrincipal findAllGroups = new GroupPrincipal(context, "*");
+                PrincipalSearcher ps = new PrincipalSearcher(findAllGroups);
+                ((DirectorySearcher)ps.GetUnderlyingSearcher()).PageSize = 1000;
+                using PrincipalSearchResult<Principal> allGroups = ps.FindAll();
+                foreach (var group in allGroups)
+                {
+                    logger.LogInformation("Checking if group " + group.Name + " should be deleted");
+                    using DirectoryEntry entry = group.GetUnderlyingObject() as DirectoryEntry;
+                    if (entry.Properties[securityGroupIdField].Value != null)
+                    {
+                        string id = entry.Properties[securityGroupIdField].Value.ToString();
+                        string name = entry.Name;
+                        if (id.StartsWith("os2skoledata_institution_") && !securityGroupIds.Contains(id))
+                        {
+                            // skip if in locked institution
+                            var skip = false;
+                            if (lockedInstitutionNumbers != null)
+                            {
+                                var instituionNumber = entry.Properties[securityGroupInstitutionNumberField].Value.ToString();
+                                if (lockedInstitutionNumbers.Contains(instituionNumber))
+                                {
+                                    skip = true;
+                                }
+                            }
+
+                            if (skip)
+                            {
+                                continue;
+                            }
+
+                            securityGroupOU.Children.Remove(entry);
+                            logger.LogInformation($"Deleted class security group with name {name}");
+                        }
+                    }
+                }
+
+                // after deletion rename prefixed groups to their real name and samAccountName
+                foreach (var groupId in allRenamedGroupIds)
+                {
+                    DirectoryEntry group = GetGroupFromId(groupId);
+                    if (group != null)
+                    {
+                        string name = RemovePrefix(group.Name, "CN=");
+                        name = RemovePrefix(name, "c_");
+                        group.Rename("CN=" + name);
+
+                        if (setSamAccountName)
+                        {
+                            string samAccountName = group.Properties["sAMAccountName"].Value.ToString();
+                            group.Properties["sAMAccountName"].Value = RemovePrefix(samAccountName, "c_");
+                        }
+
+                        group.CommitChanges();
+                    }
+                }
             }
         }
 
-        private void HandleGroupMembers(DirectoryEntry group, List<User> users)
+        private string RemovePrefix(string name, string prefix)
         {
-            logger.LogInformation($"Handling members for group {group.Name}");
-            PrincipalContext context = new PrincipalContext(ContextType.Domain, Environment.UserDomainName);
-            GroupPrincipal groupPrincipal = GroupPrincipal.FindByIdentity(context, group.Properties["cn"].Value.ToString());
-            var members = groupPrincipal.GetMembers().ToList();
-            List<string> currentPaths = members.Select(m => m.DistinguishedName).ToList();
-            List<string> actualPaths = users.Select(u => u.ADPath).ToList();
-
-            foreach (var member in members)
+            if (name.StartsWith(prefix))
             {
-                var dn = member.DistinguishedName;
-                if (!actualPaths.Contains(dn))
-                {
-                    group.Properties["member"].Remove(dn);
-                    logger.LogInformation($"Removed member with dn {dn} from group {group.Name}");
-                }
+                return name.Substring(prefix.Length);
             }
-
-            foreach (User user in users)
+            else
             {
-                if (!currentPaths.Contains(user.ADPath))
-                {
-                    group.Properties["member"].Add(user.ADPath);
-                    currentPaths.Add(user.ADPath);
-                    logger.LogInformation($"Added member with dn {user.ADPath} to group {group.Name}");
-                }
+                return name; // Return the original name if the prefix is not present
             }
-
-            group.CommitChanges();
         }
 
-        public void UpdateGlobalSecurityGroups(Dictionary<string, List<User>> institutionUserMap)
+        private void HandleGroupMembers(DirectoryEntry group, List<User> users, List<string> lockedInstitutionNumbers, Dictionary<string, string> usernameADPathMap)
+        {
+            if (dryRun)
+            {
+                logger.LogInformation($"DryRun: would have checked if any members should be added or removed from group");
+            }
+            else
+            {
+                if (moveUsersEnabled)
+                {
+                    logger.LogInformation($"Handling members for group {group.Name}");
+                    PrincipalContext context = new PrincipalContext(ContextType.Domain, Environment.UserDomainName);
+                    GroupPrincipal groupPrincipal = GroupPrincipal.FindByIdentity(context, IdentityType.Guid, group.Guid.ToString());
+                    List<Principal> members = new List<Principal>();
+                    try
+                    {
+                        members = groupPrincipal.GetMembers().ToList();
+                    } catch(Exception e)
+                    {
+                        logger.LogInformation($"Failed to find current members for group {group.Name}. Maybe there are none. Therefore not checking if members should be removed");
+                    }
+
+                    List<string> currentUsernames = members.Select(m => m.SamAccountName).ToList();
+                    List<string> actualUsernames = users.Select(u => u.Username).ToList();
+
+                    foreach (var member in members)
+                    {
+                        var usernameForMember = member.SamAccountName;
+                        var dn = member.DistinguishedName;
+
+                        if (usersToIgnore.Contains(usernameForMember) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(usernameForMember)))
+                        {
+                            logger.LogInformation("Ignoring " + usernameForMember);
+                            continue;
+                        }
+
+                        if (lockedInstitutionNumbers != null)
+                        {
+                            // skip if member is in locked institution
+                            using DirectoryEntry memberAsDirectoryEntry = member.GetUnderlyingObject() as DirectoryEntry;
+
+                            // the member can be a group and not have the institutionNumberField 
+                            string memberInstitutionNumbers = "";
+                            List<string> memberInstitutionNumbersList = new List<string>();
+                            try
+                            {
+                                memberInstitutionNumbers = memberAsDirectoryEntry.Properties[institutionNumberField].Value.ToString();
+                                memberInstitutionNumbersList = memberInstitutionNumbers.Split(",").ToList();
+                            } catch(Exception e)
+                            {
+                                // do nothing
+                            }
+
+                            var skip = false;
+                            if (memberInstitutionNumbers != null)
+                            {
+                                foreach (string number in memberInstitutionNumbersList)
+                                {
+                                    if (lockedInstitutionNumbers.Contains(number))
+                                    {
+                                        skip = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (skip)
+                            {
+                                continue;
+                            }
+                        }
+
+                        if (!actualUsernames.Contains(usernameForMember))
+                        {
+                            group.Properties["member"].Remove(dn);
+                            logger.LogInformation($"Removed member with dn {dn} from group {group.Name}");
+                        }
+                    }
+
+                    foreach (User user in users)
+                    {
+                        if (usersToIgnore.Contains(user.Username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(user.Username)))
+                        {
+                            logger.LogInformation("Ignoring " + user.Username);
+                            continue;
+                        }
+
+                        if (!currentUsernames.Contains(user.Username))
+                        {
+                            string pathForUser = GetPathFromUsername(user, usernameADPathMap);
+                            group.Properties["member"].Add(pathForUser);
+                            logger.LogInformation($"Added member with dn {pathForUser} to group {group.Name}");
+
+                            currentUsernames.Add(user.Username);
+                        }
+                    }
+                    group.CommitChanges();
+                }
+            }
+        }
+
+        private string GetPathFromUsername(User user, Dictionary<string, string> usernameADPathMap)
+        {
+            if (usernameADPathMap.ContainsKey(user.Username)) {
+                return usernameADPathMap[user.Username];
+            } else
+            {
+                // should never happen
+                return user.ADPath;
+            }
+        }
+
+        public void UpdateGlobalSecurityGroups(Dictionary<string, List<User>> institutionUserMap, List<string> lockedInstitutionNumbers, Dictionary<string, string> usernameADPathMap, List<Institution> institutions)
         {
             logger.LogInformation("Handling global security groups");
             using var rootEntry = new DirectoryEntry("LDAP://" + rootOU);
             using var securityGroupOU = GetSecurityGroupOUInEntry(rootEntry);
 
-            using DirectoryEntry globalStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_elever", globalStudentSecurityGroupName);
-            using DirectoryEntry globalEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_ansatte", globalEmployeeSecurityGroupName);
+            using DirectoryEntry globalStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_elever", globalStudentSecurityGroupName, "allInstitutions", GenerateSamAccountName(null, null, GroupType.GLOBAL_STUDENTS, null, null));
+            using DirectoryEntry globalEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_ansatte", globalEmployeeSecurityGroupName, "allInstitutions", GenerateSamAccountName(null, null, GroupType.GLOBAL_EMPLOYEES, null, null));
 
-            List<User> students = new List<User>();
-            List<User> employees = new List<User>();
-            foreach (List<User> userList in institutionUserMap.Values)
+            if (moveUsersEnabled)
             {
-                foreach (User user in userList)
+                List<User> students = new List<User>();
+                List<User> employees = new List<User>();
+                if (!dryRun)
                 {
-                    // if ADPath is null it means that the user has been excluded
-                    if (user.ADPath == null)
+                    foreach (List<User> userList in institutionUserMap.Values)
                     {
-                        continue;
-                    }
+                        foreach (User user in userList)
+                        {
+                            // if ADPath is null it means that the user has been excluded
+                            if (user.ADPath == null)
+                            {
+                                continue;
+                            }
 
-                    // the ADPath is not necesarily correct anymore because people can have users in multiple institutions and with different names
-                    // so fetch the correct one.
-                    using DirectoryEntry entry = GetUserFromCpr(user.Cpr);
-                    if (entry == null)
-                    {
-                        continue;
-                    }
+                            // the ADPath is not necesarily correct anymore because people can have users in multiple institutions and with different names
+                            // so fetch the correct one from the map
+                            user.ADPath = GetPathFromUsername(user, usernameADPathMap);
+                            
 
-                    user.ADPath = entry.Properties["distinguishedName"].Value.ToString();
+                            if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
+                            {
+                                employees.Add(user);
+                            }
+                            else if (user.Role.Equals(Role.STUDENT))
+                            {
+                                students.Add(user);
+                            }
+                        }
+                    }
+                }
 
-                    if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
-                    {
-                        employees.Add(user);
-                    }
-                    else if (user.Role.Equals(Role.STUDENT))
-                    {
-                        students.Add(user);
-                    }
+                if (globalStudentGroup != null)
+                {
+                    HandleGroupMembers(globalStudentGroup, students, lockedInstitutionNumbers, usernameADPathMap);
+                }
+                if (globalEmployeeGroup != null)
+                {
+                    HandleGroupMembers(globalEmployeeGroup, employees, lockedInstitutionNumbers, usernameADPathMap);
                 }
             }
 
-            HandleGroupMembers(globalStudentGroup, students);
-            HandleGroupMembers(globalEmployeeGroup, employees);
+            if (!String.IsNullOrEmpty(globalSecurityGroupForEmployeeTypeSchoolNameStandard))
+            {
+                HandleGlobalEmployeeTypeSecurityGroups(securityGroupOU, institutions.Where(i => i.Type.Equals(InstitutionType.SCHOOL)).ToList(), institutionUserMap, usernameADPathMap, globalSecurityGroupForEmployeeTypeSchoolNameStandard, "skoler", GroupType.GLOBAL_EMPLOYEE_TYPES_SCHOOL, lockedInstitutionNumbers);
+            }
+            if (!String.IsNullOrEmpty(globalSecurityGroupForEmployeeTypeDaycareNameStandard))
+            {
+                HandleGlobalEmployeeTypeSecurityGroups(securityGroupOU, institutions.Where(i => i.Type.Equals(InstitutionType.DAYCARE)).ToList(), institutionUserMap, usernameADPathMap, globalSecurityGroupForEmployeeTypeDaycareNameStandard, "daginstitutioner", GroupType.GLOBAL_EMPLOYEE_TYPES_DAYCARE, lockedInstitutionNumbers);
+            }
 
             logger.LogInformation("Finished handling global security groups");
+        }
+
+        private void HandleGlobalEmployeeTypeSecurityGroups(DirectoryEntry securityGroupOU, List<Institution> allInstitutions, Dictionary<string, List<User>> institutionUserMap, Dictionary<string, string> usernameADPathMap, string nameStandard, String typeStringForId, GroupType groupType, List<string> lockedInstitutionNumbers)
+        {
+            using DirectoryEntry globalEmployeeLærerGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_LÆRER", GetGlobalEmployeeTypeGroupName("lærere", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "lærere", null));
+            using DirectoryEntry globalEmployeePædagogGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_PÆDAGOG", GetGlobalEmployeeTypeGroupName("pædagoger", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "pædagoger", null));
+            using DirectoryEntry globalEmployeeVikarGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_VIKAR", GetGlobalEmployeeTypeGroupName("vikarer", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "vikarer", null));
+            using DirectoryEntry globalEmployeeLederGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_LEDER", GetGlobalEmployeeTypeGroupName("ledere", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "ledere", null));
+            using DirectoryEntry globalEmployeeLedelseGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_LEDELSE", GetGlobalEmployeeTypeGroupName("ledelse", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "ledelse", null));
+            using DirectoryEntry globalEmployeeTapGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_TAP", GetGlobalEmployeeTypeGroupName("TAPer", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "TAPer", null));
+            using DirectoryEntry globalEmployeeKonsulentGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_KONSULENT", GetGlobalEmployeeTypeGroupName("konsulenter", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "konsulenter", null));
+            using DirectoryEntry globalEmployeeUnknownGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_UNKNOWN", GetGlobalEmployeeTypeGroupName("unknown", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "unknown", null));
+            using DirectoryEntry globalEmployeePraktikantGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_PRAKTIKANT", GetGlobalEmployeeTypeGroupName("praktikanter", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "praktikanter", null));
+            using DirectoryEntry globalEmployeeEksternGroup = UpdateGroup(securityGroupOU, "os2skoledata_global_" + typeStringForId + "_EKSTERN", GetGlobalEmployeeTypeGroupName("eksterne", nameStandard), "allInstitutions", GenerateSamAccountName(null, null, groupType, "eksterne", null));
+
+            if (moveUsersEnabled)
+            {
+                List<User> usersInLærer = new List<User>();
+                List<User> usersInPædagog = new List<User>();
+                List<User> usersInVikar = new List<User>();
+                List<User> usersInLeder = new List<User>();
+                List<User> usersInLedelse = new List<User>();
+                List<User> usersInTAP = new List<User>();
+                List<User> usersInKonsulent = new List<User>();
+                List<User> usersInPraktikant = new List<User>();
+                List<User> usersInEkstern = new List<User>();
+                List<User> usersInUnknown = new List<User>();
+
+                foreach (Institution institution in allInstitutions)
+                {
+                    if (institutionUserMap.ContainsKey(institution.InstitutionNumber))
+                    {
+                        List<User> users = institutionUserMap[institution.InstitutionNumber];
+                        usersInLærer.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LÆRER)).ToList());
+                        usersInPædagog.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.PÆDAGOG)).ToList());
+                        usersInVikar.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.VIKAR)).ToList());
+                        usersInLeder.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LEDER)).ToList());
+                        usersInLedelse.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.LEDELSE)).ToList());
+                        usersInTAP.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.TAP)).ToList());
+                        usersInKonsulent.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.KONSULENT)).ToList());
+                        usersInPraktikant.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.PRAKTIKANT)).ToList());
+                        usersInEkstern.AddRange(users.Where(u => u.ADPath != null && u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.EKSTERN)).ToList());
+                        usersInUnknown.AddRange(users.Where(u => u.ADPath != null && ((u.Role.Equals(Role.EXTERNAL) && u.ExternalRole.Equals(ExternalRole.UNKNOWN)) || (u.Role.Equals(Role.EMPLOYEE) && u.EmployeeRoles.Contains(EmployeeRole.UNKNOWN)))).ToList());
+
+                    }
+                }
+
+                HandleGroupMembers(globalEmployeeLærerGroup, usersInLærer, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeePædagogGroup, usersInPædagog, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeVikarGroup, usersInVikar, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeLederGroup, usersInLeder, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeLedelseGroup, usersInLedelse, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeTapGroup, usersInTAP, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeKonsulentGroup, usersInKonsulent, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeePraktikantGroup, usersInPraktikant, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeEksternGroup, usersInEkstern, lockedInstitutionNumbers, usernameADPathMap);
+                HandleGroupMembers(globalEmployeeUnknownGroup, usersInUnknown, lockedInstitutionNumbers, usernameADPathMap);
+            }
         }
 
         public void PopulateTable()
         {
            
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
             {
+                char[] possibleNumbers = "0123456789".ToCharArray();
                 int idx = 0;
 
-                for (int i = 0; i < third.Length; i++)
+                for (int i = 0; i < possibleNumbers.Length; i++)
                 {
-                    for (int j = 0; j < third.Length; j++)
+                    for (int j = 0; j < possibleNumbers.Length; j++)
                     {
-                        for (int k = 0; k < third.Length; k++)
+                        for (int k = 0; k < possibleNumbers.Length; k++)
                         {
-                            for (int l = 0; l < third.Length; l++)
+                            for (int l = 0; l < possibleNumbers.Length; l++)
                             {
-                                uniqueIds.Add(idx++, ("" + third[i] + third[j] + third[k] + third[l]));
+                                uniqueIds.Add(idx++, ("" + possibleNumbers[i] + possibleNumbers[j] + possibleNumbers[k] + possibleNumbers[l]));
                             }
                         }
                     }
                 }
-            } else
+            } else if (usernameStandard.Equals(UsernameStandardType.THREE_NUMBERS_THREE_CHARS_FROM_NAME))
+            {
+                char[] possibleNumbers = "23456789".ToCharArray();
+                int idx = 0;
+
+                for (int i = 0; i < possibleNumbers.Length; i++)
+                {
+                    for (int j = 0; j < possibleNumbers.Length; j++)
+                    {
+                        for (int k = 0; k < possibleNumbers.Length; k++)
+                        {
+                            uniqueIds.Add(idx++, ("" + possibleNumbers[i] + possibleNumbers[j] + possibleNumbers[k]));
+                        }
+                    }
+                }
+            }
+            else
             {
                 int idx = 0;
 
@@ -661,16 +1340,19 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public List<string> GetAllUsernames()
         {
             using var entry = new DirectoryEntry();
-            return GetAllUsernames(entry);
+            return GetAllUsernames(entry, false);
         }
 
-        public Dictionary<string, List<string>> GenerateUsernameMap(List<string> allUsernames)
+        public Dictionary<string, List<string>> GenerateUsernameMap(List<string> allADUsernames, List<string> allOS2skoledataUsernames)
         {
             Dictionary<string, List<string>> map = new Dictionary<string, List<string>>();
+            List<string> allUsernames = new List<string>();
+            allUsernames.AddRange(allADUsernames);
+            allUsernames.AddRange(allOS2skoledataUsernames);
             foreach (string username in allUsernames)
             {
                 string key = "";
-                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN))
+                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
                 {
                     try
                     {
@@ -707,7 +1389,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                         logger.LogWarning(e, "Failed to add username " + username + " to username map");
                         continue;
                     }
-                } else if (usernameStandard.Equals(UsernameStandardType.PREFIX_NAME_LAST))
+                } else if (usernameStandard.Equals(UsernameStandardType.PREFIX_NAME_LAST) || usernameStandard.Equals(UsernameStandardType.THREE_NUMBERS_THREE_CHARS_FROM_NAME))
                 {
                     try
                     {
@@ -748,33 +1430,65 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             syncOUs(dtos, rootOUEntry, true, null, schoolsOU, daycareOU);
         }
 
-        public void UpdateClassesForInstitution(List<OS2skoledata.Model.Group> classes, Institution institution)
+        public void UpdateClassesForInstitution(List<Group> classes, Institution institution)
         {
             logger.LogInformation($"Handling classes for institution {institution.InstitutionName}");
             using DirectoryEntry rootOUEntry = new DirectoryEntry(@"LDAP://" + rootOU);
 
-            using DirectoryEntry institutionEntry = GetOUFromId("inst" + institution.InstitutionNumber);
-            if (institutionEntry == null)
+            if (dryRun)
             {
-                logger.LogError("Failed to update classes for institution with name " + institution.InstitutionName + " and id " + institution.InstitutionNumber + ". Could not find OU in AD with matching id.");
-                return;
-            }
-
-            using DirectoryEntry studentEntry = GetStudentsOU(institutionEntry);
-            if (studentEntry == null)
+                List<OUDTO> dtos = classes.Select(c => new OUDTO(c)).ToList();
+                syncOUs(dtos, null, false, institution, null, null);
+            } else
             {
-                logger.LogError("Failed to update classes for institution with name " + institution.InstitutionName + " and id " + institution.InstitutionNumber + ". Could not find student OU under institution in AD with matching id.");
-                return;
-            }
+                using DirectoryEntry institutionEntry = GetOUFromId("inst" + institution.InstitutionNumber);
+                if (institutionEntry == null)
+                {
+                    logger.LogError("Failed to update classes for institution with name " + institution.InstitutionName + " and id " + institution.InstitutionNumber + ". Could not find OU in AD with matching id.");
+                    return;
+                }
 
-            List<OUDTO> dtos = classes.Select(c => new OUDTO(c)).ToList();
-            syncOUs(dtos, studentEntry, false, institution, null, null);
+                using DirectoryEntry studentEntry = GetStudentsOU(institutionEntry);
+                if (studentEntry == null)
+                {
+                    logger.LogError("Failed to update classes for institution with name " + institution.InstitutionName + " and id " + institution.InstitutionNumber + ". Could not find student OU under institution in AD with matching id.");
+                    return;
+                }
+
+                // sort dtos based on level (highest first) to make sure potential renaming is smooth
+                List<OUDTO> dtos = classes.Select(c => new OUDTO(c)).ToList();
+                dtos = SortDtosBasedOnLevel(dtos);
+                syncOUs(dtos, studentEntry, false, institution, null, null);
+            }
+        }
+
+        private List<OUDTO> SortDtosBasedOnLevel(List<OUDTO> dtos)
+        {
+            return dtos.OrderByDescending(dto => ConvertToInt(dto.Level)).ToList();
+        }
+
+        private int ConvertToInt(string level)
+        {
+            int result;
+            return int.TryParse(level, out result) ? result : int.MinValue;
         }
 
         public DirectoryEntry GetUserFromCpr(string cpr)
         {
             var filter = string.Format("(&(objectClass=user)(objectClass=person)({0}={1}))", cprField, cpr);
             return SearchForDirectoryEntry(filter);
+        }
+
+        public DirectoryEntry GetUserFromUsername(string username)
+        {
+            if (username != null)
+            {
+                var filter = string.Format($"(&(objectClass=user)(objectClass=person)({usernameKeyField}={username}))");
+                return SearchForDirectoryEntry(filter);
+            } else
+            {
+                return null;
+            }
         }
 
         public bool AccountExists(string sAMAccountName)
@@ -797,91 +1511,175 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         public string CreateAccount(string username, User user, string institutionNumber)
         {
-            // ou
-            string ouDN = null;
-            if (user.Role.Equals(Role.STUDENT))
+            if (usersToIgnore.Contains(username) || usersToInclude.Count() != 0)
             {
-                if (user.StudentMainGroups == null || user.StudentMainGroups.Count() == 0)
+                logger.LogInformation("Ignoring " + username);
+                return null;
+            }
+
+            if (dryRun)
+            {
+                logger.LogInformation($"DryRun: would have created Active directory user with username {username} and name {user.Firstname} {user.FamilyName}");
+                return "";
+            } else
+            {
+                // ou
+                int classYearForOU = 0;
+                string ouDN = null;
+                if (createOUHierarchy)
                 {
-                    using DirectoryEntry institutionEntry = GetOUFromId("inst" + institutionNumber);
-                    using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
-                    ouDN = emptyGroupsOU.Properties["distinguishedName"].Value.ToString();
-                } else
-                {
-                    using DirectoryEntry entry = GetOUFromId(user.StudentMainGroups.First());
-                    if (entry != null)
+                    if (user.Role.Equals(Role.STUDENT))
                     {
-                        ouDN = entry.Properties["distinguishedName"].Value.ToString();
-                    } else
+                        if (user.StudentMainGroups == null || user.StudentMainGroups.Count() == 0)
+                        {
+                            using DirectoryEntry institutionEntry = GetOUFromId("inst" + institutionNumber);
+                            using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
+                            ouDN = emptyGroupsOU.Properties["distinguishedName"].Value.ToString();
+                        }
+                        else
+                        {
+                            MiniGroup firstGroup = user.StudentMainGroupsAsObjects.First();
+                            using DirectoryEntry entry = GetOUFromId(firstGroup.DatabaseId.ToString());
+                            if (entry != null)
+                            {
+                                ouDN = entry.Properties["distinguishedName"].Value.ToString();
+                                classYearForOU = firstGroup.StartYear;
+                            }
+                            else
+                            {
+                                using DirectoryEntry institutionEntry = GetOUFromId("inst" + institutionNumber);
+                                using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
+                                ouDN = emptyGroupsOU.Properties["distinguishedName"].Value.ToString();
+                            }
+                        }
+                    }
+                    else if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
                     {
                         using DirectoryEntry institutionEntry = GetOUFromId("inst" + institutionNumber);
-                        using DirectoryEntry emptyGroupsOU = GetStudentWithoutGroupsOU(institutionEntry);
-                        ouDN = emptyGroupsOU.Properties["distinguishedName"].Value.ToString();
+                        using DirectoryEntry employeeOU = GetEmployeeOU(institutionEntry);
+                        if (employeeOU != null)
+                        {
+                            ouDN = employeeOU.Properties["distinguishedName"].Value.ToString();
+                        }
                     }
                 }
-            } else if (user.Role.Equals(Role.EMPLOYEE) || user.Role.Equals(Role.EXTERNAL))
-            {
-                using DirectoryEntry institutionEntry = GetOUFromId("inst"+ institutionNumber);
-                using DirectoryEntry employeeOU = GetEmployeeOU(institutionEntry);
-                if (employeeOU != null)
+                else
                 {
-                    ouDN = employeeOU.Properties["distinguishedName"].Value.ToString();
+                    using DirectoryEntry institutionUsersEntry = new DirectoryEntry(@"LDAP://" + institutionUserOUPath[institutionNumber]);
+                    ouDN = institutionUsersEntry.Properties["distinguishedName"].Value.ToString();
                 }
+
+                if (ouDN == null)
+                {
+                    throw new Exception("Failed to find ou to create user in.");
+                }
+
+
+                // the user should be under root ou if createOUHierarchy
+                if (createOUHierarchy && !ouDN.ToLower().EndsWith(rootOU.ToLower()))
+                {
+                    throw new Exception("The user " + username + " was not created. It has to be placed under the root ou. Tried to place user in " + ouDN);
+                }
+
+                using PrincipalContext ctx = GetPrincipalContext(ouDN);
+                using UserPrincipal newUser = new UserPrincipal(ctx);
+                var firstname = user.Firstname.Replace(",", "");
+                var familyname = user.FamilyName.Replace(",", "");
+                string name = firstname + " " + familyname + " (" + username + ")";
+                string unidecodedName = name.Unidecode();
+                if (unidecodedName.Length > 64)
+                {
+                    int lengthDiff = unidecodedName.Length - 64;
+                    string namePart = firstname + " " + familyname;
+                    if (namePart.Length > lengthDiff)
+                    {
+                        namePart = namePart.Substring(0, namePart.Length - lengthDiff);
+                        string fullName = namePart + " (" + username + ")";
+                        newUser.Name = fullName.Unidecode();
+                    } else
+                    {
+                        throw new Exception($"Way to long name for user {username}. Name {unidecodedName}. Not creating user. Stopping sync.");
+                    }
+
+                } else
+                {
+                    newUser.Name = unidecodedName;
+                }
+                
+                newUser.GivenName = firstname;
+                newUser.Surname = familyname;
+                newUser.SamAccountName = username;
+                newUser.DisplayName = firstname + " " + familyname;
+                newUser.AccountExpirationDate = null;
+                newUser.UserPrincipalName = username + emailDomain;
+                newUser.Enabled = true;
+                newUser.SetPassword(Guid.NewGuid().ToString());
+                newUser.ExpirePasswordNow();
+                newUser.Save();
+
+                // set cpr
+                using DirectoryEntry directoryEntry = newUser.GetUnderlyingObject() as DirectoryEntry;
+
+                if (cprField != null && !cprField.Equals(""))
+                {
+                    directoryEntry.Properties[cprField].Value = user.Cpr;
+                }
+
+                // set institutionNumbers
+                if (institutionNumberField != null && !institutionNumberField.Equals(""))
+                {
+                    directoryEntry.Properties[institutionNumberField].Value = String.Join(",", user.Institutions.Select(i => i.InstitutionNumber).ToArray());
+                }
+
+                // optional fields
+                if (institutionNameField != null && !institutionNameField.Equals(""))
+                {
+                    directoryEntry.Properties[institutionNameField].Value = String.Join(", ", user.Institutions.Select(i => i.InstitutionName).ToArray());
+                }
+
+                if (uniIdField != null && !uniIdField.Equals(""))
+                {
+                    directoryEntry.Properties[uniIdField].Value = user.UniId;
+                }
+
+                string mail = username + emailDomain;
+                if (mailField != null && !mailField.Equals(""))
+                {
+                    directoryEntry.Properties[mailField].Value = mail;
+                }
+
+                string totalRoles = String.Join(',', user.TotalRoles);
+                if (stilRolesField != null && !stilRolesField.Equals(""))
+                {
+                    directoryEntry.Properties[stilRolesField].Value = totalRoles;
+                }
+
+                if (studentStartYearField != null && !studentStartYearField.Equals("") && classYearForOU != 0)
+                {
+                    directoryEntry.Properties[studentStartYearField].Value = classYearForOU;
+                }
+
+                // mark user
+                if (!createOUHierarchy && adFieldForOS2skoledataMark != null && !adFieldForOS2skoledataMark.Equals(""))
+                {
+                    directoryEntry.Properties[adFieldForOS2skoledataMark].Value = os2skoledataMark;
+                }
+
+                directoryEntry.CommitChanges();
+
+                // run powerShell
+                powerShellRunner.RunCreateScript(username, user.Firstname + " " + user.FamilyName, user.Role.ToString(), ctx.ConnectedServer, user);
+
+                return directoryEntry.Properties["distinguishedName"].Value.ToString();
             }
-
-            if (ouDN == null)
-            {
-                throw new Exception("Failed to find ou to create user in.");
-            }
-            
-
-            // the user should be under root ou
-            if (!ouDN.EndsWith(rootOU))
-            {
-                throw new Exception("The user " + username + " was not created. It has to be placed under the root ou. Tried to place user in " + ouDN);
-            }
-
-            using PrincipalContext ctx = GetPrincipalContext(ouDN);
-            using UserPrincipal newUser = new UserPrincipal(ctx);
-            string name = user.Firstname + " " + user.FamilyName + " (" + username + ")";
-            newUser.Name = name.Unidecode();
-            newUser.GivenName = user.Firstname;
-            newUser.Surname = user.FamilyName;
-            newUser.SamAccountName = username;
-            newUser.DisplayName = user.Firstname + " " + user.FamilyName;
-            newUser.AccountExpirationDate = null;
-            newUser.UserPrincipalName = username + emailDomain;
-            newUser.Enabled = true;
-            newUser.Save();
-
-            // set cpr
-            using DirectoryEntry directoryEntry = newUser.GetUnderlyingObject() as DirectoryEntry;
-            directoryEntry.Properties[cprField].Value = user.Cpr;
-
-            // optional fields
-            if (institutionNumberField != null && !institutionNumberField.Equals(""))
-            {
-                directoryEntry.Properties[institutionNumberField].Value = String.Join(", ", user.Institutions.Select(i => i.InstitutionNumber).ToArray());
-            }
-            if (institutionNameField != null && !institutionNameField.Equals(""))
-            {
-                directoryEntry.Properties[institutionNameField].Value = String.Join(", ", user.Institutions.Select(i => i.InstitutionName).ToArray());
-            }
-            
-            directoryEntry.CommitChanges();
-
-            // run powerShell
-            powerShellRunner.Run(username, user.Firstname + " " + user.FamilyName);
-
-            return directoryEntry.Properties["distinguishedName"].Value.ToString();
         }
 
-        public void DeltaSyncCreateGroup(OS2skoledata.Model.Group group)
+        public void DeltaSyncCreateGroup(Group group)
         {
             using DirectoryEntry institutionEntry = GetOUFromId("inst" + group.InstitutionNumber);
             using DirectoryEntry studentEntry = GetStudentsOU(institutionEntry);
 
-            string name = GetNameForOU(false, group.InstitutionName, group.InstitutionNumber, group.GroupName, group.GroupId, group.GroupLevel, group.StartYear);
+            string name = GetNameForOU(false, group.InstitutionName, group.InstitutionNumber, group.GroupName, group.GroupId, group.GroupLevel, group.StartYear, group.Line);
             CreateOU(studentEntry, false, group.GroupId, name);
         }
 
@@ -889,19 +1687,41 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         {
             using DirectoryEntry rootEntry = new DirectoryEntry(@"LDAP://" + rootOU);
 
-            string name = GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0);
+            string name = GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0, null);
             CreateOU(rootEntry, true, institution.InstitutionNumber, name);
         }
 
-        public void DeltaSyncUpdateGroup(OS2skoledata.Model.Group group, DirectoryEntry entry)
+        public void DeltaSyncUpdateGroup(Group group, DirectoryEntry entry)
         {
-            string name = GetNameForOU(false, group.InstitutionName, group.InstitutionNumber, group.GroupName, group.GroupId, group.GroupLevel, group.StartYear);
-            UpdateOU(entry, name);
+            using DirectoryEntry institutionEntry = GetOUFromId("inst" + group.InstitutionNumber);
+            using DirectoryEntry studentEntry = GetStudentsOU(institutionEntry);
+            string name = GetNameForOU(false, group.InstitutionName, group.InstitutionNumber, group.GroupName, group.GroupId, group.GroupLevel, group.StartYear, group.Line);
+
+            // if it has been deleted, move it back to the right place
+            bool moved = false;
+            if (!rootDeletedOusOu.Equals(rootOU) && entry.Properties["distinguishedName"][0].ToString().EndsWith(rootDeletedOusOu))
+            {
+                logger.LogInformation("Attempting to move OU with DN " + entry.Properties["distinguishedName"][0].ToString() + " to " + studentEntry.Properties["distinguishedName"][0].ToString());
+                entry.MoveTo(studentEntry);
+                logger.LogInformation($"Moved OU with name {entry.Name} to OU with path {studentEntry.Properties["distinguishedName"][0]}");
+                moved = true;
+            }
+
+            // check if ou should be updated
+            if (moved)
+            {
+                using DirectoryEntry movedEntry = GetOUFromId("" + group.DatabaseId);
+                UpdateOU(movedEntry, name);
+            }
+            else
+            {
+                UpdateOU(entry, name);
+            }
         }
 
         public void DeltaSyncUpdateInstitution(Institution institution, DirectoryEntry entry)
         {
-            string name = GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0);
+            string name = GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0, null);
             UpdateOU(entry, name);
         }
 
@@ -924,36 +1744,51 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private DirectoryEntry GetSchoolsOU(DirectoryEntry rootOU)
         {
-            foreach (DirectoryEntry ou in rootOU.Children)
+            if (dryRun)
             {
-                if (ou.Name.Equals("OU=" + schoolOUName))
+                logger.LogInformation($"DryRun: would have created or fetched school ou in Active Directory");
+                return null;
+            } else
+            {
+                foreach (DirectoryEntry ou in rootOU.Children)
                 {
-                    return ou;
+                    if (ou.Name.Equals("OU=" + schoolOUName))
+                    {
+                        return ou;
+                    }
+                    ou.Close();
                 }
-                ou.Close();
+
+                DirectoryEntry schoolsOU = rootOU.Children.Add("OU=" + schoolOUName, "OrganizationalUnit");
+                schoolsOU.CommitChanges();
+
+                return schoolsOU;
             }
-
-            DirectoryEntry schoolsOU = rootOU.Children.Add("OU=" + schoolOUName, "OrganizationalUnit");
-            schoolsOU.CommitChanges();
-
-            return schoolsOU;
         }
 
         private DirectoryEntry GetDaycareOU(DirectoryEntry rootOU)
         {
-            foreach (DirectoryEntry ou in rootOU.Children)
+            if (dryRun)
             {
-                if (ou.Name.Equals("OU=" + daycareOUName))
-                {
-                    return ou;
-                }
-                ou.Close();
+                logger.LogInformation($"DryRun: would have created or fetched daycare ou in Active Directory");
+                return null;
             }
+            else
+            {
+                foreach (DirectoryEntry ou in rootOU.Children)
+                {
+                    if (ou.Name.Equals("OU=" + daycareOUName))
+                    {
+                        return ou;
+                    }
+                    ou.Close();
+                }
 
-            DirectoryEntry daycareOU = rootOU.Children.Add("OU=" + daycareOUName, "OrganizationalUnit");
-            daycareOU.CommitChanges();
+                DirectoryEntry daycareOU = rootOU.Children.Add("OU=" + daycareOUName, "OrganizationalUnit");
+                daycareOU.CommitChanges();
 
-            return daycareOU;
+                return daycareOU;
+            }
         }
 
         private DirectoryEntry GetStudentWithoutGroupsOU(DirectoryEntry institutionOU)
@@ -1023,43 +1858,80 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private void syncOUs(List<OUDTO> dtos, DirectoryEntry ouToCreateIn, bool institutionLevel, Institution institution, DirectoryEntry schoolsOU, DirectoryEntry daycareOU)
         {
             // delete
-            foreach (DirectoryEntry ou in ouToCreateIn.Children)
+            if (dryRun)
+            { 
+                string institutionString = institution == null ? "" : "Institution: " + institution.InstitutionName;
+                logger.LogInformation($"DryRun: Would have checked if any ous should be deleted. InstitutionLevel: {institutionLevel}. {institutionString}");
+            } else
             {
-                if (ou.Name.Equals("OU=" + schoolOUName) || ou.Name.Equals("OU=" + daycareOUName) || ou.Properties["distinguishedName"].Equals(rootDeletedOusOu) || ou.Properties["distinguishedName"].Equals(disabledUsersOU))
+                foreach (DirectoryEntry ou in ouToCreateIn.Children)
                 {
-                    continue;
-                }
 
-                if (ou.Properties[oUIdField].Value != null)
-                {
-                    string id = ou.Properties[oUIdField].Value.ToString();
-                    if (dtos.Where(i => i.Id.Equals(id)).ToList().Count == 0)
+                    if (ou.Name.Equals("OU=" + schoolOUName) || ou.Name.Equals("OU=" + daycareOUName) || ou.Properties["distinguishedName"].Equals(rootDeletedOusOu) || ou.Properties["distinguishedName"].Equals(disabledUsersOU))
                     {
-                        MoveToDeletedOUs(ou);
+                        continue;
                     }
+
+                    if (ou.Properties[oUIdField].Value != null)
+                    {
+                        string id = ou.Properties[oUIdField].Value.ToString();
+                        if (dtos.Where(i => i.Id.Equals(id)).ToList().Count == 0)
+                        {
+                            if (institution == null)
+                            {
+                                MoveToDeletedOUs(ou, "Ukendt");
+                            }
+                            else
+                            {
+                                MoveToDeletedOUs(ou, GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0, null));
+                            }
+                        }
+                    }
+                    ou.Close();
                 }
-                ou.Close();
             }
+            
 
             if (institutionLevel)
             {
-                DeleteInstitutionLevelOusFor(dtos, schoolsOU);
-                DeleteInstitutionLevelOusFor(dtos, daycareOU);
+                if (dryRun)
+                {
+                    logger.LogInformation($"DryRun: Would have checked if any ous in the schoolOU or daycareOU should be deleted.");
+                } else
+                {
+                    DeleteInstitutionLevelOusFor(dtos, schoolsOU);
+                    DeleteInstitutionLevelOusFor(dtos, daycareOU);
+                }
             }
+
+            List<string> idsWithPrefix = new List<string>();
 
             // create or update
             foreach (OUDTO dto in dtos)
             {
+                if (dto.InstitutionLocked)
+                {
+                    logger.LogInformation($"NOT handling OU with database Id {dto.Id} and name  {dto.Name}. Institution is locked.");
+                    continue;
+                }
+
                 logger.LogInformation($"Handling OU with database Id {dto.Id} and name  {dto.Name}");
                 using DirectoryEntry match = GetOUFromId(dto.Id);
                 string name = "";
                 if (institutionLevel)
                 {
-                    name = GetNameForOU(institutionLevel, dto.Name, dto.StilId, null, null, null, 0);
+                    name = GetNameForOU(institutionLevel, dto.Name, dto.StilId, null, null, null, 0, null);
                 }
                 else
                 {
-                    name = GetNameForOU(institutionLevel, institution.InstitutionName, institution.InstitutionNumber, dto.Name, dto.StilId, dto.Level, dto.StartYear);
+                    name = GetNameForOU(institutionLevel, institution.InstitutionName, institution.InstitutionNumber, dto.Name, dto.StilId, dto.Level, dto.StartYear, dto.Line);
+                    
+                    // give classes a prefix when creating/ updating in full sync to make sure we don't get any renaming isues - if length is less than max lenght minus 2
+                    if (name.Length <= 62)
+                    {
+                        name = "c_" + name;
+                        idsWithPrefix.Add(dto.Id);
+                    }
                 }
 
                 if (match == null)
@@ -1085,8 +1957,39 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 }
                 else
                 {
+                    // if it has been deleted, move it back to the right place
+                    bool moved = false;
+                    string matchDN = match.Properties["distinguishedName"].Value.ToString();
+                    string createInDN = ouToCreateIn.Properties["distinguishedName"].Value.ToString();
+                    if (!matchDN.EndsWith(createInDN))
+                    {
+                        logger.LogInformation("Attempting to move OU with DN " + matchDN + " to " + createInDN);
+                        match.MoveTo(ouToCreateIn);
+                        logger.LogInformation($"Moved OU with name {match.Name} to OU with path {createInDN}");
+                        moved = true;
+                    }
+
                     // check if ou should be updated
-                    UpdateOU(match, name);
+                    if (moved)
+                    {
+                        using DirectoryEntry movedEntry = GetOUFromId(dto.Id);
+                        UpdateOU(movedEntry, name);
+                    } else
+                    {
+                        UpdateOU(match, name);
+                    }
+                }
+            }
+
+            // remove prefixes if any
+            if (idsWithPrefix.Count > 0)
+            {
+                foreach (var id in idsWithPrefix)
+                {
+                    using DirectoryEntry entry = GetOUFromId(id);
+                    string name = RemovePrefix(entry.Name, "OU=");
+                    name = RemovePrefix(name, "c_");
+                    UpdateOU(entry, name);
                 }
             }
         }
@@ -1100,7 +2003,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     string id = ou.Properties[oUIdField].Value.ToString();
                     if (dtos.Where(i => i.Id.Equals(id)).ToList().Count == 0)
                     {
-                        MoveToDeletedOUs(ou);
+                        MoveToDeletedOUs(ou, ou.Name);
                     }
                 }
                 ou.Close();
@@ -1109,76 +2012,115 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private void UpdateOU(DirectoryEntry match, string name)
         {
-            if (!match.Name.Equals("OU=" + name))
+            if (dryRun)
             {
-                match.Rename("OU=" + name);
-                match.CommitChanges();
-                logger.LogInformation($"Updated OU with DN {match.Properties["distinguishedName"].Value} and id {match.Properties[oUIdField].Value}");
+                logger.LogInformation($"DryRun: would have checked for updates on OU with name {name}");
+            }
+            else
+            {
+                var shouldHaveName = "OU=" + name;
+                if (!match.Name.Equals(shouldHaveName))
+                {
+                    logger.LogInformation($"Attempting to rename OU with dn {match.Properties["distinguishedName"].Value} from {match.Name} to {shouldHaveName}");
+                    match.Rename(shouldHaveName);
+                    match.CommitChanges();
+                    logger.LogInformation($"Updated OU with DN {match.Properties["distinguishedName"].Value} and id {match.Properties[oUIdField].Value}");
+                }
             }
         }
 
         private void CreateOU(DirectoryEntry ouToCreateIn, bool institutionLevel, string id, string name)
         {
-            using DirectoryEntry newOU = ouToCreateIn.Children.Add("OU=" + name, "OrganizationalUnit");
-            newOU.Properties[oUIdField].Value = id;
-            newOU.CommitChanges();
-            logger.LogInformation($"Created OU with DN {newOU.Properties["distinguishedName"].Value} and id {id}");
-
-            if (institutionLevel)
+            if (dryRun)
             {
-                using DirectoryEntry studentOU = newOU.Children.Add("OU=" + studentOUName, "OrganizationalUnit");
-                studentOU.CommitChanges();
-                logger.LogInformation($"Created student OU with DN {studentOU.Properties["distinguishedName"].Value}");
+                logger.LogInformation($"DryRun: would have created OU with name {name} and id {id}");
+            } else
+            {
+                using DirectoryEntry newOU = ouToCreateIn.Children.Add("OU=" + name, "OrganizationalUnit");
+                newOU.Properties[oUIdField].Value = id;
+                newOU.CommitChanges();
+                logger.LogInformation($"Created OU with DN {newOU.Properties["distinguishedName"].Value} and id {id}");
 
-                using DirectoryEntry studentWithoutGroupsOU = studentOU.Children.Add("OU=" + studentsWithoutGroupsOUName, "OrganizationalUnit");
-                studentWithoutGroupsOU.CommitChanges();
-                logger.LogInformation($"Created student-without-groups OU with DN {studentWithoutGroupsOU.Properties["distinguishedName"].Value}");
-
-                using DirectoryEntry employeeOU = newOU.Children.Add("OU=" + employeeOUName, "OrganizationalUnit");
-                employeeOU.CommitChanges();
-                logger.LogInformation($"Created employee OU with DN {employeeOU.Properties["distinguishedName"].Value}");
-
-                using DirectoryEntry securityGroupOU = newOU.Children.Add("OU=" + securityGroupOUName, "OrganizationalUnit");
-                securityGroupOU.CommitChanges();
-                logger.LogInformation($"Created SecurityGroup OU with DN {securityGroupOU.Properties["distinguishedName"].Value}");
-
-                if (oUsToAlwaysCreate != null)
+                if (institutionLevel)
                 {
-                    foreach (string alwaysCreate in (oUsToAlwaysCreate != null ? oUsToAlwaysCreate.ToList() : new List<string>()))
+                    using DirectoryEntry studentOU = newOU.Children.Add("OU=" + studentOUName, "OrganizationalUnit");
+                    studentOU.CommitChanges();
+                    logger.LogInformation($"Created student OU with DN {studentOU.Properties["distinguishedName"].Value}");
+
+                    using DirectoryEntry studentWithoutGroupsOU = studentOU.Children.Add("OU=" + studentsWithoutGroupsOUName, "OrganizationalUnit");
+                    studentWithoutGroupsOU.CommitChanges();
+                    logger.LogInformation($"Created student-without-groups OU with DN {studentWithoutGroupsOU.Properties["distinguishedName"].Value}");
+
+                    using DirectoryEntry employeeOU = newOU.Children.Add("OU=" + employeeOUName, "OrganizationalUnit");
+                    employeeOU.CommitChanges();
+                    logger.LogInformation($"Created employee OU with DN {employeeOU.Properties["distinguishedName"].Value}");
+
+                    using DirectoryEntry securityGroupOU = newOU.Children.Add("OU=" + securityGroupOUName, "OrganizationalUnit");
+                    securityGroupOU.CommitChanges();
+                    logger.LogInformation($"Created SecurityGroup OU with DN {securityGroupOU.Properties["distinguishedName"].Value}");
+
+                    if (oUsToAlwaysCreate != null)
                     {
-                        using DirectoryEntry alwaysCreateOU = newOU.Children.Add("OU=" + alwaysCreate, "OrganizationalUnit");
-                        alwaysCreateOU.CommitChanges();
-                        logger.LogInformation($"Created OU configured to always be created with DN {alwaysCreateOU.Properties["distinguishedName"].Value}");
+                        foreach (string alwaysCreate in (oUsToAlwaysCreate != null ? oUsToAlwaysCreate.ToList() : new List<string>()))
+                        {
+                            using DirectoryEntry alwaysCreateOU = newOU.Children.Add("OU=" + alwaysCreate, "OrganizationalUnit");
+                            alwaysCreateOU.CommitChanges();
+                            logger.LogInformation($"Created OU configured to always be created with DN {alwaysCreateOU.Properties["distinguishedName"].Value}");
+                        }
                     }
                 }
             }
         }
 
-        private string GetNameForOU(bool institutionLevel, string institutionName, string institutionNumber, string name, string id, string level, int startYear)
+        public string GetNameForOU(bool institutionLevel, string institutionName, string institutionNumber, string name, string id, string level, int startYear, string line)
         {
+            if (!useDanishCharacters)
+            {
+                institutionName = institutionName.Unidecode();
+                name = name.Unidecode();
+            }
+
             string calculatedName = "";
             if (institutionLevel)
             {
                 calculatedName = institutionOUNameStandard
-                    .Replace("{INSTITUTION_NAME}", institutionName.Unidecode())
+                    .Replace("{INSTITUTION_NAME}", institutionName)
                     .Replace("{INSTITUTION_NUMBER}", institutionNumber);
             }
             else
             {
-                calculatedName = classOUNameStandard
-                    .Replace("{INSTITUTION_NAME}", institutionName.Unidecode())
+                if (startYear != 0 && (!classOUNameStandard.Contains("CLASS_LINE") || (classOUNameStandard.Contains("CLASS_LINE") && !String.IsNullOrEmpty(line))))
+                {
+                    calculatedName = classOUNameStandard
+                    .Replace("{INSTITUTION_NAME}", institutionName)
                     .Replace("{INSTITUTION_NUMBER}", institutionNumber)
-                    .Replace("{CLASS_NAME}", name.Unidecode())
+                    .Replace("{CLASS_NAME}", name)
+                    .Replace("{CLASS_ID}", id)
+                    .Replace("{CLASS_LEVEL}", level)
+                    .Replace("{CLASS_YEAR}", startYear + "")
+                    .Replace("{CLASS_LINE}", line);
+                }
+                else
+                {
+                    String nameStandard = null;
+                    if (String.IsNullOrEmpty(classOUNameStandardNoClassYear))
+                    {
+                        nameStandard = classOUNameStandard;
+                    } else
+                    {
+                        nameStandard = classOUNameStandardNoClassYear;
+                    }
+
+                    calculatedName = nameStandard
+                    .Replace("{INSTITUTION_NAME}", institutionName)
+                    .Replace("{INSTITUTION_NUMBER}", institutionNumber)
+                    .Replace("{CLASS_NAME}", name)
                     .Replace("{CLASS_ID}", id)
                     .Replace("{CLASS_LEVEL}", level);
-                
-                if (startYear != 0)
-                {
-                    calculatedName = calculatedName.Replace("{CLASS_YEAR}", startYear + "");
                 }
             }
 
-            calculatedName = EscapeCharactersForAD(calculatedName);
+            calculatedName = EscapeCharactersForAD(calculatedName, false);
 
             if (calculatedName.Length > 64)
             {
@@ -1188,7 +2130,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return calculatedName;
         }
 
-        private string EscapeCharactersForAD(string name)
+        private string EscapeCharactersForAD(string name, bool forGroup)
         {
             name = name.Replace("+", "\\+");
             name = name.Replace(",", "\\,");
@@ -1200,89 +2142,191 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             name = name.Replace("&", " og ");
             name = name.Replace("/", " ");
 
+            if (forGroup)
+            {
+                name = name.Replace(".", "");
+            }
+
+            return name;
+        }
+        
+        private string EscapeCharactersForADSamAccountNameHard(string name)
+        {
+            name = name.Replace("+", "");
+            name = name.Replace(",", "");
+            name = name.Replace("\"", "");
+            name = name.Replace("<", "");
+            name = name.Replace(">", "");
+            name = name.Replace(";", "");
+            name = name.Replace("#", "");
+            name = name.Replace("&", "");
+            name = name.Replace("/", "");
+            name = name.Replace(" ", "_");
+            name = name.Replace("*", "_");
+            name = name.Replace(".", "");
+
+            if (!useDanishCharacters)
+            {
+                name = name.Replace("ø", "oe");
+                name = name.Replace("å", "aa");
+                name = name.Replace("æ", "ae");
+                name = name.Replace("Ø", "Oe");
+                name = name.Replace("Å", "Aa");
+                name = name.Replace("Æ", "Ae");
+            }
+
             return name;
         }
 
-        public void MoveToDeletedOUs(DirectoryEntry toMove)
+        public void MoveToDeletedOUs(DirectoryEntry toMove, string underInstitution)
         {
-            var newOUName = "OU=slettede_ous_" + DateTime.Now.ToString("yyyy_MM_dd");
-            DirectoryEntry rootDeletedOusOuEntry = new DirectoryEntry(@"LDAP://" + rootDeletedOusOu);
-            DirectoryEntry match = null;
-            foreach (DirectoryEntry ou in rootDeletedOusOuEntry.Children)
+            if (dryRun)
             {
-                if (ou.Name.Equals(newOUName))
+                logger.LogInformation($"DryRun: would have moved OU with dn {toMove.Properties["distinguishedName"][0]} to deleted ous");
+            } else
+            {
+                var newOUName = "OU=slettede_ous_" + DateTime.Now.ToString("yyyy_MM_dd");
+                DirectoryEntry rootDeletedOusOuEntry = new DirectoryEntry(@"LDAP://" + rootDeletedOusOu);
+                DirectoryEntry dayMatch = null;
+                foreach (DirectoryEntry ou in rootDeletedOusOuEntry.Children)
                 {
-                    match = ou;
+                    if (ou.Name.Equals(newOUName))
+                    {
+                        dayMatch = ou;
+                    }
                 }
-            }
 
-            if (match == null)
-            {
-                match = rootDeletedOusOuEntry.Children.Add(newOUName, "OrganizationalUnit");
-                match.CommitChanges();
-                logger.LogInformation("Created deleted ous ou for today: " + match.Properties["distinguishedName"][0].ToString());
-            }
+                if (dayMatch == null)
+                {
+                    dayMatch = rootDeletedOusOuEntry.Children.Add(newOUName, "OrganizationalUnit");
+                    dayMatch.CommitChanges();
+                    logger.LogInformation("Created deleted ous ou for today: " + dayMatch.Properties["distinguishedName"][0].ToString());
+                }
 
-            toMove.MoveTo(match);
-            logger.LogInformation("Moved OU with name " + toMove.Name + " to deleted ous ou for today");
-            match.Close();
+                var underInstitutionOUName = "OU=" + underInstitution;
+                DirectoryEntry institutionMatch = null;
+                foreach (DirectoryEntry ou in dayMatch.Children)
+                {
+                    if (ou.Name.Equals(underInstitutionOUName))
+                    {
+                        institutionMatch = ou;
+                    }
+                }
+
+                if (institutionMatch == null)
+                {
+                    institutionMatch = dayMatch.Children.Add(underInstitutionOUName, "OrganizationalUnit");
+                    institutionMatch.CommitChanges();
+                    logger.LogInformation("Created institutionOU under deleted ous ou for today: " + institutionMatch.Properties["distinguishedName"][0].ToString());
+                }
+
+                logger.LogInformation("Attempting to move OU with DN " + toMove.Properties["distinguishedName"][0].ToString() + " to institutionOU under deleted ous ou for today with dn " + institutionMatch.Properties["distinguishedName"][0].ToString());
+                toMove.MoveTo(institutionMatch);
+                logger.LogInformation($"Moved OU with name {toMove.Name} to institutionOU with name {institutionMatch.Name} under deleted ous ou for today");
+
+                institutionMatch.Close();
+                dayMatch.Close();
+            }
         }
 
         public bool DisableAccount(string username)
         {
-            bool success = false;
-            using PrincipalContext ctx = GetPrincipalContext();
-            using UserPrincipal user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
-            if (user == null)
+            if (usersToIgnore.Contains(username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(username)))
             {
-                logger.LogError("Failed to disable AD user with userId: No account with userId: " + username);
+                logger.LogInformation("Ignoring " + username);
+                return true;
+            }
+
+            if (dryRun)
+            {
+                logger.LogInformation($"DryRun: would have disabled AD account with username {username} in AD");
+                return true;
             }
             else
             {
-                // disable user
-                user.Enabled = false;
-                user.Save();
+                bool success = false;
+                
+                using PrincipalContext ctx = GetPrincipalContext();
+                using UserPrincipal user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
+                if (user == null)
+                {
+                    logger.LogError("Failed to disable AD user with userId: No account with userId: " + username);
+                }
+                else
+                {
+                    if ((bool) user.Enabled)
+                    {
+                        // disable user
+                        user.Enabled = false;
+                        user.Save();
 
-                // move user to date specific disabled user group
-                string ouDn = CreateOrGetDisabledUserOUDN();
-                MoveUser(username, user.DistinguishedName, ouDn);
-                logger.LogInformation($"Disabled user with username {username}");
+                        // move user to date specific disabled user group
+                        string ouDn = CreateOrGetDisabledUserOUDN();
+                        MoveUser(username, user.DistinguishedName, ouDn);
 
-                success = true;
+                        logger.LogInformation($"Disabled user with username {username}");
+
+                        powerShellRunner.DisableScript(username);
+
+                        success = true;
+                    }
+                }
+
+                return success;
             }
-
-            return success;
         }
 
         private string CreateOrGetDisabledUserOUDN()
         {
-            var newOUName = "OU=disabled_users_" + DateTime.Now.ToString("yyyy_MM_dd");
-            using DirectoryEntry rootDisabledOu = new DirectoryEntry(@"LDAP://" + disabledUsersOU);
-            foreach (DirectoryEntry ou in rootDisabledOu.Children)
+            if (dryRun)
             {
-                if (ou.Name.Equals(newOUName))
+                logger.LogInformation("DryRun: would have created disabled ou for today");
+                return "";
+            } else
+            {
+                var newOUName = "OU=disabled_users_" + DateTime.Now.ToString("yyyy_MM_dd");
+                using DirectoryEntry rootDisabledOu = new DirectoryEntry(@"LDAP://" + disabledUsersOU);
+                foreach (DirectoryEntry ou in rootDisabledOu.Children)
                 {
-                    return ou.Properties["distinguishedName"][0].ToString();
+                    if (ou.Name.Equals(newOUName))
+                    {
+                        return ou.Properties["distinguishedName"][0].ToString();
+                    }
                 }
+
+
+                using DirectoryEntry newOU = rootDisabledOu.Children.Add(newOUName, "OrganizationalUnit");
+                newOU.CommitChanges();
+                var dn = newOU.Properties["distinguishedName"][0].ToString();
+                logger.LogInformation("Created disabled ou for today: " + dn);
+
+                return dn;
             }
-
-
-            using DirectoryEntry newOU = rootDisabledOu.Children.Add(newOUName, "OrganizationalUnit");
-            newOU.CommitChanges();
-            var dn = newOU.Properties["distinguishedName"][0].ToString();
-            logger.LogInformation("Created disabled ou for today: " + dn);
-
-            return dn;
         }
 
-        private void MoveUser(string userId, string from, string to)
+        private void MoveUser(string username, string from, string to)
         {
-            using DirectoryEntry eLocation = new DirectoryEntry("LDAP://" + from);
-            using DirectoryEntry nLocation = new DirectoryEntry("LDAP://" + to);
+            if (usersToIgnore.Contains(username) || (usersToInclude.Count() != 0 && !usersToInclude.Contains(username)))
+            {
+                logger.LogInformation("Ignoring " + username);
+                return;
+            }
 
-            eLocation.MoveTo(nLocation);
-            
-            logger.LogInformation("Moved user " + userId + " from " + from + " to " + to);
+            if (dryRun)
+            {
+                logger.LogInformation($"DryRun: would have moved AD account with username {username} from {from} to {to}");
+            }
+            else
+            {
+                logger.LogInformation("Attempting to move user " + username + " from " + from + " to " + to);
+
+                using DirectoryEntry eLocation = new DirectoryEntry("LDAP://" + from);
+                using DirectoryEntry nLocation = new DirectoryEntry("LDAP://" + to);
+
+                eLocation.MoveTo(nLocation);
+
+                logger.LogInformation("Moved user " + username + " from " + from + " to " + to);
+            }
         }
 
         private PrincipalContext GetPrincipalContext(string ldapPath = null)
@@ -1322,7 +2366,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private string GetPrefix()
         {
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
             {
                 return "";
             }
@@ -1331,7 +2375,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private int getNamePartLength()
         {
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
             {
                 return 4;
             }
@@ -1340,28 +2384,44 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private bool IsNameFirst()
         {
-            if (usernameStandard.Equals(UsernameStandardType.PREFIX_NAME_LAST))
+            if (usernameStandard.Equals(UsernameStandardType.PREFIX_NAME_LAST) || usernameStandard.Equals(UsernameStandardType.THREE_NUMBERS_THREE_CHARS_FROM_NAME))
             {
                 return false;
             }
             return true;
         }
 
-        private List<string> GetAllUsernames(DirectoryEntry entry)
+        private List<string> GetAllUsernames(DirectoryEntry entry, bool filterByMark)
         {
             var filter = string.Format("(&(objectClass=user)(objectClass=person))");
 
             using DirectorySearcher search = new DirectorySearcher(entry);
             search.Filter = filter;
             search.PropertiesToLoad.Add("sAMAccountName");
-            SearchResultCollection users = search.FindAll();
+            if (!createOUHierarchy && filterByMark)
+            {
+                search.PropertiesToLoad.Add(adFieldForOS2skoledataMark);
+            }
+
+            // to ensure loading all - set pageSize
+            search.PageSize = 1000;
+            using SearchResultCollection users = search.FindAll();
 
             if (users != null)
             {
                 List<string> usernames = new List<string>();
                 foreach (SearchResult user in users)
                 {
-                    usernames.Add(user.Properties["sAMAccountName"][0].ToString());
+                    if (createOUHierarchy && !filterByMark)
+                    {
+                        usernames.Add(user.Properties["sAMAccountName"][0].ToString());
+                    } else
+                    {
+                        if (user.Properties[adFieldForOS2skoledataMark] != null && user.Properties[adFieldForOS2skoledataMark].Count > 0 && Object.Equals(user.Properties[adFieldForOS2skoledataMark][0].ToString(), os2skoledataMark))
+                        {
+                            usernames.Add(user.Properties["sAMAccountName"][0].ToString());
+                        }
+                    }
                 }
                 return usernames;
             }
@@ -1369,38 +2429,265 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return null;
         }
 
+        private List<UsernameInstitutionDTO> GetAllUsernamesAndInstitutionNumbers(DirectoryEntry entry, bool filterByMark)
+        {
+            var filter = string.Format("(&(objectClass=user)(objectClass=person))");
+
+            using DirectorySearcher search = new DirectorySearcher(entry);
+            search.Filter = filter;
+            search.PropertiesToLoad.Add("sAMAccountName");
+            search.PropertiesToLoad.Add(institutionNumberField);
+            if (!createOUHierarchy && filterByMark)
+            {
+                search.PropertiesToLoad.Add(adFieldForOS2skoledataMark);
+            }
+
+            // to ensure loading all - set pageSize
+            search.PageSize = 1000;
+            using SearchResultCollection users = search.FindAll();
+
+            if (users != null)
+            {
+                List<UsernameInstitutionDTO> dtos = new List<UsernameInstitutionDTO>();
+                foreach (SearchResult user in users)
+                {
+                    if (createOUHierarchy && !filterByMark)
+                    {
+                        AddDTO(dtos, user);
+                    }
+                    else
+                    {
+                        if (user.Properties[adFieldForOS2skoledataMark] != null && user.Properties[adFieldForOS2skoledataMark].Count > 0 && Object.Equals(user.Properties[adFieldForOS2skoledataMark][0].ToString(), os2skoledataMark))
+                        {
+                            AddDTO(dtos, user);
+                        }
+                    }
+                }
+                return dtos;
+            }
+
+            return null;
+        }
+
+        private List<string> GetAllUsernamesWithIgnoreFieldFilled()
+        {
+            // search for users where ignoreField has a value (no matter what the value is - * is wildcard)
+            var filter = string.Format("(&(objectClass=user)(objectClass=person)({0}=*))", ignoreField);
+
+            using DirectorySearcher search = new DirectorySearcher(new DirectoryEntry());
+            search.Filter = filter;
+            search.PropertiesToLoad.Add("sAMAccountName");
+            search.PropertiesToLoad.Add(ignoreField);
+
+            // to ensure loading all - set pageSize
+            search.PageSize = 1000;
+            using SearchResultCollection users = search.FindAll();
+
+            if (users != null)
+            {
+                List<string> usernamesToIgnore = new List<string>();
+                foreach (SearchResult user in users)
+                {
+                    usernamesToIgnore.Add(user.Properties["sAMAccountName"][0].ToString());
+                }
+                return usernamesToIgnore;
+            }
+
+            return null;
+        }
+
+        private void AddDTO(List<UsernameInstitutionDTO> dtos, SearchResult user)
+        {
+            UsernameInstitutionDTO dto = new UsernameInstitutionDTO();
+            dto.Username = user.Properties["sAMAccountName"][0].ToString();
+            dto.institutionNumbers = new List<string>();
+
+            string numberString = null;
+            if (user.Properties.Contains(institutionNumberField) && user.Properties[institutionNumberField] != null && user.Properties[institutionNumberField].Count > 0 && !string.IsNullOrEmpty(user.Properties[institutionNumberField][0].ToString()))
+            {
+                numberString = user.Properties[institutionNumberField][0].ToString();
+            }
+            
+            if (numberString != null && numberString.Count() > 0)
+            {
+                dto.institutionNumbers = numberString.Split(",").ToList();
+            }
+
+            // only add if we can fetch institutionNumbers
+            if (dto.institutionNumbers.Count > 0)
+            {
+                dtos.Add(dto);
+            }
+        }
 
         private DirectoryEntry GetSecurityGroupOUInEntry(DirectoryEntry entry)
         {
-            DirectoryEntry securityGroupOU = null;
-            if (!DirectoryEntry.Exists("LDAP://OU=" + securityGroupOUName + "," + entry.Properties["distinguishedName"].Value.ToString()))
+            if (createOUHierarchy)
             {
-                securityGroupOU = entry.Children.Add("OU=" + securityGroupOUName, "OrganizationalUnit");
-                securityGroupOU.CommitChanges();
+                DirectoryEntry securityGroupOU = null;
+
+                if (dryRun)
+                {
+                    logger.LogInformation($"DryRun: would have created or fetched security group Ou");
+                } else
+                {
+                    if (!DirectoryEntry.Exists("LDAP://OU=" + securityGroupOUName + "," + entry.Properties["distinguishedName"].Value.ToString()))
+                    {
+
+                        securityGroupOU = entry.Children.Add("OU=" + securityGroupOUName, "OrganizationalUnit");
+                        securityGroupOU.CommitChanges();
+                    }
+                    else
+                    {
+                        securityGroupOU = new DirectoryEntry("LDAP://OU=" + securityGroupOUName + "," + entry.Properties["distinguishedName"].Value.ToString());
+                    }
+                }
+
+                return securityGroupOU;
+            } else
+            {
+                return new DirectoryEntry(@"LDAP://" + allSecurityGroupsOU);
+            }
+            
+        }
+
+        private string GetClassSecurityGroupName(Group currentClass, Institution institution)
+        {
+            string institutionName = institution.InstitutionName;
+            string groupName = currentClass.GroupName;
+            if (!useDanishCharacters)
+            {
+                institutionName = institutionName.Unidecode();
+                groupName = groupName.Unidecode();
+            }
+
+            String name;
+            if (currentClass.StartYear != 0 && (!classSecurityGroupNameStandard.Contains("CLASS_LINE") || (!String.IsNullOrEmpty(currentClass.Line) && classSecurityGroupNameStandard.Contains("CLASS_LINE"))))
+            {
+                name = classSecurityGroupNameStandard;
+                name = FindPlaceholdersAndClassSecurityGroupName("classSecurityGroupNameStandard", currentClass, institution, institutionName, groupName, name);
+
             }
             else
             {
-                securityGroupOU = new DirectoryEntry("LDAP://OU=" + securityGroupOUName + "," + entry.Properties["distinguishedName"].Value.ToString());
+                if (String.IsNullOrEmpty(classSecurityGroupNameStandardNoClassYear)) {
+                    name = classSecurityGroupNameStandard;
+                    name = FindPlaceholdersAndClassSecurityGroupName("classSecurityGroupNameStandard", currentClass, institution, institutionName, groupName, name);
+                } else
+                {
+                    name = classSecurityGroupNameStandardNoClassYear;
+                    name = FindPlaceholdersAndClassSecurityGroupName("classSecurityGroupNameStandardNoClassYear", currentClass, institution, institutionName, groupName, name);
+                }
             }
 
-            return securityGroupOU;
-        }
-
-        private string GetClassSecurityGroupName(OS2skoledata.Model.Group currentClass, Institution institution)
-        {
-            string name = classSecurityGroupNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
-                        .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
-                        .Replace("{CLASS_NAME}", currentClass.GroupName.Unidecode())
-                        .Replace("{CLASS_ID}", currentClass.GroupId)
-                        .Replace("{CLASS_LEVEL}", currentClass.GroupLevel);
-
-
-            name = EscapeCharactersForAD(name);
+            name = EscapeCharactersForAD(name, true);
 
             if (name.Length > 64)
             {
                 name = name.Substring(0,64);
+            }
+
+            return name;
+        }
+
+        private string FindPlaceholdersAndClassSecurityGroupName(string standard, Group currentClass, Institution institution, string institutionName, string groupName, string name)
+        {
+            // find the placeholders and for each replace
+            string pattern = @"\{.*?\}";
+            Regex regex = new Regex(pattern);
+            MatchCollection placeholders = regex.Matches(name);
+
+            foreach (Match match in placeholders)
+            {
+                string placeholder = match.Value;
+                name = ReplaceGroupName(standard, name, placeholder, institutionName, institution, groupName, currentClass);
+            }
+
+            return name;
+        }
+
+        private string ReplaceGroupName(string standardName, string name, String placeholder, string institutionName, Institution institution, string groupName, Group currentClass)
+        {
+            string lettersPattern = @"([a-zA-Z_]+)";
+            string numberPattern = @"(\d{1,2})";
+
+            Match lettersMatch = Regex.Match(placeholder, lettersPattern);
+            Match numberMatch = Regex.Match(placeholder, numberPattern);
+
+            string letters = lettersMatch.Success ? lettersMatch.Groups[1].Value : null;
+            string numberString = numberMatch.Success ? numberMatch.Groups[1].Value : null;
+
+            int number = 0;
+            if (numberString != null)
+            {
+                bool isNumberValid = int.TryParse(numberString, out number);
+                if (!isNumberValid)
+                {
+                    throw new Exception($"Invalid number in class group name Standard: {standardName}. Invalid number: {numberString}");
+                }
+            }
+
+            bool numberFirst = false;
+            bool hasNumber = false;
+
+            if (!string.IsNullOrEmpty(letters) && !string.IsNullOrEmpty(numberString))
+            {
+                hasNumber = true;
+                numberFirst = placeholder.IndexOf(letters) > placeholder.IndexOf(numberString);
+            }
+
+            if (placeholder.Contains("INSTITUTION_NAME"))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, institutionName, number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("INSTITUTION_NUMBER"))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, institution.InstitutionNumber, number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("CLASS_NAME"))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, groupName, number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("CLASS_ID"))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, currentClass.GroupId, number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("CLASS_LEVEL"))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, currentClass.GroupLevel, number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("CLASS_YEAR") && currentClass.StartYear != 0)
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, currentClass.StartYear.ToString(), number, numberFirst, hasNumber);
+            }
+            else if (placeholder.Contains("CLASS_LINE") && !String.IsNullOrEmpty(currentClass.Line))
+            {
+                name = ReplaceBasedOnNumber(name, placeholder, currentClass.Line, number, numberFirst, hasNumber);
+            }
+
+            return name;
+        }
+
+        private string ReplaceBasedOnNumber(string name, string placeholder, string value, int number, bool numberFirst, bool hasNumber)
+        {
+            if (hasNumber && value.Length > number)
+            {
+                // if numberFirst - then cut from end else from beginning
+                string finalValue = value;
+                if (numberFirst)
+                {
+                    finalValue = finalValue.Substring(0, number);
+                }
+                else
+                {
+                    finalValue = finalValue.Substring(finalValue.Length - number);
+                }
+                name = name.Replace(placeholder, finalValue);
+
+            }
+            else
+            {
+                name = name.Replace(placeholder, value);
             }
 
             return name;
@@ -1408,29 +2695,35 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private string GetInstitutionGroupName(string type, Institution institution)
         {
+            string institutionName = institution.InstitutionName;
+            if (!useDanishCharacters)
+            {
+                institutionName = institutionName.Unidecode();
+            }
+
             string name = "";
             switch (type)
             {
                 case "ALL":
                     name = allInInstitutionSecurityGroupNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
+                        .Replace("{INSTITUTION_NAME}", institutionName)
                         .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber);
                     break;
                 case "EMPLOYEES":
                     name = allEmployeesInInstitutionSecurityGroupNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
+                        .Replace("{INSTITUTION_NAME}", institutionName)
                         .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber);
                     break;
                 case "STUDENTS":
                     name = allStudentsInInstitutionSecurityGroupNameStandard
-                        .Replace("{INSTITUTION_NAME}", institution.InstitutionName.Unidecode())
+                        .Replace("{INSTITUTION_NAME}", institutionName)
                         .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber);
                     break;
                 default:
                     throw new Exception("Unknown institution security group name standard type: " + type);
             }
 
-            name = EscapeCharactersForAD(name);
+            name = EscapeCharactersForAD(name, true);
 
             if (name.Length > 64)
             {
@@ -1441,40 +2734,200 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         }
 
 
-        private DirectoryEntry UpdateGroup(DirectoryEntry securityGroupOU, string id, string name)
+        private DirectoryEntry UpdateGroup(DirectoryEntry securityGroupOU, string id, string name, string institutionNumber, string samAccountName, List<string> renamedOrNewSecurityGroupIds = null)
         {
+            if (String.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+
             logger.LogInformation($"Checking if security group with name {name} and id {id} should be updated or created");
             DirectoryEntry group = GetGroupFromId(id);
 
-            bool created = false;
-            bool updated = false;
-            if (group == null)
+            if (dryRun)
             {
-                group = securityGroupOU.Children.Add("CN=" + name, "group");
-                group.Properties[securityGroupIdField].Value = id;
-                created = true;
+                if (group == null)
+                {
+                    logger.LogInformation($"DryRun: would have created Security Group with name {name} and id {id}.");
+                }
+                else
+                {
+                    logger.LogInformation($"DryRun: would have updated Security Group with name {name} and id {id}.");
+                }
             }
             else
             {
-                if (!group.Name.Equals("CN=" + name))
+                bool created = false;
+                bool updated = false;
+                bool hasPrefix = false;
+                if (group == null)
                 {
-                    group.Rename("CN=" + name);
-                    updated = true;
+                    logger.LogInformation($"Did not find group with name {name} and id {id} in AD. Attempting to create");
+                    if (renamedOrNewSecurityGroupIds != null && name.Length <= 62)
+                    {
+                        group = securityGroupOU.Children.Add("CN=c_" + RemovePrefix(name, "c_"), "group");
+                        hasPrefix = true;
+                    }
+                    else
+                    {
+                        group = securityGroupOU.Children.Add("CN=" + name, "group");
+                    }
+                    group.Properties[securityGroupIdField].Value = id;
+                    group.Properties[securityGroupInstitutionNumberField].Value = institutionNumber;
+
+                    if (setSamAccountName)
+                    {
+                        group.Properties["sAMAccountName"].Value = samAccountName;
+                    }
+
+                    created = true;
                 }
-            }
+                else
+                {
+                    if (!object.Equals(group.Properties[securityGroupInstitutionNumberField].Value, institutionNumber))
+                    {
+                        logger.LogInformation($"Updating securityGroupInstitutionNumberField on group {group.Name} from {group.Properties[securityGroupInstitutionNumberField].Value} to {institutionNumber}");
+                        group.Properties[securityGroupInstitutionNumberField].Value = institutionNumber;
+                        updated = true;
+                    }
 
-            group.CommitChanges();
+                    if (setSamAccountName)
+                    {
+                        var currentSamAccountName = group.Properties["sAMAccountName"].Value;
+                        if (!Object.Equals(currentSamAccountName, samAccountName))
+                        {
+                            logger.LogInformation($"Updating samAccountName on group {group.Name} from {currentSamAccountName} to {samAccountName}");
+                            group.Properties["sAMAccountName"].Value = samAccountName;
+                            updated = true;
+                        }
+                    }
 
-            if (created)
-            {
-                logger.LogInformation($"Created security group with name {name} and id {id}");
-            } else if (updated)
-            {
-                logger.LogInformation($"Updated security group with name {name} and id {id}");
+                    if (!group.Name.Equals("CN=" + name))
+                    {
+                        logger.LogInformation($"Updating name on group {group.Name} from {group.Name} to {"CN=" + name}");
+                        if (renamedOrNewSecurityGroupIds != null && name.Length <= 62)
+                        {
+                            group.Rename("CN=c_" + RemovePrefix(name, "c_"));
+                            hasPrefix = true;
+                        } else
+                        {
+                            group.Rename("CN=" + name);
+                        }
+                            
+                        updated = true;
+                    }
+                }
+
+                if (hasPrefix)
+                {
+                    if (setSamAccountName && samAccountName != null)
+                    {
+                        // if name has prefix, also set prefix on samAccountName
+                        group.Properties["sAMAccountName"].Value = "c_" + RemovePrefix(samAccountName, "c_");
+                    }
+                    
+                    renamedOrNewSecurityGroupIds.Add(id);
+                }
+
+                if (updated || created)
+                {
+                    group.CommitChanges();
+                }
+
+                if (created)
+                {
+                    logger.LogInformation($"Created security group with name {name} and id {id}");
+                }
+                else if (updated)
+                {
+                    logger.LogInformation($"Updated security group with name {name} and id {id}");
+                }
             }
 
             return group;
         }
 
+        private string GenerateSamAccountName(Group group, Institution institution, GroupType groupType, string additionalInfo, List<Group> classes)
+        {
+            if (!setSamAccountName)
+            {
+                return null;
+            }
+
+            string institutionName = institution == null ? null : institution.InstitutionName;
+            string groupName = group == null ? null : group.GroupName;
+            if (!useDanishCharacters)
+            {
+                institutionName = institution == null ? null : institutionName.Unidecode();
+                additionalInfo = additionalInfo == null ? null : additionalInfo.Unidecode();
+                groupName = group == null ? null : group.GroupName.Unidecode();
+            }
+
+            string samAccountName = "";
+            string prefix = string.IsNullOrEmpty(samAccountPrefix) ? "" : samAccountPrefix + "_";
+            switch (groupType)
+            {
+                case GroupType.INSTITUTION_ALL:
+                    samAccountName = $"{prefix}{institutionName}_alle";
+                    break;
+                case GroupType.INSTITUTION_STUDENTS:
+                    samAccountName = $"{prefix}{institutionName}_elever";
+                    break;
+                case GroupType.INSTITUTION_EMPLOYEES:
+                    samAccountName = $"{prefix}{institutionName}_ansatte";
+                    break;
+                case GroupType.INSTITUTION_EMPLOYEE_TYPES:
+                    samAccountName = $"{prefix}{institutionName}_{additionalInfo}_alle";
+                    break;
+                case GroupType.INSTITUTION_STUDENT_YEARS:
+                    samAccountName = $"{prefix}{institutionName}_elever_{additionalInfo}";
+                    break;
+                case GroupType.INSTITUTION_LEVELS:
+                    samAccountName = $"{prefix}{institutionName}_{additionalInfo}.klasse";
+                    break;
+                case GroupType.CLASS_ALL:
+                    bool multipleWithSameLineAndLevel = classes.Where(c => c.Line != null && group.Line != null && Object.Equals(c.Line.ToLower(), group.Line.ToLower()) && Object.Equals(c.StartYear, group.StartYear)).Count() > 1;
+                    if (group.Line == null || multipleWithSameLineAndLevel)
+                    {
+                        samAccountName = $"{prefix}{institutionName}_{group.StartYear}_{groupName}";
+                    } else
+                    {
+                        samAccountName = $"{prefix}{institutionName}_{group.StartYear}_{group.Line}";
+                    }
+                    break;
+                case GroupType.GLOBAL_STUDENTS:
+                    samAccountName = $"{prefix}{globalStudentSecurityGroupName}";
+                    break;
+                case GroupType.GLOBAL_EMPLOYEES:
+                    samAccountName = $"{prefix}{globalEmployeeSecurityGroupName}";
+                    break;
+                case GroupType.GLOBAL_EMPLOYEE_TYPES_SCHOOL:
+                    samAccountName = $"{prefix}global_{additionalInfo}_skoler";
+                    break;
+                case GroupType.GLOBAL_EMPLOYEE_TYPES_DAYCARE:
+                    samAccountName = $"{prefix}global_{additionalInfo}_daginstitutioner";
+                    break;
+            }
+
+            samAccountName = EscapeCharactersForADSamAccountNameHard(samAccountName);
+
+            return samAccountName;
+        }
     }
+
+    public enum GroupType
+    {
+        INSTITUTION_ALL,
+        INSTITUTION_STUDENTS,
+        INSTITUTION_EMPLOYEES,
+        INSTITUTION_EMPLOYEE_TYPES,
+        INSTITUTION_STUDENT_YEARS,
+        INSTITUTION_LEVELS,
+        CLASS_ALL,
+        GLOBAL_STUDENTS,
+        GLOBAL_EMPLOYEES,
+        GLOBAL_EMPLOYEE_TYPES_SCHOOL,
+        GLOBAL_EMPLOYEE_TYPES_DAYCARE
+    }
+
 }

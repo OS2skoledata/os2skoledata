@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <UserSecretsId>dotnet-dotnet_worker_template-3296BE65-791D-49C2-A695-DACAE082222A</UserSecretsId>
     <RootNamespace>os2skoledata_ad_sync</RootNamespace>
-    <FileVersion>1.0.0.0</FileVersion>
+    <FileVersion>1.11.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -21,5 +21,14 @@
     <PackageReference Include="System.DirectoryServices.AccountManagement" Version="6.0.0" />
     <PackageReference Include="System.Management.Automation" Version="7.2.2" />
     <PackageReference Include="Unidecode.NET" Version="2.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Services\PowerShellRunner\createUser.ps1">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Services\PowerShellRunner\disableUser.ps1">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 </Project>

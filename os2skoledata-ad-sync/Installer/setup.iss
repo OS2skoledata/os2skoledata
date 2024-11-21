@@ -4,12 +4,13 @@
 #define AppPublisher "Digital Identity"
 #define AppURL "http://digital-identity.dk/"
 #define ExeName "os2skoledata-ad-sync.exe"
-#define AppVersion GetVersionNumbersString(AppSourceDir + "\" + ExeName)
+#define AppVersion "1.16.2"
+#define AppVersionOut "1.16.2"
 
 [Setup]
 AppId={#AppId}
 AppName={#AppName}
-AppVersion={#AppVersion}
+AppVersion={#AppVersionOut}
 AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
@@ -33,6 +34,8 @@ Source: "*.pdb"; DestDir: "{app}"; Flags: ignoreversion
 Source: "os2skoledata-ad-sync.runtimeconfig.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "os2skoledata-ad-sync.deps.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "appsettings.json"; DestDir: "{app}"; Flags: ignoreversion onlyifdoesntexist
+Source: "appsettings.json"; DestDir: "{app}"; DestName: "appsettings.json.default"; Flags: ignoreversion
+Source: "Services\PowerShellRunner\*.ps1"; DestDir: "{app}\PowerShell"; Flags: ignoreversion onlyifdoesntexist
 
 [Run]
 Filename: "sc.exe"; Parameters: "create ""{#AppName}"" binpath= ""{app}\{#ExeName}"" displayname=""{#AppName}"""; Flags: runhidden

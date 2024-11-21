@@ -1,0 +1,40 @@
+2023.03.27 - 1.0.0 - Første version
+2023.05.15 - 1.1.0 - Underståtter MoveUsers setting, som skal sættes til True får brugere behandles
+2023.07.11 - 1.2.0 - Fejlrettelser
+2023.08.10 - 1.3.0 - Opdateret styring af Årsrul (per institution i stedet for globalt)
+2023.09.05 - 1.4.0 - Underståttelse for whitelisting af institutioner
+2023.09.24 - 1.5.0 - Support "keep-old-unilogin" naming scheme
+2023.09.25 - 1.5.1 - Skriv uni-id tilbage til attribut i AD
+2023.10.02 - 1.5.2 - Diverse fejlrettelser
+2023.10.05 - 1.5.3 - Oprettelse af ekstra klasse-trins grupper per institution^
+2023.10.11 - 1.6.0 - Opmærke brugere med email adresse, og undtage udvalgte brugere for synkronisering
+2023.10.13 - 1.6.1 - Fejlrettelser til AD forbindelsen
+2023.10.18 - 1.6.2 - Håndtering af alias
+2023.10.30 - 1.6.3 - Diverse fejlrettelser til brugeroprettelsesflowet
+2023.11.06 - 1.6.4 - Fejlrettelser til hÅndtering af opsplitte AD/Azure setup
+2023.11.20 - 1.7.0 - Oprettelsen af yderligere sikkerhedsgrupper
+2023.11.20 - 1.7.1 - Kodeord pÅ nye konti sættes til 36 tilfældige tegn
+2023.12.12 - 1.8.0 - Underståttelse for PAM til lagring af API någler
+2024.01.04 - 1.9.0 - HÅndtering af meget lange klassenavne og sikkerhedsgrupper
+2024.01.10 - 1.9.1 - Forbedringer til installer
+2024.01.11 - 1.9.2 - Kræver ikke længere dotnet 6 installeret pÅ serveren.
+2024.01.11 - 1.9.3 - Tilfåjet domaincontroller og rolle parametre til powershell script
+2024.01.23 - 1.9.4 - Udvidet navnestandav (klasse-bogstav) og låbende opdatering af displayName
+2024.02.08 - 1.9.5 - Fix der sikrer at brugere der har ekskluderede ansættelsestyper ikke står og flipper mellem spærret/aktiv
+2024.02.26 - 1.10.0 - Send et JSON objekt med brugerdata til powershell metoden ved oprettelse
+                      Understøtte mulighed for at disable konti selvom de er aktive i SkoleGrunddata
+                      Overføre STIL rollen til et felt i AD
+2024.03.01 - 1.10.1 - Bugfix til håndteringen af sAMAccountName
+2024.03.06 - 1.10.2 - Mulighed for at konfigurere UsersToInclude så man kan begrænse/teste flytning/opdatering til udvalgte brugere
+2024.04.02 - 1.11.0 - Opdateringer til håndtering af årsrul
+2024.04.05 - 1.11.1 - Mindre bugfixes til håndtering af klassetrin
+2024.05.15 - 1.12.0 - Forbedringer til logopsamling
+2024.06.03 - 1.12.1 - Mindre bugfixes til logopsamling
+2024.06.07 - 1.13.0 - Understøt brugermatch på UniID
+2024.07.03 - 1.14.0 - Diverse rettelser til mere elegant håndtering af årsrul
+2024.07.05 - 1.14.1 - Rettelse til gruppenavngivning ved årsrul på klasser som lukkes
+2024.07.29 - 1.14.2 - Rettelse til gruppenavngivning ved lange gruppenavne
+2024.07.30 - 1.15.0 - Ændring til navnestandard løbenummer
+2024.08.05 - 1.16.0 - Ny navnestandard tilføjet
+2024.09.20 - 1.16.1 - Fixet fejl der reaktiverer konti for brugere med eksluderede roller
+2024.10.04 - 1.16.2 - Fejlhåndtering til genåbning af lukkede enheder i institutioner

@@ -2,7 +2,7 @@
 {
     public class UsernameRequest
     {
-        public string LocalPersonId { get; set; }
+        public long PersonDatabaseId { get; set; }
         public string Username { get; set; }
     }
 }

@@ -14,13 +14,30 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
     {
         private readonly ActiveDirectoryService activeDirectoryService;
         private readonly OS2skoledataService oS2skoledataService;
+        private readonly bool moveUsersEnabled;
         private bool performFullSyncNext = true;
         private bool resetFullSyncFlag = false;
+        private bool useUsernameAsKey = false;
+        private readonly bool createOUHierarchy;
+        private readonly bool dryRun;
+        private readonly UsernameStandardType usernameStandard;
+        private List<string> globalLockedInstitutionNumbers;
+        private readonly List<string> usersToInclude;
+        private readonly UsernameKeyType usernameKeyType;
 
         public SyncService(IServiceProvider sp) : base(sp)
         {
             activeDirectoryService = sp.GetService<ActiveDirectoryService>();
             oS2skoledataService = sp.GetService<OS2skoledataService>();
+
+            moveUsersEnabled = settings.ActiveDirectorySettings.MoveUsersEnabled;
+            useUsernameAsKey = settings.ActiveDirectorySettings.UseUsernameAsKey;
+            createOUHierarchy = settings.ActiveDirectorySettings.CreateOUHierarchy;
+            dryRun = settings.ActiveDirectorySettings.DryRun;
+            usernameStandard = settings.ActiveDirectorySettings.usernameSettings.UsernameStandard;
+            usersToInclude = settings.ActiveDirectorySettings.UsersToInclude == null ? new List<string>() : settings.ActiveDirectorySettings.UsersToInclude;
+            globalLockedInstitutionNumbers = new List<string>();
+            usernameKeyType = settings.ActiveDirectorySettings.UsernameKeyType;
         }
 
         public void SetFullSync()
@@ -53,99 +70,245 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 // get head
                 long head = oS2skoledataService.GetHead();
 
-                //all usernames
-                var allUsernames = activeDirectoryService.GetAllUsernames();
-                if (allUsernames == null)
+                Dictionary<string, List<string>> usernameMap = null;
+                if (moveUsersEnabled)
                 {
-                    throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
-                }
-                var usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames);
-                if (usernameMap == null)
-                {
-                    throw new Exception("Failed to generate username map from AD. Will not perform sync.");
+                    //all usernames
+                    var allUsernames = activeDirectoryService.GetAllUsernames();
+                    if (allUsernames == null)
+                    {
+                        throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
+                    }
+
+                    List<string> skoledataUsernames = oS2skoledataService.GetAllUsernames();
+                    usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames, skoledataUsernames);
+                    if (usernameMap == null)
+                    {
+                        throw new Exception("Failed to generate username map from AD. Will not perform sync.");
+                    }
                 }
 
                 // ous - institutions
                 List<Institution> institutions = oS2skoledataService.GetInstitutions();
-                activeDirectoryService.UpdateInstitutions(institutions);
+                List<string> lockedInstitutionNumbers = institutions.Where(i => i.Locked).Select(i => i.InstitutionNumber).ToList();
+                List<string> lockedUsernames = oS2skoledataService.GetLockedUsernames();
 
-                // pr institution update classes and users
-                Dictionary<string, List<User>> institutionUserMap = new Dictionary<string, List<User>>();
-                foreach (Institution institution in institutions)
+                // add locked institutions to global list
+                // institutions that are no longer locked will be removed from the list when the full sync is done (to make sure first sync of unlocked institutions is a full sync)
+                globalLockedInstitutionNumbers.AddRange(lockedInstitutionNumbers);
+
+                // check and disable users
+                if (moveUsersEnabled)
                 {
-                    // ous - classes
-                    List<Group> classes = oS2skoledataService.GetClassesForInstitution(institution);
-                    activeDirectoryService.UpdateClassesForInstitution(classes, institution);
-
-                    // users
-                    List<User> users = oS2skoledataService.GetUsersForInstitution(institution);
-                    institutionUserMap.Add(institution.InstitutionNumber, users);
-
-                    List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(institution.InstitutionNumber);
-
-                    activeDirectoryService.DisableInactiveUsers(users, institution, excludedRoles);
-
-                    foreach (User user in users)
+                    List<User> allUsers = new List<User>();
+                    foreach (Institution institution in institutions)
                     {
-                        logger.LogInformation($"Checking if user with databaseId {user.DatabaseId} should be created or updated");
-                        using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
-                        if (entry == null)
+                        if (!institution.Locked)
                         {
-                            // should user be created?
-                            bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
-                            if (shouldBeExcluded)
-                            {
-                                logger.LogInformation($"Not creating user with databaseId {user.DatabaseId} because it has an excluded role");
-                                continue;
-                            }
+                            List<User> inInstitution = oS2skoledataService.GetUsersForInstitution(institution);
 
-                            // find available username and create
-                            string username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
-                            if (username == null)
+                            // check and remove excluded
+                            List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(institution.InstitutionNumber);
+                            foreach (User user in inInstitution)
                             {
-                                throw new Exception("Failed to generate username for user with databaseId " + user.DatabaseId);
+                                if (!activeDirectoryService.shouldBeExcluded(user, excludedRoles))
+                                {
+                                    allUsers.Add(user);
+                                }
                             }
-
-                            user.Username = username;
-                            oS2skoledataService.SetUsernameOnUser(username, user.LocalPersonId);
-                            logger.LogInformation($"Generated username {username} for user with databaseId {user.DatabaseId}");
-                            string path = activeDirectoryService.CreateAccount(username, user, institution.InstitutionNumber);
-                            user.ADPath = path;
-                            logger.LogInformation($"Created Account for user with databaseId {user.DatabaseId} and username {username}. ADPath = {path}");
-                        }
-                        else
-                        {
-                            // update username in OS2skoledata
-                            string username = entry.Properties["sAMAccountName"][0].ToString();
-                            if (user.Username == null || !username.Equals(user.Username))
-                            {
-                                user.Username = username;
-                                oS2skoledataService.SetUsernameOnUser(username, user.LocalPersonId);
-                            }
-
-                            // maybe update and/or move user in AD
-                            string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
-                            user.ADPath = path;
                         }
                     }
 
-                    // security groups for institution
-                    activeDirectoryService.UpdateSecurityGroups(institution, users, classes);
+                    if (!createOUHierarchy)
+                    {
+                        activeDirectoryService.DisableInactiveUsersNoHierarchy(allUsers, lockedUsernames);
+                    } else
+                    {
+                        activeDirectoryService.DisableInactiveUsersFromRoot(allUsers, lockedUsernames);
+                    }
                 }
 
-                // global security groups
-                activeDirectoryService.UpdateGlobalSecurityGroups(institutionUserMap);
+                if (createOUHierarchy)
+                {
+                    activeDirectoryService.UpdateInstitutions(institutions);
+                }
 
-                // set head
-                oS2skoledataService.SetHead(head);
+                // this map is used to keep the newest known path pr username
+                Dictionary<string, string> usernameADPathMap = new Dictionary<string, string>();
+
+                // pr institution update classes and users
+                List<string> allSecurityGroupIds = new List<string>();
+                List<string> allRenamedGroupIds = new List<string>();
+                Dictionary<string, List<User>> institutionUserMap = new Dictionary<string, List<User>>();
+                foreach (Institution institution in institutions)
+                {
+                    if (institution.Locked)
+                    {
+                        logger.LogInformation($"Skipping institution with number {institution.InstitutionNumber}. Institution is locked due to school year change.");
+                        continue;
+                    }
+
+                    // ous - classes
+                    List<Group> classes = oS2skoledataService.GetClassesForInstitution(institution);
+                    if (createOUHierarchy)
+                    {
+                        activeDirectoryService.UpdateClassesForInstitution(classes, institution);
+                    }
+
+                    // users
+                    List<User> users = new List<User>();
+                    if (moveUsersEnabled)
+                    {
+                        users = oS2skoledataService.GetUsersForInstitution(institution);
+                        institutionUserMap.Add(institution.InstitutionNumber, users);
+
+                        List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(institution.InstitutionNumber);
+
+                        foreach (User user in users)
+                        {
+                            logger.LogInformation($"Checking if user with databaseId {user.DatabaseId} should be created or updated");
+
+                            if (useUsernameAsKey)
+                            {
+                                using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
+                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap);
+                            } else
+                            {
+                                using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap);
+                            }
+                        }
+                    }
+                    
+                    // security groups for institution
+                    if (createOUHierarchy)
+                    {
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, null, null, usernameADPathMap);
+                    } else
+                    {
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, allSecurityGroupIds, allRenamedGroupIds, usernameADPathMap);
+                    }
+                }
+
+                if (!createOUHierarchy)
+                {
+                    activeDirectoryService.DeleteSecurityGroups(allSecurityGroupIds, null, lockedInstitutionNumbers, allRenamedGroupIds);
+                }
+ 
+                // global security groups
+                activeDirectoryService.UpdateGlobalSecurityGroups(institutionUserMap, lockedInstitutionNumbers, usernameADPathMap, institutions);
+
+                // set head on not locked institutions
+                foreach (Institution institution in institutions)
+                {
+                    if (!institution.Locked)
+                    {
+                        oS2skoledataService.SetHead(head, institution.InstitutionNumber);
+                    }
+                }
+
+                // full sync was a success - update the locked institution list to only have the current locked institutions
+                globalLockedInstitutionNumbers = lockedInstitutionNumbers;
 
                 stopWatch.Stop();
                 logger.LogInformation($"Finsihed executing FullSyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds");
             }
             catch (Exception e)
             {
-                oS2skoledataService.ReportError(e.Message);
+                oS2skoledataService.ReportError(e.Message + "\n" + e.StackTrace);
                 logger.LogError(e, "Failed to execute FullSyncJob");
+            }
+        }
+
+        private void HandleFullSyncUser(User user, DirectoryEntry entry, Institution institution, List<string> excludedRoles, Dictionary<string, List<string>> usernameMap, Dictionary<string,string> usernameADPathMap)
+        {
+            bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
+            if (shouldBeExcluded)
+            {
+                logger.LogInformation($"skipping user with databaseId {user.DatabaseId} and username {user.Username} because it has an excluded role");
+                return;
+            }
+
+            if (entry == null)
+            {
+                if (usersToInclude.Count() != 0)
+                {
+                    logger.LogInformation($"Not creating user with databaseId {user.DatabaseId}. Only handeling users on include list.");
+                    return;
+                }
+
+                // find available username and create
+
+                string username = null;
+                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                {
+                    bool exists = activeDirectoryService.AccountExists(user.StilUsername);
+                    if (!exists)
+                    {
+                        username = user.StilUsername;
+                        AddUsernameToMap(user.StilUsername, usernameMap);
+                    } else
+                    {
+                        username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
+                    }
+                } else
+                {
+                    username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
+                }
+                
+                if (username == null)
+                {
+                    throw new Exception("Failed to generate username for user with databaseId " + user.DatabaseId);
+                }
+
+                user.Username = username;
+                oS2skoledataService.SetUsernameOnUser(username, user.DatabaseId);
+                logger.LogInformation($"Generated username {username} for user with databaseId {user.DatabaseId}");
+                string path = activeDirectoryService.CreateAccount(username, user, institution.InstitutionNumber);
+                user.ADPath = path;
+                AddPathToMap(path, username, usernameADPathMap);
+                
+                if (!dryRun)
+                {
+                    logger.LogInformation($"Created Account for user with databaseId {user.DatabaseId} and username {username}. ADPath = {path}");
+                }
+            }
+            else
+            {
+                // update username in OS2skoledata
+                string username = entry.Properties["sAMAccountName"][0].ToString();
+                if (user.Username == null || !username.Equals(user.Username))
+                {
+                    user.Username = username;
+                    oS2skoledataService.SetUsernameOnUser(username, user.DatabaseId);
+                }
+
+                // maybe update and/or move user in AD
+                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
+                user.ADPath = path;
+                AddPathToMap(path, username, usernameADPathMap);
+            }
+        }
+
+        private void AddUsernameToMap(string stilUsername, Dictionary<string, List<string>> usernameMap)
+        {
+            var key = stilUsername.Substring(0, 4);
+            bool mapContainsKey = usernameMap.ContainsKey(key);
+            if (!mapContainsKey)
+            {
+                usernameMap.Add(key, new List<string>());
+            }
+            usernameMap[key].Add(stilUsername);
+        }
+
+        private void AddPathToMap(string path, string username, Dictionary<string, string> usernameADPathMap)
+        {
+            if (usernameADPathMap.ContainsKey(username))
+            {
+                usernameADPathMap[username] = path;
+            } else
+            {
+                usernameADPathMap.Add(username, path);
             }
         }
 
@@ -157,8 +320,8 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 Stopwatch stopWatch = new Stopwatch();
                 stopWatch.Start();
 
-                List<ModificationHistory> changes = oS2skoledataService.GetChanges();
-                if (changes.Count() > 0)
+                Dictionary<string, List<string>> usernameMap = null;
+                if (moveUsersEnabled)
                 {
                     //all usernames
                     var allUsernames = activeDirectoryService.GetAllUsernames();
@@ -166,37 +329,66 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                     {
                         throw new Exception("Failed to get all usernames from AD. Will not perform delta sync.");
                     }
-                    var usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames);
+
+                    List<string> skoledataUsernames = oS2skoledataService.GetAllUsernames();
+                    usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames, skoledataUsernames);
                     if (usernameMap == null)
                     {
                         throw new Exception("Failed to generate username map from AD. Will not perform delta sync.");
                     }
+                }
 
-                    changes = changes.OrderByDescending(c => c.Id).ToList();
+                var totalChanges = 0;
+                List<Institution> institutions = oS2skoledataService.GetInstitutions();
+                foreach (Institution institution in institutions)
+                {
+                    if (institution.Locked || globalLockedInstitutionNumbers.Contains(institution.InstitutionNumber))
+                    {
+                        logger.LogInformation($"Not performing delta sync on institution with number {institution.InstitutionNumber}. Institution is locked.");
+                        if (institution.Locked && !globalLockedInstitutionNumbers.Contains(institution.InstitutionNumber))
+                        {
+                            globalLockedInstitutionNumbers.Add(institution.InstitutionNumber);
+                        }
+                        continue;
+                    }
 
-                    List<ModificationHistory> typePerson = changes.Where(c => c.EntityType.Equals(EntityType.INSTITUTION_PERSON)).ToList();
-                    List<ModificationHistory> typeInstitution = changes.Where(c => c.EntityType.Equals(EntityType.INSTITUTION)).ToList();
-                    List<ModificationHistory> typeGroup = changes.Where(c => c.EntityType.Equals(EntityType.GROUP)).ToList();
+                    List<ModificationHistory> changes = oS2skoledataService.GetChangesForInstitution(institution.InstitutionNumber);
+                    if (changes.Count() > 0)
+                    {
+                        totalChanges = totalChanges + changes.Count();
+                        changes = changes.OrderByDescending(c => c.Id).ToList();
 
-                    List<long> changedPersonIds = typePerson.Select(c => c.EntityId).ToList();
-                    List<long> changedInstitutionIds = typeInstitution.Select(c => c.EntityId).ToList();
-                    List<long> changedGroupIds = typeGroup.Select(c => c.EntityId).ToList();
+                        List<ModificationHistory> typePerson = changes.Where(c => c.EntityType.Equals(EntityType.INSTITUTION_PERSON)).ToList();
+                        List<ModificationHistory> typeInstitution = changes.Where(c => c.EntityType.Equals(EntityType.INSTITUTION)).ToList();
+                        List<ModificationHistory> typeGroup = changes.Where(c => c.EntityType.Equals(EntityType.GROUP)).ToList();
 
-                    List<User> changedUsers = oS2skoledataService.GetChangedUsers(changedPersonIds);
-                    List<Institution> changedInstitutions = oS2skoledataService.GetChangedInstitutions(changedInstitutionIds);
-                    List<Group> changedGroups = oS2skoledataService.GetChangedGroups(changedGroupIds);
+                        List<long> changedPersonIds = typePerson.Select(c => c.EntityId).ToList();
+                        List<long> changedInstitutionIds = typeInstitution.Select(c => c.EntityId).ToList();
+                        List<long> changedGroupIds = typeGroup.Select(c => c.EntityId).ToList();
 
-                    // handle changes
-                    HandleInstitutionChanges(typeInstitution, changedInstitutions);
-                    HandleGroupChanges(typeGroup, changedGroups);
-                    HandlePersonChanges(typePerson, changedUsers, usernameMap);
+                        List<User> changedUsers = oS2skoledataService.GetChangedUsers(changedPersonIds);
+                        List<Institution> changedInstitutions = oS2skoledataService.GetChangedInstitutions(changedInstitutionIds);
+                        List<Group> changedGroups = oS2skoledataService.GetChangedGroups(changedGroupIds);
 
-                    // setting head last
-                    oS2skoledataService.SetHead(changes.First().Id);
+                        // handle changes
+                        if (createOUHierarchy)
+                        {
+                            HandleInstitutionChanges(typeInstitution, changedInstitutions);
+                            HandleGroupChanges(typeGroup, changedGroups);
+                        }
+
+                        if (moveUsersEnabled)
+                        {
+                            HandlePersonChanges(typePerson, changedUsers, usernameMap);
+                        }
+
+                        // setting head last
+                        oS2skoledataService.SetHead(changes.First().Id, institution.InstitutionNumber);
+                    }
                 }
 
                 stopWatch.Stop();
-                logger.LogInformation($"Finsihed executing DeltaSyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds. Found {changes.Count()} changes");
+                logger.LogInformation($"Finsihed executing DeltaSyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds. Found {totalChanges} changes");
             }
             catch (Exception e)
             {
@@ -207,7 +399,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 }
                 else
                 {
-                    oS2skoledataService.ReportError(e.Message);
+                    oS2skoledataService.ReportError("Delta sync error:\n" + e.Message + "\n" + e.StackTrace);
                     logger.LogError(e, "Failed to execute DeltaSyncJob");
                 }
             }
@@ -215,8 +407,16 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
         private void HandlePersonChanges(List<ModificationHistory> typePerson, List<User> changedUsers, Dictionary<string, List<string>> usernameMap)
         {
+            Dictionary<string, string> usernameADPathMap = new Dictionary<string, string>();
             foreach (User user in changedUsers)
             {
+                // if user is in one or more locked institutions -> skip
+                if (user.Institutions.Any(i => i.Locked || globalLockedInstitutionNumbers.Contains(i.InstitutionNumber)))
+                {
+                    logger.LogInformation($"Not performing delta sync on user with db id {user.DatabaseId}, at least one of the user's institions are locked due to school year change.");
+                    continue;
+                }
+
                 List<ModificationHistory> userChanges = typePerson.Where(c => c.EntityId == user.DatabaseId).ToList();
                 bool create = userChanges.Any(c => c.EventType.Equals(EventType.CREATE));
                 bool update = userChanges.Any(c => c.EventType.Equals(EventType.UPDATE));
@@ -224,57 +424,98 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 logger.LogInformation($"Delta sync handling user with databaseId {user.DatabaseId}");
 
-                using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
-                if (create && entry == null)
+                if (useUsernameAsKey)
                 {
-                    // should user be created?
-                    List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(user.CurrentInstitutionNumber);
-                    bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
-                    if (shouldBeExcluded)
-                    {
-                        continue;
-                    }
+                    using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
+                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap);
+                } else
+                {
+                    using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap);
+                }
+            }
+        }
 
-                    // find available username and create
-                    string username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
-                    if (username == null)
-                    {
-                        throw new Exception("Failed to generate username for user with LocalPersonId " + user.LocalPersonId);
-                    }
+        private void HandleOnePersonChanges(DirectoryEntry entry, User user, bool create, bool update, bool delete, Dictionary<string, List<string>> usernameMap, Dictionary<string, string> usernameADPathMap)
+        {
+            // if any of the users institutions are locked, we will not perform a delta sync
+            if (user.Institutions.Any(i => i.Locked))
+            {
+                logger.LogInformation($"Not performing delta sync on user with db id {user.DatabaseId}, at least one of the user's institions are locked due to school year change.");
+                return;
+            }
 
+            if (!user.Deleted && create && entry == null)
+            {
+                // should user be created?
+                List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(user.CurrentInstitutionNumber);
+                bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
+                if (shouldBeExcluded)
+                {
+                    return;
+                }
+
+                // find available username and create
+                string username = null;
+                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                {
+                    bool exists = activeDirectoryService.AccountExists(user.StilUsername);
+                    if (!exists)
+                    {
+                        username = user.StilUsername;
+                        AddUsernameToMap(user.StilUsername, usernameMap);
+                    }
+                    else
+                    {
+                        username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
+                    }
+                }
+                else
+                {
+                    username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
+                }
+
+                if (username == null)
+                {
+                    throw new Exception("Failed to generate username for user with databaseId " + user.DatabaseId);
+                }
+
+                user.Username = username;
+                oS2skoledataService.SetUsernameOnUser(username, user.DatabaseId);
+                logger.LogInformation($"Delta sync generated username {username} for user with databaseId {user.DatabaseId}");
+                string path = activeDirectoryService.CreateAccount(username, user, user.CurrentInstitutionNumber);
+                user.ADPath = path;
+                AddPathToMap(path, username, usernameADPathMap);
+                logger.LogInformation($"Delta sync created account for user with databaseId {user.DatabaseId} and username {username}. ADPath = {path}");
+            }
+            else if (!user.Deleted && create && entry != null)
+            {
+                update = true;
+            }
+
+            if (!user.Deleted && update && entry != null)
+            {
+                // update username in OS2skoledata
+                string username = entry.Properties["sAMAccountName"][0].ToString();
+                if (user.Username == null || !username.Equals(user.Username))
+                {
                     user.Username = username;
-                    oS2skoledataService.SetUsernameOnUser(username, user.LocalPersonId);
-                    logger.LogInformation($"Delta sync generated username {username} for user with databaseId {user.DatabaseId}");
-                    string path = activeDirectoryService.CreateAccount(username, user, user.CurrentInstitutionNumber);
-                    user.ADPath = path;
-                    logger.LogInformation($"Delta sync created account for user with databaseId {user.DatabaseId} and username {username}. ADPath = {path}");
-                }
-                else if (create && entry != null)
-                {
-                    update = true;
+                    oS2skoledataService.SetUsernameOnUser(username, user.DatabaseId);
                 }
 
-                if (update && entry != null)
-                {
-                    // update username in OS2skoledata
-                    string username = entry.Properties["sAMAccountName"][0].ToString();
-                    if (user.Username == null || !username.Equals(user.Username))
-                    {
-                        user.Username = username;
-                        oS2skoledataService.SetUsernameOnUser(username, user.LocalPersonId);
-                    }
+                // maybe update and/or move user in AD
+                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
+                user.ADPath = path;
+                AddPathToMap(path, username, usernameADPathMap);
+            }
 
-                    // maybe update and/or move user in AD
-                    string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
-                    user.ADPath = path;
-                }
-
-                if (delete && entry != null)
+            if (delete && entry != null)
+            {
+                if ( user.Institutions.Count == 0 || (user.Institutions.Count == 1 && user.Institutions.Select(i => i.InstitutionNumber).ToList().Contains(user.CurrentInstitutionNumber)))
                 {
                     string username = entry.Properties["sAMAccountName"][0].ToString();
                     activeDirectoryService.DisableAccount(username);
                 }
-
             }
         }
 
@@ -282,12 +523,17 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
         {
             foreach (Group group in changedGroups)
             {
+                if (globalLockedInstitutionNumbers.Contains(group.InstitutionNumber))
+                {
+                    continue;
+                }
+
                 List<ModificationHistory> groupChanges = typeGroup.Where(c => c.EntityId == group.DatabaseId).ToList();
                 bool create = groupChanges.Any(c => c.EventType.Equals(EventType.CREATE));
                 bool update = groupChanges.Any(c => c.EventType.Equals(EventType.UPDATE));
                 bool delete = groupChanges.Any(c => c.EventType.Equals(EventType.DELETE));
 
-                using DirectoryEntry entry = activeDirectoryService.GetOUFromId(group.GroupId);
+                using DirectoryEntry entry = activeDirectoryService.GetOUFromId("" + group.DatabaseId);
                 if (create && entry == null)
                 {
                     activeDirectoryService.DeltaSyncCreateGroup(group);
@@ -304,7 +550,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 if (delete && entry != null)
                 {
-                    activeDirectoryService.MoveToDeletedOUs(entry);
+                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, group.InstitutionName, group.InstitutionNumber, null, null, null, 0, null));
                 }
 
             }
@@ -314,12 +560,17 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
         {
             foreach (Institution institution in changedInstitutions)
             {
+                if (globalLockedInstitutionNumbers.Contains(institution.InstitutionNumber))
+                {
+                    continue;
+                }
+
                 List<ModificationHistory> institutionChanges = typeInstitution.Where(c => c.EntityId == institution.DatabaseId).ToList();
                 bool create = institutionChanges.Any(c => c.EventType.Equals(EventType.CREATE));
                 bool update = institutionChanges.Any(c => c.EventType.Equals(EventType.UPDATE));
                 bool delete = institutionChanges.Any(c => c.EventType.Equals(EventType.DELETE));
 
-                using DirectoryEntry entry = activeDirectoryService.GetOUFromId(institution.InstitutionNumber);
+                using DirectoryEntry entry = activeDirectoryService.GetOUFromId("inst" + institution.InstitutionNumber);
                 if (create && entry == null)
                 {
                     activeDirectoryService.DeltaSyncCreateInstitution(institution);
@@ -336,7 +587,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 if (delete && entry != null)
                 {
-                    activeDirectoryService.MoveToDeletedOUs(entry);
+                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0, null));
                 }
 
             }

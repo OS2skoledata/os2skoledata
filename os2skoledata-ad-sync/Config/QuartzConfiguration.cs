@@ -43,6 +43,22 @@ namespace os2skoledata_ad_sync.Config
                     .ForJob(setFullSyncJobKey)
                     .WithCronSchedule(settings.JobSettings.FullSyncCron)
                 );
+
+                // job for uploading log if requested
+                if (settings.LogUploaderSettings != null && settings.LogUploaderSettings.Enabled)
+                {
+                    // Add LogUploaderSyncJob
+                    var logUploaderJobKey = new JobKey("LogUploaderSyncJob");
+                    q.AddJob<LogUploaderSyncJob>(logUploaderJobKey, j => j.WithDescription(logUploaderJobKey.Name));
+
+                    // Add scheduled trigger every five minutes
+                    q.AddTrigger(t => t
+                        .WithIdentity("LogUploader Cron Trigger")
+                        .ForJob(logUploaderJobKey)
+                        .WithSimpleSchedule(b => b.WithIntervalInMinutes(5).RepeatForever())
+                    );
+                }
+                
             });
 
             return services;

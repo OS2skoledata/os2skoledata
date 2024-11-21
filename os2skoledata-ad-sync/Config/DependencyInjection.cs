@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using os2skoledata_ad_sync.Services.ActiveDirectory;
+using os2skoledata_ad_sync.Services.LogUploader;
 using os2skoledata_ad_sync.Services.OS2skoledata;
 using os2skoledata_ad_sync.Services.PowerShellRunner;
 using Serilog;
@@ -25,6 +26,8 @@ namespace os2skoledata_ad_sync.Config
             services.AddSingleton<OS2skoledataService>();
             services.AddSingleton<SyncService>();
             services.AddSingleton<PowerShellRunnerService>();
+            services.AddSingleton<PAMService>();
+            services.AddSingleton<LogUploaderService>();
 
             return services;
         }
