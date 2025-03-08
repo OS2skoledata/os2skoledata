@@ -82,7 +82,8 @@ public class ModificationHistoryService {
 				for (AuditWrapper institutionPersonChange : latestModificationObject.getInstitutionPersonChanges()) {
 					DBInstitutionPerson institutionPerson = institutionPersonService.findById(institutionPersonChange.getId());
 					if (institutionPerson == null) {
-						log.warn("Unable to find institutionPerson with id " + institutionPersonChange.getId());
+						// person is probably deleted so just debug log and skip
+						log.debug("Unable to find institutionPerson with id " + institutionPersonChange.getId());
 						continue;
 					}
 					
@@ -92,27 +93,25 @@ public class ModificationHistoryService {
 					modificationHistory.setTts(new Date());
 					modificationHistory.setEventType(institutionPersonChange.getChangeType());
 					modificationHistory.setGroups(new ArrayList<>());
-					
-					if (institutionPerson != null) {
-						modificationHistory.setEntityName(DBPerson.getName(institutionPerson.getPerson()));
-						modificationHistory.setInstitutionId(institutionPerson.getInstitution().getId());
-						modificationHistory.setInstitutionName(institutionPerson.getInstitution().getInstitutionName());
-						
-						if (institutionPerson.getEmployee() != null) {
-							modificationHistory.setGroups(institutionPerson.getEmployee().getGroupIds().stream()
-									.map(gid -> gid.getGroupId())
-									.collect(Collectors.toList()));
-						}
-						else if (institutionPerson.getExtern() != null) {
-							modificationHistory.setGroups(institutionPerson.getExtern().getGroupIds().stream()
-									.map(gid -> gid.getGroupId())
-									.collect(Collectors.toList()));
-						}
-						else if (institutionPerson.getStudent() != null) {
-							modificationHistory.setGroups(institutionPerson.getStudent().getGroupIds().stream()
-									.map(gid -> gid.getGroupId())
-									.collect(Collectors.toList()));
-						}
+
+					modificationHistory.setEntityName(DBPerson.getName(institutionPerson.getPerson()));
+					modificationHistory.setInstitutionId(institutionPerson.getInstitution().getId());
+					modificationHistory.setInstitutionName(institutionPerson.getInstitution().getInstitutionName());
+
+					if (institutionPerson.getEmployee() != null) {
+						modificationHistory.setGroups(institutionPerson.getEmployee().getGroupIds().stream()
+								.map(gid -> gid.getGroupId())
+								.collect(Collectors.toList()));
+					}
+					else if (institutionPerson.getExtern() != null) {
+						modificationHistory.setGroups(institutionPerson.getExtern().getGroupIds().stream()
+								.map(gid -> gid.getGroupId())
+								.collect(Collectors.toList()));
+					}
+					else if (institutionPerson.getStudent() != null) {
+						modificationHistory.setGroups(institutionPerson.getStudent().getGroupIds().stream()
+								.map(gid -> gid.getGroupId())
+								.collect(Collectors.toList()));
 					}
 
 					insert(modificationHistory);

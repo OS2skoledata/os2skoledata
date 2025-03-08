@@ -1,0 +1,118 @@
+<th:block th:fragment="modal" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<!-- ghost modal -->
+	<div class="modal fade" id="modal-ghost" role="dialog">
+		<div class="modal-dialog modal-lg">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h4 th:text="#{html.page.ghost.new.modal.header}"></h4>
+					<button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span class="sr-only" th:text="#{html.control.button.cancel}"></span></button>
+				</div>
+	
+				<div class="modal-body">
+					<form id="newGhostForm" class="form-horizontal">
+						<div class="form-group row">
+							<label class="col-sm-2 col-form-label" th:text="#{html.entity.ghost.username}" />
+							<div class="col-sm-8">
+								<input type="text" id="username" name="username" class="form-control" autofocus="autofocus" />
+							</div>
+						</div>
+						<div class="form-group row">
+							<label class="col-sm-2 col-form-label" th:text="#{html.entity.ghost.activeUntil}" />
+							<div class="col-sm-8">
+								<input type="text" id="activeUntil" name="activeUntil" class="form-control" autocomplete="false"/>
+							</div>
+						</div>
+					</form>
+				</div>
+	
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary" onclick="ghostModalService.postNewGhost();" th:text="#{html.control.button.create}"></button>
+					<button type="button" class="btn btn-danger" data-dismiss="modal" th:text="#{html.control.button.cancel}"></button>
+				</div>
+			</div>
+		</div>
+	</div>
+</th:block>
+
+<th:block th:fragment="scripts" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+			var postNewGhostUrl = [[@{/rest/ghosts/create}]];
+
+			var msgFailure = [[#{html.page.ghost.new.modal.msgFailure}]];
+		+]*/
+		
+		var ghostModalService;
+		
+		$(document).ready(function(){
+			ghostModalService = new GhostModalService();
+			
+			$('#newGhostForm').on("submit", function(event) {
+				event.preventDefault();
+				ghostModalService.postNewGhost();
+			});
+		});
+
+		function GhostModalService() {
+			this.show = function() {
+				$('#newGhostForm input').val('');
+
+				$('#activeUntil').datepicker({
+					keyboardNavigation: false,
+					forceParse: false,
+					autoclose: true,
+					weekStart: 1,
+					format: "dd/mm/yyyy",
+					orientation: "bottom"
+				}).datepicker('setDate', new Date(new Date().setMonth(new Date().getMonth() + 3)));
+
+				$("#modal-ghost").modal("show");
+			};
+
+			this.hide = function() {
+				$("#modal-ghost").modal("hide");
+			};
+
+			this.postNewGhost = function() {
+				var formData = {
+					username : $('#newGhostForm #username').val(),
+					activeUntil : $('#newGhostForm #activeUntil').val()
+				};
+
+				$.ajax({
+					contentType : 'application/json',
+					url : postNewGhostUrl,
+					method : "POST",
+					headers: {
+						'X-CSRF-TOKEN': token
+					},
+					data : JSON.stringify(formData),
+					error : function(response) {
+						if (response.status == 400
+								&& response.responseText != "") {
+							swal({
+								title : response.responseText,
+								type : 'warning',
+								confirmButtonColor : '#3085d6'
+							});
+						} else {
+							swal({
+								title : msgFailure,
+								type : 'error',
+								confirmButtonColor : '#3085d6'
+							});
+						}
+					},
+					success : function(response) {
+						ghostModalService.hide();
+						window.location.reload();
+					}
+				});
+			}
+		}
+
+		/*]]>*/
+	</script>
+</th:block>

@@ -56,6 +56,10 @@
 		<script th:src="@{/webjars/inspinia/2.9.3/js/plugins/codemirror/mode/javascript/javascript.js}"></script>
 		<script th:src="@{/webjars/inspinia/2.9.3/js/plugins/codemirror/mode/xml/xml.js}"></script>
 		</th:block>
+
+		<th:block th:if="${datepicker == true}">
+			<script th:src="@{/webjars/inspinia/2.9.3/js/plugins/datapicker/bootstrap-datepicker.js}"></script>
+		</th:block>
 	</div>
 
 </body>

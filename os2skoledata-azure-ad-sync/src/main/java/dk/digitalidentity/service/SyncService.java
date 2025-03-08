@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -42,6 +43,7 @@ public class SyncService {
 	private final char[] third = "23456789".toCharArray();
 	private Map<Integer, String> uniqueIds = new HashMap<>();
 	private List<String> globalLockedInstitutionNumbers = new ArrayList<>();
+	private Random random = new Random();
 
 	@PostConstruct
 	public void init() {
@@ -96,7 +98,8 @@ public class SyncService {
 
 			// fetch locked usernames to make sure they are not disabled - then check if others should be deleted
 			List<String> lockedUsernames = os2skoledataService.getLockedUsernames();
-			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata, lockedUsernames);
+			List<String> keepAliveUsernames = os2skoledataService.getKeepAliveUsernames();
+			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata, lockedUsernames, keepAliveUsernames);
 
 			List<String> securityGroupIds = new ArrayList<>();
 			List<String> securityGroupIdsForRenamedGroups = new ArrayList<>();
@@ -131,7 +134,7 @@ public class SyncService {
 
 						// find available username and create
 						String username = null;
-						if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) && user.getStilUsername() != null)
+						if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
 						{
 							boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
 							if (!exists)
@@ -203,23 +206,9 @@ public class SyncService {
 				allDBUsersForGlobalGroups.addAll(users);
 			}
 
-			// global security groups
-			azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames);
+			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams);
 
-			// fetch group ids from locked institutions to make sure they are not deleted and delete groups that are not needed anymore
-			List<String> lockedGroupIds = os2skoledataService.getLockedGroupIds();
-			azureADService.deleteNotNeededGroups(securityGroupIds, lockedGroupIds, securityGroupIdsForRenamedGroups);
-
-			// fetch team ids from locked institutions to make sure they are not deleted and delete teams that are not needed anymore
-			List<String> lockedTeamIds = os2skoledataService.getLockedTeamIds();
-			azureADService.archiveAndDeleteNotNeededTeams(teamIds, lockedTeamIds, teamIdsForRenamedTeams);
-
-			// set head on not locked institutions
-			for (Institution institution : institutions) {
-				if (!institution.isLocked()) {
-					os2skoledataService.setHead(head, institution.getInstitutionNumber());
-				}
-			}
+			setHeadOnInstitutions(institutions, head);
 
 			// full sync was a success - update the locked institution list to only have the current locked institutions
 			globalLockedInstitutionNumbers = lockedInstitutionNumbers;
@@ -227,11 +216,32 @@ public class SyncService {
 			log.info("Finished executing fullsyncjob");
 		}
 		catch (Exception e) {
-			os2skoledataService.reportError(e.getMessage());
 			log.error("Failed to perform full sync. Exception happened: " + e.getMessage());
 			e.printStackTrace();
 		}
 
+	}
+
+	private void setHeadOnInstitutions(List<Institution> institutions, long head) throws Exception {
+		// set head on not locked institutions
+		for (Institution institution : institutions) {
+			if (!institution.isLocked()) {
+				os2skoledataService.setHead(head, institution.getInstitutionNumber());
+			}
+		}
+	}
+
+	private void handleGlobalGroupsAndCleanUp(List<DBUser> allDBUsersForGlobalGroups, List<String> securityGroupIds, List<String> lockedUsernames, List<String> securityGroupIdsForRenamedGroups, List<String> teamIds, List<String> teamIdsForRenamedTeams) throws Exception {
+		// global security groups
+		azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames);
+
+		// fetch group ids from locked institutions to make sure they are not deleted and delete groups that are not needed anymore
+		List<String> lockedGroupIds = os2skoledataService.getLockedGroupIds();
+		azureADService.deleteNotNeededGroups(securityGroupIds, lockedGroupIds, securityGroupIdsForRenamedGroups);
+
+		// fetch team ids from locked institutions to make sure they are not deleted and delete teams that are not needed anymore
+		List<String> lockedTeamIds = os2skoledataService.getLockedTeamIds();
+		azureADService.archiveAndDeleteNotNeededTeams(teamIds, lockedTeamIds, teamIdsForRenamedTeams);
 	}
 
 	public void deltaSync() {
@@ -298,13 +308,13 @@ public class SyncService {
 				fullSync();
 			}
 			else {
-				os2skoledataService.reportError(e.getMessage());
 				log.error("Failed to execute DeltaSyncJob", e);
 			}
 		}
 	}
 
 	private void handlePersonChanges(List<ModificationHistory> typePerson, List<DBUser> changedUsers, Map<String, List<String>> usernameMap, List<User> allUsers) throws Exception {
+		List<String> keepAliveUsernames = os2skoledataService.getKeepAliveUsernames();
 		for (DBUser user : changedUsers) {
 			if (user.getInstitutions().stream().anyMatch(i -> i.isLocked() || globalLockedInstitutionNumbers.contains(i.getInstitutionNumber()))) {
 				log.info("Skipping deltasync for user with db id " + user.getDatabaseId() + ". User is in at least one locked institution.");
@@ -334,7 +344,7 @@ public class SyncService {
 
 				// find available username and create
 				String username = null;
-				if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) && user.getStilUsername() != null)
+				if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
 				{
 					boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
 					if (!exists)
@@ -399,7 +409,14 @@ public class SyncService {
 
 			if (delete && match != null) {
 				if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
-					azureADService.disableUser(match.id, "" + user.getDatabaseId());
+					boolean allowDisabling = true;
+					if (keepAliveUsernames != null && keepAliveUsernames.contains(match.mailNickname)) {
+						allowDisabling = false;
+					}
+
+					if (allowDisabling) {
+						azureADService.disableUser(match.id, match.mailNickname);
+					}
 				}
 			}
 		}
@@ -472,7 +489,12 @@ public class SyncService {
 
 		// 1000 tries is crazy many
 		for (int i = 0; i < 1000; i++) {
-			String username = prefix + ((nameFirst) ? namePart : uniqueIds.get(i)) + ((nameFirst) ? uniqueIds.get(i) : namePart);
+			String username;
+			if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
+				username = namePart + generateRandomNumber(config.getSyncSettings().getUsernameSettings().getRandomStandardNumberCount());
+			} else {
+				username = prefix + ((nameFirst) ? namePart : uniqueIds.get(i)) + ((nameFirst) ? uniqueIds.get(i) : namePart);
+			}
 
 			if (!usernamesWithNamePart.contains(username)) {
 				// can be optimized if necessary. Can do a stream anymatch on all users/usernames but it won't be a real time check
@@ -489,6 +511,12 @@ public class SyncService {
 		}
 
 		return null;
+	}
+
+	public int generateRandomNumber(int length) {
+		int min = (int) Math.pow(10, length - 1);
+		int max = (int) Math.pow(10, length) - 1;
+		return random.nextInt((max - min) + 1) + min;
 	}
 
 	private String getNamePart(String firstname) {
@@ -516,11 +544,14 @@ public class SyncService {
 		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
 			return 4;
 		}
+		else if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
+			return config.getSyncSettings().getUsernameSettings().getRandomStandardLetterCount();
+		}
 		return 3;
 	}
 
 	private String getPrefix() {
-		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
+		if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
 			return "";
 		}
 		return config.getSyncSettings().getUsernameSettings().getUsernamePrefix() == null ? "" : config.getSyncSettings().getUsernameSettings().getUsernamePrefix();
@@ -546,6 +577,8 @@ public class SyncService {
 					}
 				}
 			}
+		} else if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
+			// do nothing, random number will be generated on request
 		} else if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.THREE_NUMBERS_THREE_CHARS_FROM_NAME)) {
 			int idx = 0;
 			char[] possibleNumbers = "23456789".toCharArray();
@@ -567,6 +600,100 @@ public class SyncService {
 					}
 				}
 			}
+		}
+	}
+
+	public void teamsAndGroupsSync() {
+		log.info("Executing teams and groups sync");
+		try {
+
+			// head
+			long head = os2skoledataService.getHead();
+
+			// init
+			azureADService.initializeClient();
+
+			// all users
+			List<User> allUsers = azureADService.getAllUsers();
+
+			// institutions
+			List<Institution> institutions = os2skoledataService.getInstitutions();
+
+			// pr institution update users
+			Map<String, List<DBUser>> institutionUserMap = new HashMap<>();
+			List<DBUser> allDBUsers = new ArrayList<>();
+			for (Institution institution : institutions) {
+				if (institution.isLocked()) {
+					continue;
+				}
+				List<DBUser> users = os2skoledataService.getUsersForInstitution(institution);
+				institutionUserMap.put(institution.getInstitutionNumber(), users);
+				allDBUsers.addAll(users);
+			}
+
+			List<String> securityGroupIds = new ArrayList<>();
+			List<String> securityGroupIdsForRenamedGroups = new ArrayList<>();
+			List<String> teamIds = new ArrayList<>();
+			List<String> teamIdsForRenamedTeams = new ArrayList<>();
+			List<DBUser> allDBUsersForGlobalGroups = new ArrayList<>();
+			for (Institution institution : institutions) {
+				if (institution.isLocked()) {
+					log.info("Not updating teams and groups for institution " + institution.getInstitutionNumber() +  ". Institution is locked due to school year change.");
+					continue;
+				}
+
+				List<String> excludedRoles = getExcludedRoles(institution.getInstitutionNumber());
+				List<DBUser> users = institutionUserMap.get(institution.getInstitutionNumber());
+				for (DBUser user : users) {
+					if (user.getUsername() == null || user.getUsername().isEmpty()) {
+						continue;
+					}
+
+					User match;
+					if (config.getSyncSettings().isUseUsernameAsKey()) {
+						match = allUsers.stream().filter(u -> u.mailNickname != null && u.mailNickname.equals(user.getUsername())).findAny().orElse(null);
+					} else {
+						match = allUsers.stream().filter(u -> u.employeeId != null && u.employeeId.equals(user.getCpr())).findAny().orElse(null);
+					}
+
+					if (match == null) {
+						log.debug("Not handling user with username " + user.getUsername() + " because it was not found in azure AD");
+						continue;
+					}
+
+					boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
+					if (shouldBeExcluded) {
+						log.info("Not handling user with username " + user.getUsername() + " because it has an excluded role");
+						continue;
+					}
+
+					user.setAzureId(match.id);
+				}
+
+				// security groups for institution
+				List<DBGroup> classes = os2skoledataService.getClassesForInstitution(institution);
+				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups);
+
+				// teams for institution
+				azureADService.updateTeams(institution, users, classes, teamIds, teamIdsForRenamedTeams, allDBUsers);
+
+				allDBUsersForGlobalGroups.addAll(users);
+			}
+
+			// fetch locked usernames to make sure they are not removed from global groups
+			List<String> lockedUsernames = os2skoledataService.getLockedUsernames();
+
+			// global security groups
+			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams);
+
+			// set head on not locked institutions
+			setHeadOnInstitutions(institutions, head);
+
+			log.info("Finished executing teams and groups sync");
+		}
+		catch (Exception e) {
+			log.error("Failed to perform teams and groups sync. Exception happened: " + e.getMessage());
+			e.printStackTrace();
 		}
 	}
 }

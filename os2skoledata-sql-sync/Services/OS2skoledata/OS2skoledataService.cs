@@ -5,6 +5,7 @@ using os2skoledata_sql_sync.Services.OS2skoledata;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Text;
 
 namespace os2skoledata_ad_sync.Services.OS2skoledata
 {
@@ -62,6 +63,24 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             logger.LogDebug("Finshed fetching institutions from OS2skoledata");
 
             return new List<InstitutionReadDTO>(institutionsArray);
+        }
+
+        public void ReportError(string errorMsg)
+        {
+            try
+            {
+                ErrorRequest request = new ErrorRequest();
+                request.Message = errorMsg;
+
+                using var httpClient = GetHttpClient();
+                var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
+                var response = httpClient.PostAsync(new Uri(baseUri + "api/reporterror"), content).Result;
+                response.EnsureSuccessStatusCode();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Could not report error to OS2skoledata backend: " + ex.Message);
+            }
         }
 
         private HttpClient GetHttpClient()

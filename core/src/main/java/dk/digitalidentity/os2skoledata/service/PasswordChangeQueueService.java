@@ -1,10 +1,12 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.framework.ad.service.ActiveDirectoryService;
+import dk.digitalidentity.framework.ad.service.model.SetPasswordRequest;
+import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.PasswordChangeQueueDao;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordChangeQueue;
 import dk.digitalidentity.os2skoledata.dao.model.enums.ReplicationStatus;
-import dk.digitalidentity.os2skoledata.service.model.ADPasswordResponse.ADPasswordStatus;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -37,6 +39,9 @@ public class PasswordChangeQueueService {
 	@Autowired
 	private ADPasswordService adPasswordService;
 
+	@Autowired
+	private ActiveDirectoryService activeDirectoryService;
+
 	private SecretKeySpec secretKey;
 
 	public PasswordChangeQueue save(PasswordChangeQueue passwordChangeQueue) {
@@ -57,29 +62,25 @@ public class PasswordChangeQueueService {
 		return passwordChangeQueueDao.save(passwordChangeQueue);
 	}
 
-	public ADPasswordStatus attemptPasswordChangeFromUI(String username, String newPassword) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, UnsupportedEncodingException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
+	public SetPasswordResponse.PasswordStatus attemptPasswordChangeFromUI(String username, String newPassword) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, UnsupportedEncodingException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
 		PasswordChangeQueue change = new PasswordChangeQueue(username, encryptPassword(newPassword));
 
-		ADPasswordStatus status = adPasswordService.attemptPasswordReplication(change, true);
+		SetPasswordRequest setPasswordRequest = new SetPasswordRequest();
+		setPasswordRequest.setUserId(change.getUsername());
+		setPasswordRequest.setPassword(newPassword);
+		SetPasswordResponse setPasswordResponse = activeDirectoryService.setPassword(setPasswordRequest);
+		SetPasswordResponse.PasswordStatus status = setPasswordResponse.getStatus();
 		switch (status) {
 			// inform user through UI (but also save result in queue for debugging purposes)
-			case FAILURE:
 			case TECHNICAL_ERROR:
 			case INSUFFICIENT_PERMISSION:
 				// FINAL_ERROR prevent any retries on this
 				change.setStatus(ReplicationStatus.FINAL_ERROR);
 				save(change);
 				break;
-
-			case NOOP:
-				log.error("Got a NOOP case here - that should not happen");
-				break;
-
-			// save result - so it is correctly logged to the queue
 			case OK:
 				save(change);
 				break;
-
 			// delay replication in case of a timeout
 			case TIMEOUT:
 				save(change);

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dk.digitalidentity.os2skoledata.config.modules.CprConfiguration;
+import dk.digitalidentity.os2skoledata.config.modules.GhostAdministration;
 import dk.digitalidentity.os2skoledata.config.modules.Idp;
 import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
 import dk.digitalidentity.os2skoledata.config.modules.StudentAdministration;
@@ -29,6 +30,10 @@ public class OS2SkoleDataConfiguration {
 	private Idp idp = new Idp();
 	private TeamAdminAdministration teamAdminAdministration = new TeamAdminAdministration();
 	private boolean ignoreNameProtection = false;
+	private GhostAdministration ghostAdministration = new GhostAdministration();
+	private int deleteInstitutionPersonAfterMonths = 13;
+	private boolean filterOutGroupsWithFutureFromDate = false;
+	private int createGroupsXDaysBeforeFromDate = 60;
 
 	private Scheduled scheduled = new Scheduled();
 }

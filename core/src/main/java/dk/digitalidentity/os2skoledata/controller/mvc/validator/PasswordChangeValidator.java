@@ -62,7 +62,7 @@ public class PasswordChangeValidator implements Validator {
 	private record PerformerInfo(String username, String name) {}
 	private PerformerInfo findPerformerInfo() {
 		String username = SecurityUtil.getUserId();
-		DBInstitutionPerson loggedInPerson = institutionPersonService.findByUsername(username).stream()
+		DBInstitutionPerson loggedInPerson = institutionPersonService.findByUsernameAndDeletedFalse(username).stream()
 				.filter(p -> p.getEmployee() != null || p.getExtern() != null)
 				.findAny().orElse(null);
 

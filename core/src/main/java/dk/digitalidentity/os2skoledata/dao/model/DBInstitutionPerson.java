@@ -89,6 +89,39 @@ public class DBInstitutionPerson {
 	@JoinColumn(name = "institution_id")
 	private DBInstitution institution;
 
+	// create / delete dates
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime stilCreated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime stilDeleted;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime adCreated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime adDeactivated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime gwCreated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime gwDeactivated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime azureCreated;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime azureDeactivated;
+
 	public boolean apiEquals(InstitutionPersonFullMyndighed other) {
 		if (other == null) {
 			return false;

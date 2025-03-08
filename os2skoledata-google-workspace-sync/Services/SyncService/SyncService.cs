@@ -84,6 +84,8 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     }
                 }
 
+                List<string> keepAliveUsernames = oS2skoledataService.GetKeepAliveUsernames();
+
                 // reset
                 workspaceService.InitializeDictionaries();
 
@@ -124,7 +126,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     }
                 }
 
-                workspaceService.DisableInactiveUsersFromRoot(allActiveUsers, lockedUsernames);
+                workspaceService.DisableInactiveUsersFromRoot(allActiveUsers, lockedUsernames, keepAliveUsernames);
 
                 // update institutions
                 logger.LogInformation("Mainflow - updating institutions");
@@ -216,7 +218,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                                 }
                                 else
                                 {
-                                    if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                                    if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                                     {
                                         bool exists = workspaceService.AccountExists(user.StilUsername);
                                         if (!exists)
@@ -290,7 +292,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                         else
                         {
                             // maybe update and/or move user in AD
-                            workspaceService.UpdateAndMoveUser(user, match, institution, classes, institutionOrgUnit, studentInstitutionOrgUnit, employeeInstitutionOrgUnit);
+                            workspaceService.UpdateAndMoveUser(user, match, institution, classes, institutionOrgUnit, studentInstitutionOrgUnit, employeeInstitutionOrgUnit, keepAliveUsernames);
                         }
 
                         allUsers.Add(user);
@@ -307,6 +309,9 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
                 logger.LogInformation("Mainflow - handling global groups ");
                 workspaceService.UpdateGlobalGroups(allUsers, lockedUsernames);
+
+                // move keep alive users
+                workspaceService.MoveKeepAliveUsers(keepAliveUsernames, allGWUsers);
 
                 // set head on not locked institutions
                 foreach (Institution institution in institutions)
@@ -586,6 +591,8 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 }
             }
 
+            List<string> keepAliveUsernames = oS2skoledataService.GetKeepAliveUsernames();
+
             foreach (DBUser user in changedUsers)
             {
                 // if user is in one or more locked institutions -> skip
@@ -607,7 +614,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                             username = cprUsernameMap[user.Cpr];
                         } else
                         {
-                            if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                            if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                             {
                                 bool exists = workspaceService.AccountExists(user.StilUsername);
                                 if (!exists)
@@ -705,12 +712,22 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 if (!user.Deleted && update && match != null)
                 {
                     // maybe update and/or move user
-                    workspaceService.UpdateAndMoveUser(user, match, user.CurrentInstitution, institutionGroupMap[user.CurrentInstitution.InstitutionNumber], institutionOrgUnit, studentInstitution, employeeInstitution);
+                    workspaceService.UpdateAndMoveUser(user, match, user.CurrentInstitution, institutionGroupMap[user.CurrentInstitution.InstitutionNumber], institutionOrgUnit, studentInstitution, employeeInstitution, keepAliveUsernames);
                 }
 
                 if (delete && match != null)
                 {
-                    workspaceService.HandleSuspendUser(user.Username, match);
+                    bool allowDisabling = true;
+
+                    if (keepAliveUsernames != null && keepAliveUsernames.Contains(user.Username))
+                    {
+                        allowDisabling = false;
+                    }
+
+                    if (allowDisabling)
+                    {
+                        workspaceService.HandleSuspendUser(user.Username, match);
+                    }
                 }
 
             }

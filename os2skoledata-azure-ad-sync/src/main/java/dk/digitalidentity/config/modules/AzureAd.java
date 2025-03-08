@@ -10,4 +10,5 @@ public class AzureAd {
 	private String clientSecret;
 	private String tenantID;
 	private boolean userDryRun;
+	private boolean teamsAndGroupsOnly = false;
 }

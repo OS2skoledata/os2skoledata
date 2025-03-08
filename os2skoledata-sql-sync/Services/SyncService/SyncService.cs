@@ -32,12 +32,12 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 List<InstitutionDTO> institutions = oS2skoledataService.GetEverything();
                 foreach (var institutionDTO in institutions)
                 {
-                    // Find institution
+                    // find institution
                     var dbInstitution = _context.Institutions.Where(i => i.InstitutionNumber.Equals(institutionDTO.institutionNumber)).FirstOrDefault();
                     
                     if (dbInstitution == null)
                     {
-                        //Add scenario
+                        // add scenario
                         dbInstitution = new Institution();
                         dbInstitution.CopyFields(institutionDTO);
 
@@ -46,7 +46,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                         _context.Institutions.Add(dbInstitution);
                     } else
                     {
-                        //Update
+                        // update
                         bool changes = false;
 
                         if (!dbInstitution.ApiEquals(institutionDTO))
@@ -78,6 +78,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             }
             catch (Exception e)
             {
+                oS2skoledataService.ReportError("SQL sync error:\n" + e.Message + "\n" + e.StackTrace);
                 logger.LogError(e, "Failed to execute FullSyncJob");
             }
         }

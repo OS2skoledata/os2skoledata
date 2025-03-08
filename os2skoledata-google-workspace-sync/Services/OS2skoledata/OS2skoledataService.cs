@@ -306,6 +306,35 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             return new List<string>(usernameArray);
         }
 
+        public void SetActionOnUser(string username, ActionType action)
+        {
+            ActionRequest request = new ActionRequest();
+            request.Action = action;
+            request.Username = username;
+
+            using var httpClient = GetHttpClient();
+            var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
+            var response = httpClient.PostAsync(new Uri(baseUri + "api/person/action"), content);
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+        }
+
+        public List<string> GetKeepAliveUsernames()
+        {
+            logger.LogInformation($"Fetching keep alive usernames from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, $"api/keepalive"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var usernameArray = JsonConvert.DeserializeObject<string[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation($"Finshed fetching keep alive usernames OS2skoledata");
+            return new List<string>(usernameArray);
+        }
+
         private HttpClient GetHttpClient()
         {
             var handler = new HttpClientHandler();

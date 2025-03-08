@@ -4,7 +4,7 @@
     <TargetFramework>net6.0</TargetFramework>
     <UserSecretsId>dotnet-dotnet_worker_template-3296BE65-791D-49C2-A695-DACAE082222A</UserSecretsId>
     <RootNamespace>os2skoledata_ad_sync</RootNamespace>
-    <FileVersion>1.11.1</FileVersion>
+    <FileVersion>1.22.1</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -33,6 +33,7 @@ namespace os2skoledata_sql_sync.Config
 
             // Eager Loading of Related Data
             modelBuilder.Entity<Institution>().Navigation(i => i.Groups).AutoInclude();
+            modelBuilder.Entity<Institution>().Navigation(i => i.InstitutionPersons).AutoInclude();
 
             modelBuilder.Entity<Group>()
                 .Property(g => g.GroupType).HasConversion<string>();
@@ -42,6 +43,13 @@ namespace os2skoledata_sql_sync.Config
             modelBuilder.Entity<Group>()
                   .Property(g => g.ToDate)
                   .HasColumnType("date");
+
+            // Eager Loading of Related Data
+            modelBuilder.Entity<InstitutionPerson>().Navigation(i => i.Employee).AutoInclude();
+            modelBuilder.Entity<InstitutionPerson>().Navigation(i => i.Extern).AutoInclude();
+            modelBuilder.Entity<InstitutionPerson>().Navigation(i => i.Student).AutoInclude();
+            modelBuilder.Entity<InstitutionPerson>().Navigation(i => i.Person).AutoInclude();
+            modelBuilder.Entity<InstitutionPerson>().Navigation(i => i.UniLogin).AutoInclude();
 
             modelBuilder.Entity<InstitutionPerson>()
                 .HasOne(ip => ip.Employee);
@@ -53,6 +61,10 @@ namespace os2skoledata_sql_sync.Config
                 .HasOne(ip => ip.Person);
             modelBuilder.Entity<InstitutionPerson>()
                 .HasOne(ip => ip.UniLogin);
+
+            // Eager Loading of Related Data
+            modelBuilder.Entity<Employee>().Navigation(i => i.Roles).AutoInclude();
+            modelBuilder.Entity<Employee>().Navigation(i => i.GroupIds).AutoInclude();
 
             modelBuilder.Entity<Employee>()
                 .HasMany(e => e.Roles)
@@ -67,6 +79,9 @@ namespace os2skoledata_sql_sync.Config
             modelBuilder.Entity<Role>()
                 .Property(r => r.EmployeeRole).HasConversion<string>();
 
+            // Eager Loading of Related Data
+            modelBuilder.Entity<Extern>().Navigation(i => i.GroupIds).AutoInclude();
+            
             modelBuilder.Entity<Extern>()
                 .Property(r => r.Role).HasConversion<string>();
 
@@ -74,6 +89,11 @@ namespace os2skoledata_sql_sync.Config
                 .HasMany(e => e.GroupIds)
                 .WithOne(x => x.Extern)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Eager Loading of Related Data
+            modelBuilder.Entity<Student>().Navigation(i => i.ContactPersons).AutoInclude();
+            modelBuilder.Entity<Student>().Navigation(i => i.GroupIds).AutoInclude();
+
 
             modelBuilder.Entity<Student>()
                 .Property(r => r.Role).HasConversion<string>();
@@ -88,6 +108,10 @@ namespace os2skoledata_sql_sync.Config
                 .WithOne(x => x.Student)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // Eager Loading of Related Data
+            modelBuilder.Entity<ContactPerson>().Navigation(i => i.UniLogin).AutoInclude();
+            modelBuilder.Entity<ContactPerson>().Navigation(i => i.Person).AutoInclude();
+            
             modelBuilder.Entity<ContactPerson>()
                 .HasOne(c => c.UniLogin);
             modelBuilder.Entity<ContactPerson>()
@@ -95,6 +119,12 @@ namespace os2skoledata_sql_sync.Config
             modelBuilder.Entity<ContactPerson>()
              .Property(p => p.Relation).HasConversion<string>();
 
+            // Eager Loading of Related Data
+            modelBuilder.Entity<Person>().Navigation(i => i.Address).AutoInclude();
+            modelBuilder.Entity<Person>().Navigation(i => i.HomePhoneNumber).AutoInclude();
+            modelBuilder.Entity<Person>().Navigation(i => i.MobilePhoneNumber).AutoInclude();
+            modelBuilder.Entity<Person>().Navigation(i => i.WorkPhoneNumber).AutoInclude();
+            
             modelBuilder.Entity<Person>()
                 .HasOne(p => p.Address);
             modelBuilder.Entity<Person>()

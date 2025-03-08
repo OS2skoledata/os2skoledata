@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace os2skoledata_ad_sync.Services.PowerShellRunner
 {
-    internal class PAMService : ServiceBase<PAMService>
+    public class PAMService : ServiceBase<PAMService>
     {
         private readonly string cyberArkAppId;
         private readonly string cyberArkSafe;

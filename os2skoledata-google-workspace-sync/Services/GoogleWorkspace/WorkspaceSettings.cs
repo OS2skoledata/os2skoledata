@@ -9,6 +9,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         public string EmailAccountToImpersonate { get; set; }
         public string Domain { get; set; }
         public string RootOrgUnitPath { get; set; }
+        public string KeepAliveOU { get; set; }
         public string[] OUsToAlwaysCreate { get; set; }
         public HierarchyType HierarchyType { get; set; } = HierarchyType.INSTITUTION_FIRST;
         public NamingSettings NamingSettings { get; set; }

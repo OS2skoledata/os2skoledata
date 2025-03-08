@@ -10,9 +10,6 @@ import java.util.List;
 @Setter
 public class StudentAdministration {
 	private boolean enabled = false;
-	private String adDomain;
-	private String webSocketUrl;
-	private String webSocketApiKey;
 	private String passwordSecret;
 	private boolean parentPasswordChangeEnabled = false;
 	// this setting shows the dropdown special for selecting a new password

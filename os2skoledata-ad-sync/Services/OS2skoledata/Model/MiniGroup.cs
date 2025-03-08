@@ -4,5 +4,6 @@
     {
         public long DatabaseId { get; set; }
         public int StartYear { get; set; }
+        public string InstitutionName { get; set; }
     }
 }

@@ -11,6 +11,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import dk.digitalidentity.os2skoledata.api.enums.Action;
+import dk.digitalidentity.os2skoledata.api.enums.IntegrationType;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.dao.model.Ghost;
+import dk.digitalidentity.os2skoledata.service.GhostService;
 import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
 import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +37,7 @@ import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.DBPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBRole;
 import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
@@ -65,6 +71,12 @@ public class ReadApiController {
 	@Autowired
 	private SettingService settingService;
 
+	@Autowired
+	private GhostService ghostService;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
 	// TODO lav records om til dto klasser, det tror jeg vi bliver glade for
 	record InstitutionRecord(long databaseId, String name, String number, boolean locked, String googleWorkspaceId, String allDriveGoogleWorkspaceId, String studentDriveGoogleWorkspaceId, String employeeDriveGoogleWorkspaceId, String allAzureSecurityGroupId, String studentAzureSecurityGroupId, String employeeAzureSecurityGroupId, String employeeGroupGoogleWorkspaceEmail, String studentInstitutionGoogleWorkspaceId, String employeeInstitutionGoogleWorkspaceId, InstitutionType type, Map<String, String> googleWorkspaceEmailMappings, String currentSchoolYear, String employeeAzureTeamId, String teamAdminUsername) {}
 
@@ -94,8 +106,46 @@ public class ReadApiController {
 				)).toList();
 		return ResponseEntity.ok(institutions);
 	}
+	
+	public record ExamCompletePackage(List<ExamInstitutionRecord> institutions, List<ExamClassRecord> studentClasses, List<ExamCourseRecord> courses, List<ExamStudentRecord> students) {}
+	public record ExamInstitutionRecord(String name, String institutionNumber) {}
+	public record ExamClassRecord(String name, String classNumber, String institutionNumber) {}
+	public record ExamCourseRecord(String name, String courseNumber, String institutionNumber) {}
+	public record ExamStudentRecord(String name, String studentNumber, String studentClassNumber, List<String> courseNumber) {}
+	
+	@GetMapping("/api/examSync")
+	public ResponseEntity<?> examSync() {
+		List<ExamInstitutionRecord> institutions = institutionService.findAll().stream()
+				.map(e -> new ExamInstitutionRecord(
+					e.getInstitutionName(),
+					e.getInstitutionNumber()
+					)).toList();
+		List<ExamClassRecord> studentClasses = groupService.findAll().stream()
+				.filter(g -> g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
+				.map(e -> new ExamClassRecord(
+					e.getGroupName(),
+					e.getGroupId(),
+					e.getInstitution().getInstitutionNumber()
+					)).toList();
+		List<ExamCourseRecord> courses = groupService.findAll().stream()
+				.filter(g -> !g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
+				.map(e -> new ExamCourseRecord(
+					e.getGroupName(),
+					e.getGroupId(),
+					e.getInstitution().getInstitutionNumber()
+					)).toList();
+		List<ExamStudentRecord> students = institutionPersonService.findAllNotDeleted().stream()
+				.filter(e -> e.getStudent() != null)
+				.map(e -> new ExamStudentRecord(
+					DBPerson.getName(e.getPerson()),
+					e.getStudent().getStudentNumber(),
+					e.getStudent().getMainGroupId(),
+					e.getStudent().getGroupIds().stream().map(g -> g.getGroupId()).toList()
+					)).toList();
+		return ResponseEntity.ok(new ExamCompletePackage(institutions, studentClasses, courses, students));
+	}
 
-	public record MiniGroupRecord(long databaseId, int startYear) {}
+	public record MiniGroupRecord(long databaseId, int startYear, String institutionName) {}
 	record InstitutionPersonRecord(long databaseId, String localPersonId, String source, @JsonFormat(pattern="yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified,
 								   String firstName, String familyName, DBGender gender, String cpr, String username, String stilUsername, String uniId, PersonRole role, PersonRole globalRole, List<Long> groupIds,
 								   List<Long> studentMainGroups, List<MiniGroupRecord> studentMainGroupsAsObjects, List<String> studentMainGroupsGoogleWorkspaceIds, String stilMainGroupCurrentInstitution, List<String> stilGroupsCurrentInstitution, List<InstitutionRecord> institutions, String currentInstitutionNumber, DBStudentRole studentRole, DBStudentRole globalStudentRole,
@@ -176,6 +226,15 @@ public class ReadApiController {
 				studentRole = person.getStudent().getRole();
 				DBGroup mainGroupForInstitution = groups.stream().filter(g -> g.getInstitution().getId() == person.getInstitution().getId() && g.getGroupId().equals(person.getStudent().getMainGroupId())).findAny().orElse(null);
 				if (mainGroupForInstitution != null) {
+
+					// check if student is in main group with a future date. If so, skip user
+					if (configuration.isFilterOutGroupsWithFutureFromDate()) {
+						LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
+						if (mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
+							continue;
+						}
+					}
+
 					studentMainGroupStartYearForInstitution = groupService.getStartYear(mainGroupForInstitution.getGroupLevel(), currentYear, mainGroupForInstitution.getId());
 					studentMainGroupLevelForInstitution = mainGroupForInstitution.getGroupLevel();
 					stilMainGroupCurrentInstitution = mainGroupForInstitution.getGroupId();
@@ -308,6 +367,13 @@ public class ReadApiController {
 		} else {
 			dbGroups = groupService.findByInstitution(institution).stream()
 					.filter(g -> !g.isDeleted() && g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
+					.collect(Collectors.toList());
+		}
+
+		if (configuration.isFilterOutGroupsWithFutureFromDate()) {
+			LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
+			dbGroups = dbGroups.stream()
+					.filter(g -> g.getFromDate() == null || g.getFromDate().isBefore(futureDate))
 					.collect(Collectors.toList());
 		}
 
@@ -578,6 +644,64 @@ public class ReadApiController {
 		List<String> allUsernames = institutionPeople.stream().filter(i -> i.getUsername() != null).map(i -> i.getUsername()).collect(Collectors.toList());
 
 		return ResponseEntity.ok(allUsernames);
+	}
+
+	record IntegrationAction(String username, IntegrationType integrationType, Action action) {}
+
+	@PostMapping("/api/person/action")
+	public ResponseEntity<?> setIntegrationActionDate(@RequestBody IntegrationAction integrationAction) {
+		List<DBInstitutionPerson> institutionPersonList = institutionPersonService.findByUsername(integrationAction.username);
+
+		if (institutionPersonList.isEmpty()) {
+			log.warn("/api/person/action: failed to find person with username " + integrationAction.username() + " and action " + integrationAction.action + " and integration " + integrationAction.integrationType);
+			return new ResponseEntity<>(HttpStatus.OK);
+		}
+
+		for (DBInstitutionPerson institutionPerson : institutionPersonList) {
+			switch (integrationAction.integrationType) {
+				case AD:
+					if (integrationAction.action.equals(Action.DEACTIVATE)) {
+						institutionPerson.setAdDeactivated(LocalDateTime.now());
+					} else if (integrationAction.action.equals(Action.CREATE) || integrationAction.action.equals(Action.REACTIVATE)) {
+						if (institutionPerson.getAdCreated() == null ) {
+							institutionPerson.setAdCreated(LocalDateTime.now());
+						}
+						institutionPerson.setAdDeactivated(null);
+					}
+					break;
+				case GW:
+					if (integrationAction.action.equals(Action.DEACTIVATE)) {
+						institutionPerson.setGwDeactivated(LocalDateTime.now());
+					} else if (integrationAction.action.equals(Action.CREATE) || integrationAction.action.equals(Action.REACTIVATE)) {
+						if (institutionPerson.getGwCreated() == null ) {
+							institutionPerson.setGwCreated(LocalDateTime.now());
+						}
+						institutionPerson.setGwDeactivated(null);
+					}
+					break;
+				case AZURE:
+					if (integrationAction.action.equals(Action.DEACTIVATE)) {
+						institutionPerson.setAzureDeactivated(LocalDateTime.now());
+					} else if (integrationAction.action.equals(Action.CREATE) || integrationAction.action.equals(Action.REACTIVATE)) {
+						if (institutionPerson.getAzureCreated() == null ) {
+							institutionPerson.setAzureCreated(LocalDateTime.now());
+						}
+						institutionPerson.setAzureDeactivated(null);
+					}
+					break;
+			}
+
+			institutionPersonService.save(institutionPerson);
+		}
+
+		return new ResponseEntity<>(HttpStatus.OK);
+	}
+
+	@GetMapping("/api/keepalive")
+	public ResponseEntity<Set<String>> getKeepAliveUsernames() {
+		Set<String> keepAliveUsernames = ghostService.getAllActive().stream().map(Ghost::getUsername).collect(Collectors.toSet());
+
+		return ResponseEntity.ok(keepAliveUsernames);
 	}
 
 	private List<DBInstitution> getLockedIntitutions() {

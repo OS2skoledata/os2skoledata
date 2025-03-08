@@ -23,5 +23,6 @@
         public string SecurityGroupForLevelNameStandard { get; set; }
         public string SchoolOUName { get; set; }
         public string DaycareOUName { get; set; }
+        public string GlobalSecurityGroupForLevelNameStandard { get; set; }
     }
 }

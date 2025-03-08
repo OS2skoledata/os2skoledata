@@ -46,7 +46,11 @@ public class SqlSyncApi {
 
 	record InstitutionPersonFullRecord(@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified, boolean deleted,
 			String source, String localPersonId, String username, EmployeeFullRecord employee, ExternFullRecord extern,
-			StudentFullRecord student, PersonFullRecord person, UniLoginFullRecord uniLogin) { }
+			StudentFullRecord student, PersonFullRecord person, UniLoginFullRecord uniLogin,
+			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime stilCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime stilDeleted,
+			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime adCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime adDeactivated,
+			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime gwCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime gwDeactivated,
+			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureDeactivated) { }
 
 	record GroupFullRecord(@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified, boolean deleted,
 			@JsonFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
@@ -178,7 +182,15 @@ public class SqlSyncApi {
 					externRecord,
 					studentRecord,
 					personRecord,
-					uniLoginRecord
+					uniLoginRecord,
+					institutionPerson.getStilCreated(),
+					institutionPerson.getStilDeleted(),
+					institutionPerson.getAdCreated(),
+					institutionPerson.getAdDeactivated(),
+					institutionPerson.getGwCreated(),
+					institutionPerson.getGwDeactivated(),
+					institutionPerson.getAzureCreated(),
+					institutionPerson.getAzureDeactivated()
 					);
 			
 			institutionPersons.add(institutionPersonRecord);

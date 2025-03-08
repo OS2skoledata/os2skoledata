@@ -2,8 +2,6 @@ package dk.digitalidentity.service;
 
 import com.azure.identity.ClientSecretCredential;
 import com.azure.identity.ClientSecretCredentialBuilder;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -13,7 +11,6 @@ import com.microsoft.graph.models.AadUserConversationMember;
 import com.microsoft.graph.models.ConversationMember;
 import com.microsoft.graph.models.DirectoryObject;
 import com.microsoft.graph.models.EducationClass;
-import com.microsoft.graph.models.EducationUser;
 import com.microsoft.graph.models.Group;
 import com.microsoft.graph.models.PasswordProfile;
 import com.microsoft.graph.models.Team;
@@ -24,8 +21,6 @@ import com.microsoft.graph.options.Option;
 import com.microsoft.graph.options.QueryOption;
 import com.microsoft.graph.requests.ConversationMemberCollectionPage;
 import com.microsoft.graph.requests.ConversationMemberCollectionRequestBuilder;
-import com.microsoft.graph.requests.EducationUserCollectionWithReferencesPage;
-import com.microsoft.graph.requests.EducationUserCollectionWithReferencesRequestBuilder;
 import com.microsoft.graph.requests.GraphServiceClient;
 import com.microsoft.graph.requests.GroupCollectionPage;
 import com.microsoft.graph.requests.GroupCollectionRequestBuilder;
@@ -34,10 +29,12 @@ import com.microsoft.graph.requests.TeamCollectionRequestBuilder;
 import com.microsoft.graph.requests.UserCollectionPage;
 import com.microsoft.graph.requests.UserCollectionRequestBuilder;
 import dk.digitalidentity.config.OS2skoledataAzureADConfiguration;
+import dk.digitalidentity.config.modules.UsernameSettings;
 import dk.digitalidentity.config.modules.UsernameStandard;
 import dk.digitalidentity.service.model.DBGroup;
 import dk.digitalidentity.service.model.DBUser;
 import dk.digitalidentity.service.model.Institution;
+import dk.digitalidentity.service.model.enums.Action;
 import dk.digitalidentity.service.model.enums.EntityType;
 import dk.digitalidentity.service.model.enums.Role;
 import dk.digitalidentity.service.model.enums.SetFieldType;
@@ -100,12 +97,21 @@ public class AzureADService {
 		allUsernames.addAll(allOS2skoledataUsernames);
 		for (String username : allUsernames) {
 			String key = "";
-			if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN)) {
+			if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
 				try {
-					if (username.length() != 8) {
+					UsernameSettings usernameSettings = config.getSyncSettings().getUsernameSettings();
+					int wantedTotalLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? usernameSettings.getRandomStandardLetterCount() + usernameSettings.getRandomStandardNumberCount() : 8;
+					if (username.length() != wantedTotalLength) {
 						continue;
 					}
-					key = username.substring(0, 4);
+
+					int wantedLetterLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? usernameSettings.getRandomStandardLetterCount() : 4;
+					if (username.length() >= wantedLetterLength)
+					{
+						key = username.substring(0, wantedLetterLength);
+					} else {
+						key = username;
+					}
 				}
 				catch (Exception e) {
 					log.warn("Failed to add username " + username + " to username map", e);
@@ -237,9 +243,9 @@ public class AzureADService {
 		return appClient.users().buildRequest().post(user);
 	}
 
-	public void disableUser(String id, String identification) throws Exception {
+	public void disableUser(String id, String username) throws Exception {
 		if (config.getAzureAd().isUserDryRun()) {
-			log.info("UserDryRun: Would have disabled user with username/databaseId " + identification);
+			log.info("UserDryRun: Would have disabled user with username " + username);
 			return;
 		}
 
@@ -248,10 +254,13 @@ public class AzureADService {
 
 		try {
 			updateUser(user, id);
-			log.info("Disabled user with username/databaseId " + identification);
+			log.info("Disabled user with username " + username);
+
+			// register as reactivated in OS2skoledata
+			os2skoledataService.setActionOnUser(username, Action.DEACTIVATE);
 		}
 		catch (Exception e) {
-			throw new Exception("Failed to disable user with username/databaseId " + identification, e);
+			throw new Exception("Failed to disable user with username " + username, e);
 		}
 	}
 
@@ -380,12 +389,17 @@ public class AzureADService {
 		appClient.groups(groupId).owners(objectId).reference().buildRequest().delete();
 	}
 
-	public void disableInactiveUsers(List<DBUser> dbUsers, List<User> azureOS2skoledataUsers, List<String> lockedUsernames) throws Exception {
+	public void disableInactiveUsers(List<DBUser> dbUsers, List<User> azureOS2skoledataUsers, List<String> lockedUsernames, List<String> keepAliveUsernames) throws Exception {
 		for (User azureUser : azureOS2skoledataUsers) {
 			if (azureUser.mailNickname != null) {
 
 				// if user is in locked institution, skip
 				if (lockedUsernames != null && lockedUsernames.contains(azureUser.mailNickname)) {
+					continue;
+				}
+
+				// if user is keep alive user, skip
+				if (keepAliveUsernames != null && keepAliveUsernames.contains(azureUser.mailNickname)) {
 					continue;
 				}
 
@@ -459,6 +473,9 @@ public class AzureADService {
 		User createdUser;
 		try {
 			createdUser = createUser(newUser);
+
+			// register as created in OS2skoledata
+			os2skoledataService.setActionOnUser(username, Action.CREATE);
 		}
 		catch (Exception e) {
 			throw new Exception("Failed to create user with LocalPersonId " + user.getLocalPersonId(), e);
@@ -472,6 +489,7 @@ public class AzureADService {
 	public void updateAccount(DBUser user, User match) throws Exception {
 		User userToUpdate = new User();
 		boolean changes = false;
+		boolean reactivated = false;
 
 		// TODO måske flere felter
 		if (match.givenName == null || !match.givenName.equals(user.getFirstName())) {
@@ -494,6 +512,7 @@ public class AzureADService {
 			userToUpdate.accountEnabled = true;
 			log.info("Will enable user with username " + user.getUsername());
 			changes = true;
+			reactivated = true;
 		}
 		log.info("match.companyName current value: " + match.companyName);
 		if (match.companyName == null || !match.companyName.equals("OS2skoledata")) {
@@ -540,6 +559,9 @@ public class AzureADService {
 
 				if (!config.getAzureAd().isUserDryRun()) {
 					log.info("Updated user with username " + user.getUsername());
+
+					// register as reactivated in OS2skoledata
+					os2skoledataService.setActionOnUser(user.getUsername(), Action.REACTIVATE);
 				}
 			}
 			catch (Exception e) {

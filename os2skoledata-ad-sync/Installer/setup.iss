@@ -1,11 +1,11 @@
 #define AppId "{{4a44f9d8-e6d1-48cf-80be-06fb4e034eb6}"
-#define AppSourceDir "..\bin\Debug\net6.0\publish\win-x64"
+#define AppSourceDir "..\bin\publish"
 #define AppName "OS2skoledataADSync"
 #define AppPublisher "Digital Identity"
 #define AppURL "http://digital-identity.dk/"
 #define ExeName "os2skoledata-ad-sync.exe"
-#define AppVersion "1.16.2"
-#define AppVersionOut "1.16.2"
+#define AppVersion "1.22.1"
+#define AppVersionOut "1.22.1"
 
 [Setup]
 AppId={#AppId}

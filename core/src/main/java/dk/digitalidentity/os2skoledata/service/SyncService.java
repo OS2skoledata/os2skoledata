@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -132,6 +133,7 @@ public class SyncService {
 					dbInstitutionPerson = new DBInstitutionPerson();
 					dbInstitutionPerson.copyFields(stilInstitutionPerson);
 					dbInstitutionPerson.setInstitution(dbInstitution);
+					dbInstitutionPerson.setStilCreated(LocalDateTime.now());
 					institutionPersonService.save(dbInstitutionPerson);
 				}
 				else {
@@ -140,6 +142,8 @@ public class SyncService {
 					if (dbInstitutionPerson.isDeleted()) {
 						log.info("Undeleting institutionPerson: " + dbInstitutionPerson.getId() + " " + dbInstitutionPerson.getLocalPersonId());
 						dbInstitutionPerson.setDeleted(false);
+						dbInstitutionPerson.setStilDeleted(null);
+						dbInstitutionPerson.setStilCreated(LocalDateTime.now());
 						changes = true;
 					}
 
@@ -171,6 +175,7 @@ public class SyncService {
 		toBeDeleted.forEach(person -> {
 			log.info("Deleting institutionPerson: " + person.getId() + " " + person.getLocalPersonId());
 			person.setDeleted(true);
+			person.setStilDeleted(LocalDateTime.now());
 		});
 
 		if (toBeDeleted.size() > 0) {

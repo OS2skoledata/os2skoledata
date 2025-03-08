@@ -6,6 +6,7 @@ import dk.digitalidentity.service.model.DBGroup;
 import dk.digitalidentity.service.model.Institution;
 import dk.digitalidentity.service.model.DBUser;
 import dk.digitalidentity.service.model.ModificationHistory;
+import dk.digitalidentity.service.model.enums.Action;
 import dk.digitalidentity.service.model.enums.EntityType;
 import dk.digitalidentity.service.model.enums.Role;
 import dk.digitalidentity.service.model.enums.SetFieldType;
@@ -114,18 +115,6 @@ public class OS2skoledataService {
 		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
 		if (!response.getStatusCode().equals(HttpStatus.OK)) {
 			throw new Exception("Failed to set head in OS2skoledata for institution: " + institutionNumber + ". Message: " + response.getBody());
-		}
-	}
-
-	record ErrorRequest(String message) {}
-	public void reportError(String message) {
-		ErrorRequest error = new ErrorRequest(message);
-		HttpEntity<ErrorRequest> request = new HttpEntity<>(error, getHeaders());
-		String query = config.getOs2skoledata().getBaseUrl() + "/api/reporterror";
-
-		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
-		if (!response.getStatusCode().equals(HttpStatus.OK)) {
-			log.error("Failed to report error back to OS2skoledata. Message: " + response.getBody());
 		}
 	}
 
@@ -247,6 +236,36 @@ public class OS2skoledataService {
 		}
 
 		log.info("Finished fetching locked team ids");
+		return Arrays.asList(response.getBody());
+	}
+
+	record ActionRequest(String username, Action action, String integrationType) {}
+	public void setActionOnUser(String username, Action action) throws Exception {
+		if (config.getAzureAd().isUserDryRun()) {
+			log.info("UserDryRun: Would set action " + action + " on user with " + username + " in OS2skoledata.");
+			return;
+		}
+		ActionRequest actionRequest = new ActionRequest(username, action, "AZURE");
+		HttpEntity<ActionRequest> request = new HttpEntity<>(actionRequest, getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/person/action";
+
+		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
+		if (!response.getStatusCode().equals(HttpStatus.OK)) {
+			throw new Exception("Failed to set action on user in OS2skoledata. Message: " + response.getBody());
+		}
+	}
+
+	public List<String> getKeepAliveUsernames() throws Exception {
+		log.info("Fetching keep alive usernames");
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/keepalive";
+
+		ResponseEntity<String[]> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String[].class);
+		if (!response.getStatusCode().equals(HttpStatus.OK) || response.getBody() == null) {
+			throw new Exception("Failed to fetch keep alive usernames. Will not update");
+		}
+
+		log.info("Finished fetching keep alive usernames");
 		return Arrays.asList(response.getBody());
 	}
 

@@ -8,5 +8,6 @@
         public string STILRolesField { get; set; }
         public string IgnoreField { get; set; }
         public string StudentStartYearField { get; set; }
+        public string CurrentInstitutionField { get; set; }
     }
 }

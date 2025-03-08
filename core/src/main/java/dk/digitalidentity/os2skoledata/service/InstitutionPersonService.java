@@ -1,14 +1,54 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
+import dk.digitalidentity.os2skoledata.api.enums.PersonRole;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.controller.mvc.enums.SchoolYear;
+import dk.digitalidentity.os2skoledata.dao.InstitutionPersonDao;
+import dk.digitalidentity.os2skoledata.dao.model.DBEmployeeGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.DBRole;
+import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
+import dk.digitalidentity.os2skoledata.security.SecurityUtil;
+import dk.digitalidentity.os2skoledata.service.model.ChildDTO;
+import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
+import dk.digitalidentity.os2skoledata.service.model.CprLookupDTO;
+import dk.digitalidentity.os2skoledata.service.model.NameDTO;
+import dk.digitalidentity.os2skoledata.service.model.StudentPasswordChangeDTO;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,49 +61,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
-
-import dk.digitalidentity.os2skoledata.api.ReadApiController;
-import dk.digitalidentity.os2skoledata.api.enums.PersonRole;
-import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
-import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
-import dk.digitalidentity.os2skoledata.service.model.ChildDTO;
-import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
-import dk.digitalidentity.os2skoledata.service.model.CprLookupDTO;
-import dk.digitalidentity.os2skoledata.controller.mvc.enums.SchoolYear;
-import dk.digitalidentity.os2skoledata.dao.model.DBEmployeeGroupId;
-import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
-import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
-import dk.digitalidentity.os2skoledata.dao.model.DBRole;
-import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
-import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
-import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
-import dk.digitalidentity.os2skoledata.security.SecurityUtil;
-import dk.digitalidentity.os2skoledata.service.model.ADPasswordResponse;
-import dk.digitalidentity.os2skoledata.service.model.ADPasswordResponse.ADPasswordStatus;
-import dk.digitalidentity.os2skoledata.service.model.NameDTO;
-import dk.digitalidentity.os2skoledata.service.model.StudentPasswordChangeDTO;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Service;
-
-import dk.digitalidentity.os2skoledata.dao.InstitutionPersonDao;
-import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
-import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
-import org.springframework.util.StringUtils;
-
-import javax.crypto.BadPaddingException;
-import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
 
 @Slf4j
 @EnableCaching
@@ -88,6 +85,9 @@ public class InstitutionPersonService {
 
 	@Autowired
 	private CprService cprService;
+
+	@Autowired
+	private GhostService ghostService;
 
 	public DBInstitutionPerson save(DBInstitutionPerson dbInstitutionPerson) {
 		return institutionPersonDao.save(dbInstitutionPerson);
@@ -220,9 +220,15 @@ public class InstitutionPersonService {
 		return sortedList;
 	}
 
-    public List<DBInstitutionPerson> findByUsername(String username) {
+    public List<DBInstitutionPerson> findByUsernameAndDeletedFalse(String username) {
 		return institutionPersonDao.findByUsernameAndDeletedFalse(username);
     }
+
+	// no matter if deleted or not
+	public List<DBInstitutionPerson> findByUsername(String username) {
+		return institutionPersonDao.findByUsername(username);
+    }
+
 
 	public StudentPasswordChangeDTO getStudentIfAllowedPasswordChange(String username) {
 		return getStudentsThatPasswordCanBeChangedOnByPerson().stream().filter(p -> p.getUsername().equals(username)).findAny().orElse(null);
@@ -231,7 +237,7 @@ public class InstitutionPersonService {
 	public List<StudentPasswordChangeDTO> getStudentsThatPasswordCanBeChangedOnByPerson() {
 		List<StudentPasswordChangeDTO> result = new ArrayList<>();
 		String username = SecurityUtil.getUserId();
-		List<DBInstitutionPerson> adultInstitutionPeople = findByUsername(username).stream()
+		List<DBInstitutionPerson> adultInstitutionPeople = findByUsernameAndDeletedFalse(username).stream()
 				.filter(p -> p.getEmployee() != null || p.getExtern() != null)
 				.collect(Collectors.toList());
 		List<StudentPasswordChangeConfiguration> configurations = studentPasswordChangeConfigurationService.findAll();
@@ -389,7 +395,7 @@ public class InstitutionPersonService {
 
 	public Integer getLevel(String username) {
 		Integer level = null;
-		List<DBInstitutionPerson> people = findByUsername(username);
+		List<DBInstitutionPerson> people = findByUsernameAndDeletedFalse(username);
 		if (people.isEmpty()) {
 			return null;
 		}
@@ -420,8 +426,8 @@ public class InstitutionPersonService {
 		return level;
 	}
 
-	public ADPasswordResponse.ADPasswordStatus changePassword(String username, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
-		ADPasswordStatus adPasswordStatus = ADPasswordStatus.NOOP;
+	public SetPasswordResponse.PasswordStatus changePassword(String username, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+		SetPasswordResponse.PasswordStatus adPasswordStatus = SetPasswordResponse.PasswordStatus.INSUFFICIENT_PERMISSION;
 		if (configuration.getStudentAdministration().isEnabled() && StringUtils.hasLength(username)) {
 			adPasswordStatus = passwordChangeQueueService.attemptPasswordChangeFromUI(username, newPassword);
 		}
@@ -664,5 +670,37 @@ public class InstitutionPersonService {
 
 	public List<DBInstitutionPerson> searchByInstitutionNumber(String institutionNumber, String term) {
 		return institutionPersonDao.searchByInstitutionNumber(institutionNumber, term);
+	}
+
+	@Transactional
+	public void cleanUp() {
+		cleanUpInstitutionPeople();
+		cleanUpAudTables();
+		ghostService.cleanUpNotActive();
+	}
+
+	private void cleanUpAudTables() {
+		Integer maxRev = institutionPersonDao.getMaxRev5Years();
+		if (maxRev != null) {
+			institutionPersonDao.deleteContactPersonAud(maxRev);
+			institutionPersonDao.deleteEmployeeGroupAud(maxRev);
+			institutionPersonDao.deleteRoleAud(maxRev);
+			institutionPersonDao.deleteEmployeeAud(maxRev);
+			institutionPersonDao.deleteExternGroupAud(maxRev);
+			institutionPersonDao.deleteExternAud(maxRev);
+			institutionPersonDao.deletePhoneNumberAud(maxRev);
+			institutionPersonDao.deleteAddressAud(maxRev);
+			institutionPersonDao.deletePersonAud(maxRev);
+			institutionPersonDao.deleteStudentAud(maxRev);
+			institutionPersonDao.deleteStudentGroupAud(maxRev);
+			institutionPersonDao.deleteUniLoginAud(maxRev);
+			institutionPersonDao.deleteInstitutionPersonAud(maxRev);
+		}
+
+	}
+
+	private void cleanUpInstitutionPeople() {
+		LocalDateTime xMonthsAgo = LocalDateTime.now().minusMonths(configuration.getDeleteInstitutionPersonAfterMonths());
+		institutionPersonDao.deleteByDeletedTrueAndStilDeletedBefore(xMonthsAgo);
 	}
 }

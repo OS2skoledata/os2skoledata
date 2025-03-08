@@ -18,6 +18,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Xml.Linq;
 using Unidecode.NET;
 
 namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
@@ -28,6 +29,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private readonly string emailAccountToImpersonate;
         private readonly string domain;
         private readonly string rootOrgUnitPath;
+        private readonly string keepAliveOUPath;
         private readonly HierarchyType hierarchyType;
         private readonly DirectoryService directoryService;
         private readonly DriveService driveService;
@@ -70,6 +72,8 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private readonly string[] rolesToBeCreatedDirectlyInGW;
         private readonly UsernameStandardType usernameStandard;
         private readonly string usernamePrefix;
+        private readonly int randomStandardLetterCount;
+        private readonly int randomStandardNumberCount;
         private readonly string institutitonStaffGroupEmailTypeName;
         private readonly bool useDanishCharacters;
         private readonly bool deleteDisabledUsersFully;
@@ -87,6 +91,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private char[] second;
         private char[] third;
         private Dictionary<long, string> uniqueIds;
+        private Random random;
 
         // caching because Google Workspace is slooooow
         private Dictionary<string, OrgUnit> institutionStudentsOUMapping;
@@ -105,6 +110,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             emailAccountToImpersonate = settings.WorkspaceSettings.EmailAccountToImpersonate;
             domain = settings.WorkspaceSettings.Domain;
             rootOrgUnitPath = settings.WorkspaceSettings.RootOrgUnitPath;
+            keepAliveOUPath = settings.WorkspaceSettings.KeepAliveOU;
             oUsToAlwaysCreate = settings.WorkspaceSettings.OUsToAlwaysCreate;
             hierarchyType = settings.WorkspaceSettings.HierarchyType;
             employeeOUName = settings.WorkspaceSettings.NamingSettings.EmployeeOUName;
@@ -144,6 +150,8 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             rolesToBeCreatedDirectlyInGW = settings.WorkspaceSettings.RolesToBeCreatedDirectlyInGW;
             usernameStandard = settings.WorkspaceSettings.usernameSettings == null ? UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN : settings.WorkspaceSettings.usernameSettings.UsernameStandard;
             usernamePrefix = settings.WorkspaceSettings.usernameSettings == null ? null : settings.WorkspaceSettings.usernameSettings.UsernamePrefix;
+            randomStandardLetterCount = settings.WorkspaceSettings.usernameSettings == null ? 4 : settings.WorkspaceSettings.usernameSettings.RandomStandardLetterCount;
+            randomStandardNumberCount = settings.WorkspaceSettings.usernameSettings == null ? 4 : settings.WorkspaceSettings.usernameSettings.RandomStandardNumberCount;
             institutitonStaffGroupEmailTypeName = settings.WorkspaceSettings.NamingSettings.InstitutitonStaffGroupEmailTypeName;
             useDanishCharacters = settings.WorkspaceSettings.UseDanishCharacters;
             deleteDisabledUsersFully = settings.WorkspaceSettings.DeleteDisabledUsersFully;
@@ -198,6 +206,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             second = "abcdefghjkmnpqrstuvxyz".ToCharArray();
             third = "23456789".ToCharArray();
             uniqueIds = new Dictionary<long, string>();
+            random = new Random();
 
             PopulateTable();
         }
@@ -374,32 +383,35 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     string name = GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0);
                     OrgUnit match = GetOrgUnit(institution.GoogleWorkspaceId);
 
+                    string pathToCreateIn = rootOrgUnitPath;
+                    if (institution.Type.Equals(InstitutionType.SCHOOL))
+                    {
+                        pathToCreateIn = schoolsOU.OrgUnitPath;
+                    }
+                    else if (institution.Type.Equals(InstitutionType.DAYCARE))
+                    {
+                        pathToCreateIn = daycaresOU.OrgUnitPath;
+                    }
+
                     if (match == null)
                     {
                         // create
-                        OrgUnit ou;
-                        if (institution.Type.Equals(InstitutionType.SCHOOL))
-                        {
-                            ou = CreateOU(schoolsOU.OrgUnitPath, true, name);
-                        }
-                        else if (institution.Type.Equals(InstitutionType.DAYCARE))
-                        {
-                            ou = CreateOU(daycaresOU.OrgUnitPath, true, name);
-                        }
-                        else if (institution.Type.Equals(InstitutionType.MUNICIPALITY))
-                        {
-                            ou = CreateOU(rootOrgUnitPath, true, name);
-                        }
-                        else
-                        {
-                            throw new Exception($"Unknown institution type: {institution.Type.ToString()}. Institution with database id: {institution.DatabaseId} and institution number: {institution.InstitutionNumber}");
-                        }
+                        OrgUnit ou = CreateOU(pathToCreateIn, true, name);
 
                         institution.GoogleWorkspaceId = ou.OrgUnitId;
                         oS2skoledataService.SetFields(institution.DatabaseId, EntityType.INSTITUTION, SetFieldType.INSTITUTION_WORKSPACE_ID, ou.OrgUnitId);
                     }
                     else
                     {
+                        // check if institution ou has been deleted previously and should be moved back
+                        if (!match.ParentOrgUnitPath.Equals(pathToCreateIn))
+                        {
+                            OrgUnit editedOU = new OrgUnit();
+                            editedOU.ParentOrgUnitPath = pathToCreateIn;
+                            match = UpdateOrgUnitGoogleWorkspace(editedOU, match.OrgUnitId);
+                            logger.LogInformation($"Moved ou with id {match.OrgUnitId} to path {match.OrgUnitPath}");
+                        }
+
                         // check if ou should be updated
                         UpdateOU(name, match);
                     }
@@ -542,7 +554,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             return false;
         }
 
-        public void DisableInactiveUsersFromRoot(List<DBUser> allActiveUsers, List<string> lockedUsernames)
+        public void DisableInactiveUsersFromRoot(List<DBUser> allActiveUsers, List<string> lockedUsernames, List<string> keepAliveUsernames)
         {
             // fetch OS2skoledata users from GW from both root, disabledUsersOU and deleted ous OU
             List<Google.Apis.Admin.Directory.directory_v1.Data.User> users = new List<Google.Apis.Admin.Directory.directory_v1.Data.User>();
@@ -555,6 +567,11 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             {
                 users.AddRange(ListUsers(deletedOusOu));
             }
+            if (!string.IsNullOrEmpty(keepAliveOUPath) && !keepAliveOUPath.Contains(keepAliveOUPath))
+            {
+                users.AddRange(ListUsers(keepAliveOUPath));
+            }
+
 
             foreach (Google.Apis.Admin.Directory.directory_v1.Data.User gwUser in users)
             {
@@ -562,6 +579,12 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
                 // if user is in locked institution, skip
                 if (lockedUsernames != null && lockedUsernames.Contains(username))
+                {
+                    continue;
+                }
+
+                // if user is a keep alive user, skip
+                if (keepAliveUsernames != null && keepAliveUsernames.Contains(username))
                 {
                     continue;
                 }
@@ -628,6 +651,9 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
                 Google.Apis.Admin.Directory.directory_v1.Data.User createdUser = CreateUserInWorkspace(user, ouPath);
 
+                // register as reactivated in OS2skoledata
+                oS2skoledataService.SetActionOnUser(user.Username, ActionType.CREATE);
+
                 // handle license
                 if (user.Role.Equals(DBRole.STUDENT))
                 {
@@ -659,9 +685,10 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             }
         }
 
-        public void UpdateAndMoveUser(DBUser user, Google.Apis.Admin.Directory.directory_v1.Data.User match, Institution institution, List<DBGroup> classes, OrgUnit institutionOrgUnit, OrgUnit studentInstitutionOrgUnit, OrgUnit employeeInstitutionOrgUnit)
+        public void UpdateAndMoveUser(DBUser user, Google.Apis.Admin.Directory.directory_v1.Data.User match, Institution institution, List<DBGroup> classes, OrgUnit institutionOrgUnit, OrgUnit studentInstitutionOrgUnit, OrgUnit employeeInstitutionOrgUnit, List<string> keepAliveUsernames)
         {
             bool changes = false;
+            bool reactivated = false;
 
             // check for user changes
             if (!Object.Equals(match.Name.FullName, user.Firstname + " " + user.FamilyName))
@@ -685,6 +712,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     logger.LogInformation($"Attempting to reactivate workspace user with username {user.Username} and db id {user.DatabaseId}");
                 }
                 changes = true;
+                reactivated = true;
             }
 
             // check for contact card changes 
@@ -728,6 +756,10 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
             // check for move
             string path = match.OrgUnitPath;
+            if (keepAliveUsernames != null && keepAliveUsernames.Contains(user.Username) && !string.IsNullOrEmpty(keepAliveOUPath) && keepAliveOUPath.Equals(path))
+            {
+                // do not move
+            }
             if (user.Role.Equals(DBRole.STUDENT))
             {
                 OrgUnit emptyGroupsOU = GetStudentsWithoutGroupOrgUnitForInstitution(institutionOrgUnit, studentInstitutionOrgUnit);
@@ -813,6 +845,12 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 {
                     UpdateUserInWorkspace(user, path);
                     logger.LogInformation($"Updated user with username {user.Username}. Path = {path}");
+
+                    if (reactivated)
+                    {
+                        // register as reactivated in OS2skoledata
+                        oS2skoledataService.SetActionOnUser(user.Username, ActionType.REACTIVATE);
+                    }
                 }
             }
         }
@@ -2428,6 +2466,10 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 // kaster exception hvis bruger ikke findes
                 Google.Apis.Admin.Directory.directory_v1.Data.User user = updateUserReq.Execute();
                 logger.LogInformation($"Suspended user with username {username}");
+
+                // register as deactivated in OS2skoledata
+                oS2skoledataService.SetActionOnUser(username, ActionType.DEACTIVATE);
+
                 return true;
             }));
         }
@@ -3096,6 +3138,10 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     }
                 }
             }
+            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            {
+                // do nothing. Random number will be generated later 
+            }
             else if (usernameStandard.Equals(UsernameStandardType.THREE_NUMBERS_THREE_CHARS_FROM_NAME))
             {
                 int idx = 0;
@@ -3128,6 +3174,15 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             }
         }
 
+        public string GetRandomNumber(int length)
+        {
+            string s = string.Empty;
+            for (int i = 0; i < length; i++)
+                s = String.Concat(s, random.Next(10).ToString());
+            return s;
+        }
+
+
         public Dictionary<string, List<string>> GenerateUsernameMap(List<string> allOS2skoledataUsernames)
         {
             Dictionary<string, List<string>> map = new Dictionary<string, List<string>>();
@@ -3143,18 +3198,20 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             foreach (string username in allUsernames)
             {
                 string key = "";
-                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
+                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
                 {
                     try
                     {
-                        if (username.Length != 8)
+                        int wantedTotalLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount + randomStandardNumberCount : 8;
+                        if (username.Length != wantedTotalLength)
                         {
                             continue;
                         }
 
-                        if (username.Length >= 4)
+                        int wantedLetterLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount : 4;
+                        if (username.Length >= wantedLetterLength)
                         {
-                            key = username.Substring(0, 4);
+                            key = username.Substring(0, wantedLetterLength);
                         }
                         else
                         {
@@ -3220,7 +3277,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
         private string GetPrefix()
         {
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.UNIID))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.UNIID) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
             {
                 return "";
             }
@@ -3232,6 +3289,10 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.UNIID))
             {
                 return 4;
+            }
+            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            {
+                return randomStandardLetterCount;
             }
             return 3;
         }
@@ -3266,7 +3327,15 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             // 1000 tries is crazy many
             for (int i = 0; i < 1000; i++)
             {
-                string username = prefix + ((nameFirst) ? namePart : uniqueIds[i]) + ((nameFirst) ? uniqueIds[i] : namePart);
+                string username;
+                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+                {
+                    username = namePart + GetRandomNumber(randomStandardNumberCount);
+                }
+                else 
+                {
+                    username = prefix + ((nameFirst) ? namePart : uniqueIds[i]) + ((nameFirst) ? uniqueIds[i] : namePart);
+                }
 
                 if (!usernamesWithNamePart.Contains(username))
                 {
@@ -3456,6 +3525,45 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             {
                 logger.LogInformation($"Google Workspace trace log - method {methodName} called. Details: {details}");
             }
+        }
+
+        public void MoveKeepAliveUsers(List<string> keepAliveUsernames, List<Google.Apis.Admin.Directory.directory_v1.Data.User> allGWUsers)
+        {
+            if (string.IsNullOrEmpty(keepAliveOUPath))
+            {
+                return;
+            }
+
+            foreach (string username in keepAliveUsernames)
+            {
+                Google.Apis.Admin.Directory.directory_v1.Data.User user = allGWUsers.Where(u => Object.Equals(u.PrimaryEmail, username + "@" + domain)).FirstOrDefault();
+                if (user != null)
+                {
+                    string userPath = user.OrgUnitPath;
+
+                    if (!keepAliveOUPath.Equals(userPath))
+                    {
+                        MoveToKeepAliveOU(username);
+                    }
+                }
+            }
+        }
+
+        private void MoveToKeepAliveOU(string username)
+        {
+            RetryUtil.WithRetry((() =>
+            {
+                var updateUserReq = directoryService.Users.Update(new Google.Apis.Admin.Directory.directory_v1.Data.User
+                {
+                    OrgUnitPath = keepAliveOUPath
+                }, username + "@" + domain);
+
+                // kaster exception hvis bruger ikke findes
+                Google.Apis.Admin.Directory.directory_v1.Data.User user = updateUserReq.Execute();
+                logger.LogInformation($"Moved user with username {username} to keepAliveOUPath {keepAliveOUPath}");
+
+                return true;
+            }));
         }
     }
 }

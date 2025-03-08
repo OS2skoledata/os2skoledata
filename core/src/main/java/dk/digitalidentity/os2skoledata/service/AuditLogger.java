@@ -1,19 +1,19 @@
 package dk.digitalidentity.os2skoledata.service;
 
-import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
-import dk.digitalidentity.os2skoledata.dao.AuditLogDao;
-import dk.digitalidentity.os2skoledata.dao.model.AuditLog;
-import dk.digitalidentity.os2skoledata.dao.model.enums.LogAction;
-import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDateTime;
+
+import javax.servlet.http.HttpServletRequest;
+
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.context.MessageSource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
-import javax.servlet.http.HttpServletRequest;
-import java.time.LocalDateTime;
+import dk.digitalidentity.os2skoledata.dao.AuditLogDao;
+import dk.digitalidentity.os2skoledata.dao.model.AuditLog;
+import dk.digitalidentity.os2skoledata.dao.model.enums.LogAction;
+import lombok.extern.slf4j.Slf4j;
 
 @Component
 @Slf4j
@@ -22,12 +22,6 @@ public class AuditLogger {
 	@Autowired
 	private AuditLogDao auditLogDao;
 	
-	@Autowired
-	private MessageSource messageSource;
-	
-	@Autowired
-	private OS2SkoleDataConfiguration configuration;
-
 	public void changePasswordFailed(String personUsername, String personName, String performerUsername, String performerName, String reason) {
 		AuditLog auditLog = new AuditLog();
 		auditLog.setLogAction(LogAction.CHANGE_PASSWORD_FAILED);

@@ -1,0 +1,14 @@
+os2skoledata.studentAdministration.parentPasswordChangeEnabled=true
+os2skoledata.studentAdministration.indskolingSpecialEnabled=true
+
+di.saml.idp.discovery=true
+di.saml.pages.chooseIdentityProvider=/discovery
+
+os2skoledata.idp.employee.metadata=https://demo-idp.os2faktor.dk/sso/saml/metadata
+os2skoledata.idp.employee.entityId=https://demo-idp.os2faktor.dk/
+
+os2skoledata.idp.parent.metadata=https://www.digital-identity.dk/metadata/nemlogin3-prod-metadata.xml
+os2skoledata.idp.parent.entityId=https://saml.nemlog-in.dk
+
+og så skal der laves en opsætning inde i NL3 portalen
+

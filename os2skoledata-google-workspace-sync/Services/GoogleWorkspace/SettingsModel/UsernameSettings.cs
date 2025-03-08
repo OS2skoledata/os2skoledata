@@ -4,6 +4,8 @@
     {
         public UsernameStandardType UsernameStandard { get; set; }
         public string UsernamePrefix { get; set; }
+        public int RandomStandardLetterCount { get; set; } = 4;
+        public int RandomStandardNumberCount { get; set; } = 4;
     }
 
     public enum UsernameStandardType
@@ -14,6 +16,7 @@
         PREFIX_NAME_LAST,
         UNIID,
         // numbers from 2-9 (0 and 1 is excluded) e.g. 222mad
-        THREE_NUMBERS_THREE_CHARS_FROM_NAME
+        THREE_NUMBERS_THREE_CHARS_FROM_NAME,
+        FROM_STIL_OR_AS_UNILOGIN_RANDOM
     }
 }

@@ -29,6 +29,16 @@ namespace os2skoledata_sql_sync.Model
         public int institutionId { get; set; }
         public virtual Institution Institution { get; set; }
 
+        public DateTime StilCreated { get; set; }
+        public DateTime StilDeleted { get; set; }
+        public DateTime AdCreated { get; set; }
+        public DateTime AdDeactivated { get; set; }
+        public DateTime GwCreated { get; set; }
+        public DateTime GwDeactivated { get; set; }
+        public DateTime AzureCreated { get; set; }
+        public DateTime AzureDeactivated { get; set; }
+
+
         public bool ApiEquals(InstitutionPersonDTO other)
         {
             if (other == null)
@@ -91,6 +101,46 @@ namespace os2skoledata_sql_sync.Model
                 return false;
             }
 
+            if (this.StilCreated != other.StilCreated)
+            {
+                return false;
+            }
+
+            if (this.StilDeleted != other.StilDeleted)
+            {
+                return false;
+            }
+
+            if (this.AdCreated != other.AdCreated)
+            {
+                return false;
+            }
+
+            if (this.AdDeactivated != other.AdDeactivated)
+            {
+                return false;
+            }
+
+            if (this.GwCreated != other.GwCreated)
+            {
+                return false;
+            }
+
+            if (this.GwDeactivated != other.GwDeactivated)
+            {
+                return false;
+            }
+
+            if (this.AzureCreated != other.AzureCreated)
+            {
+                return false;
+            }
+
+            if (this.AzureDeactivated != other.AzureDeactivated)
+            {
+                return false;
+            }
+
             return true;
         }
 
@@ -106,6 +156,15 @@ namespace os2skoledata_sql_sync.Model
             this.LocalPersonId = institutionPerson.localPersonId;
             this.Source = institutionPerson.source;
             this.Username = institutionPerson.username;
+
+            this.StilCreated = institutionPerson.StilCreated;
+            this.StilDeleted = institutionPerson.StilDeleted;
+            this.AdCreated = institutionPerson.AdCreated;
+            this.AdDeactivated = institutionPerson.AdDeactivated;
+            this.GwCreated = institutionPerson.GwCreated;
+            this.GwDeactivated = institutionPerson.GwDeactivated;
+            this.AzureCreated = institutionPerson.AzureCreated;
+            this.AzureDeactivated = institutionPerson.AzureDeactivated;
 
             if (this.Employee == null && institutionPerson.employee != null)
             {

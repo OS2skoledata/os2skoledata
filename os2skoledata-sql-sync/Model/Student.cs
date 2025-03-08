@@ -82,6 +82,17 @@ namespace os2skoledata_sql_sync.Model
                         return false;
                     }
                 }
+
+                // if all the groupIds match on both list we check if the group fields are different
+                foreach (ContactPerson contactPerson in this.ContactPersons)
+                {
+                    var stilContactPerson = student.contactPersons.Where(sc => contactPerson.Person.ApiEquals(sc.person)).FirstOrDefault();
+
+                    if (stilContactPerson != null && !contactPerson.ApiEquals(stilContactPerson))
+                    {
+                        return false;
+                    }
+                }
             }
 
             if (this.GroupIds?.Count != student.groupIds?.Count)

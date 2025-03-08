@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 @EnableScheduling
 @Slf4j
-public class LogCleanupTask {
+public class AuditLogCleanupTask {
 
 	@Autowired
 	private AuditLogger auditLogger;

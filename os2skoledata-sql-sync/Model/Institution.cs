@@ -87,6 +87,37 @@ namespace os2skoledata_sql_sync.Model
                 }
             }
 
+            if ((this.InstitutionPersons == null && other.institutionPersons != null) || (this.InstitutionPersons != null && other.institutionPersons == null) || (this.InstitutionPersons.Count != other.institutionPersons.Count))
+            {
+                return false;
+            }
+            else
+            {
+                List<InstitutionPerson> existingPeople = this.InstitutionPersons;
+                List<InstitutionPersonDTO> apiPeople = other.institutionPersons;
+
+                if (existingPeople.Where(p1 => apiPeople.Any(p2 => p2.localPersonId.Equals(p1.LocalPersonId)) == false).Any())
+                {
+                    return false;
+                }
+
+                if (apiPeople.Where(p1 => existingPeople.Any(p2 => p2.LocalPersonId.Equals(p1.localPersonId)) == false).Any())
+                {
+                    return false;
+                }
+
+                // if all the groupIds match on both list we check if the group fields are different
+                foreach (InstitutionPerson existingPerson in existingPeople)
+                {
+                    var stilPerson = apiPeople.Where(sp => sp.localPersonId.Equals(existingPerson.LocalPersonId)).FirstOrDefault();
+
+                    if (stilPerson != null && !existingPerson.ApiEquals(stilPerson))
+                    {
+                        return false;
+                    }
+                }
+            }
+
             return true;
         }
 

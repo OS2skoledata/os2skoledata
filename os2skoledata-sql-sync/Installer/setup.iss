@@ -1,5 +1,5 @@
 #define AppId "{{c6eab83d-bd08-42f1-aa10-f76137f2cb70}"
-#define AppSourceDir "..\bin\Debug\net6.0"
+#define AppSourceDir "..\bin\publish"
 #define AppName "OS2skoledata SQL Sync"
 #define AppPublisher "Digital Identity"
 #define AppURL "http://digital-identity.dk/"

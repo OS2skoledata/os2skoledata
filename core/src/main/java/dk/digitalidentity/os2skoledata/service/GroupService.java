@@ -68,7 +68,7 @@ public class GroupService {
 	public void sortAndAddStudentMainGroups(List<DBGroup> studentMainGroupGroups, List<Long> studentMainGroup, List<String> studentMainGroupsWorkspace, List<MiniGroupRecord> studentMainGroupsAsObjects, int currentYear) {
 		sortByLevel(studentMainGroupGroups);
 		studentMainGroup.addAll(studentMainGroupGroups.stream().map(DBGroup::getId).toList());
-		studentMainGroupsAsObjects.addAll(studentMainGroupGroups.stream().map(g -> new MiniGroupRecord(g.getId(), getStartYear(g.getGroupLevel(), currentYear, g.getId()))).toList());
+		studentMainGroupsAsObjects.addAll(studentMainGroupGroups.stream().map(g -> new MiniGroupRecord(g.getId(), getStartYear(g.getGroupLevel(), currentYear, g.getId()), g.getInstitution().getInstitutionName())).toList());
 		studentMainGroupsWorkspace.addAll(studentMainGroupGroups.stream().map(DBGroup::getGoogleWorkspaceId).toList());
 	}
 

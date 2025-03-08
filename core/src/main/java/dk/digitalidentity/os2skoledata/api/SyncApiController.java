@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.api;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
 import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,6 +73,9 @@ public class SyncApiController {
 
 	@Autowired
 	private SettingService settingService;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
 	
 	@GetMapping("/api/head")
 	public ResponseEntity<?> getHead() {
@@ -223,6 +228,15 @@ public class SyncApiController {
 				studentRole = person.getStudent().getRole();
 				DBGroup mainGroupForInstitution = groups.stream().filter(g ->  g.getInstitution().getId() == person.getInstitution().getId() && g.getGroupId().equals(person.getStudent().getMainGroupId())).findAny().orElse(null);
 				if (mainGroupForInstitution != null) {
+
+					// check if student is in main group with a future date. If so, skip user
+					if (configuration.isFilterOutGroupsWithFutureFromDate()) {
+						LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
+						if (mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
+							continue;
+						}
+					}
+
 					studentMainGroupStartYearForInstitution = groupService.getStartYear(mainGroupForInstitution.getGroupLevel(), settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + person.getInstitution().getInstitutionNumber()), mainGroupForInstitution.getId());
 					studentMainGroupLevelForInstitution = mainGroupForInstitution.getGroupLevel();
 					stilMainGroupCurrentInstitution = mainGroupForInstitution.getGroupId();
@@ -342,8 +356,17 @@ public class SyncApiController {
 			return new ResponseEntity<>("Unknown client", HttpStatus.FORBIDDEN);
 		}
 
+		List<DBGroup> dbGroups = groupService.findByIdIn(body.ids);
+
+		if (configuration.isFilterOutGroupsWithFutureFromDate()) {
+			LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
+			dbGroups = dbGroups.stream()
+					.filter(g -> g.getFromDate() == null || g.getFromDate().isBefore(futureDate))
+					.collect(Collectors.toList());
+		}
+
 		// only main groups
-		List<GroupRecord> groups = groupService.findByIdIn(body.ids).stream()
+		List<GroupRecord> groups = dbGroups.stream()
 				.filter(g -> g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
 				.map(g -> new GroupRecord(
 						g.getId(),

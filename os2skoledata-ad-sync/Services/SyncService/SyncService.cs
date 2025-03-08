@@ -92,6 +92,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 List<Institution> institutions = oS2skoledataService.GetInstitutions();
                 List<string> lockedInstitutionNumbers = institutions.Where(i => i.Locked).Select(i => i.InstitutionNumber).ToList();
                 List<string> lockedUsernames = oS2skoledataService.GetLockedUsernames();
+                List<string> keepAliveUsernames = oS2skoledataService.GetKeepAliveUsernames();
 
                 // add locked institutions to global list
                 // institutions that are no longer locked will be removed from the list when the full sync is done (to make sure first sync of unlocked institutions is a full sync)
@@ -121,10 +122,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                     if (!createOUHierarchy)
                     {
-                        activeDirectoryService.DisableInactiveUsersNoHierarchy(allUsers, lockedUsernames);
+                        activeDirectoryService.DisableInactiveUsersNoHierarchy(allUsers, lockedUsernames, keepAliveUsernames);
                     } else
                     {
-                        activeDirectoryService.DisableInactiveUsersFromRoot(allUsers, lockedUsernames);
+                        activeDirectoryService.DisableInactiveUsersFromRoot(allUsers, lockedUsernames, keepAliveUsernames);
                     }
                 }
 
@@ -137,6 +138,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 Dictionary<string, string> usernameADPathMap = new Dictionary<string, string>();
 
                 // pr institution update classes and users
+                HashSet<string> allClassLevels = new HashSet<string>();
                 List<string> allSecurityGroupIds = new List<string>();
                 List<string> allRenamedGroupIds = new List<string>();
                 Dictionary<string, List<User>> institutionUserMap = new Dictionary<string, List<User>>();
@@ -171,11 +173,11 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                             if (useUsernameAsKey)
                             {
                                 using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
-                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap);
+                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap, keepAliveUsernames);
                             } else
                             {
                                 using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
-                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap);
+                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap, keepAliveUsernames);
                             }
                         }
                     }
@@ -183,10 +185,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                     // security groups for institution
                     if (createOUHierarchy)
                     {
-                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, null, null, usernameADPathMap);
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, null, null, usernameADPathMap, allClassLevels);
                     } else
                     {
-                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, allSecurityGroupIds, allRenamedGroupIds, usernameADPathMap);
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, allSecurityGroupIds, allRenamedGroupIds, usernameADPathMap, allClassLevels);
                     }
                 }
 
@@ -196,7 +198,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 }
  
                 // global security groups
-                activeDirectoryService.UpdateGlobalSecurityGroups(institutionUserMap, lockedInstitutionNumbers, usernameADPathMap, institutions);
+                activeDirectoryService.UpdateGlobalSecurityGroups(institutionUserMap, lockedInstitutionNumbers, usernameADPathMap, institutions, allClassLevels);
+
+                // move keep alive users
+                activeDirectoryService.MoveKeepAliveUsers(keepAliveUsernames);
 
                 // set head on not locked institutions
                 foreach (Institution institution in institutions)
@@ -220,7 +225,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             }
         }
 
-        private void HandleFullSyncUser(User user, DirectoryEntry entry, Institution institution, List<string> excludedRoles, Dictionary<string, List<string>> usernameMap, Dictionary<string,string> usernameADPathMap)
+        private void HandleFullSyncUser(User user, DirectoryEntry entry, Institution institution, List<string> excludedRoles, Dictionary<string, List<string>> usernameMap, Dictionary<string,string> usernameADPathMap, List<string> keepAliveUsernames)
         {
             bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
             if (shouldBeExcluded)
@@ -240,7 +245,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 // find available username and create
 
                 string username = null;
-                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                 {
                     bool exists = activeDirectoryService.AccountExists(user.StilUsername);
                     if (!exists)
@@ -284,7 +289,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 }
 
                 // maybe update and/or move user in AD
-                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
+                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry, keepAliveUsernames);
                 user.ADPath = path;
                 AddPathToMap(path, username, usernameADPathMap);
             }
@@ -407,6 +412,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
         private void HandlePersonChanges(List<ModificationHistory> typePerson, List<User> changedUsers, Dictionary<string, List<string>> usernameMap)
         {
+            List<string> keepAliveUsernames = oS2skoledataService.GetKeepAliveUsernames();
             Dictionary<string, string> usernameADPathMap = new Dictionary<string, string>();
             foreach (User user in changedUsers)
             {
@@ -427,16 +433,16 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 if (useUsernameAsKey)
                 {
                     using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
-                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap);
+                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap, keepAliveUsernames);
                 } else
                 {
                     using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
-                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap);
+                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap, keepAliveUsernames);
                 }
             }
         }
 
-        private void HandleOnePersonChanges(DirectoryEntry entry, User user, bool create, bool update, bool delete, Dictionary<string, List<string>> usernameMap, Dictionary<string, string> usernameADPathMap)
+        private void HandleOnePersonChanges(DirectoryEntry entry, User user, bool create, bool update, bool delete, Dictionary<string, List<string>> usernameMap, Dictionary<string, string> usernameADPathMap, List<string> keepAliveUsernames)
         {
             // if any of the users institutions are locked, we will not perform a delta sync
             if (user.Institutions.Any(i => i.Locked))
@@ -457,7 +463,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 // find available username and create
                 string username = null;
-                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) && user.StilUsername != null)
+                if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                 {
                     bool exists = activeDirectoryService.AccountExists(user.StilUsername);
                     if (!exists)
@@ -504,7 +510,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 }
 
                 // maybe update and/or move user in AD
-                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry);
+                string path = activeDirectoryService.UpdateAndMoveUser(username, user, entry, keepAliveUsernames);
                 user.ADPath = path;
                 AddPathToMap(path, username, usernameADPathMap);
             }
@@ -513,8 +519,18 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             {
                 if ( user.Institutions.Count == 0 || (user.Institutions.Count == 1 && user.Institutions.Select(i => i.InstitutionNumber).ToList().Contains(user.CurrentInstitutionNumber)))
                 {
+                    bool allowDisabling = true;
                     string username = entry.Properties["sAMAccountName"][0].ToString();
-                    activeDirectoryService.DisableAccount(username);
+
+                    if (keepAliveUsernames != null && keepAliveUsernames.Contains(username))
+                    {
+                        allowDisabling = false;
+                    }
+
+                    if (allowDisabling)
+                    {
+                        activeDirectoryService.DisableAccount(username);
+                    }
                 }
             }
         }

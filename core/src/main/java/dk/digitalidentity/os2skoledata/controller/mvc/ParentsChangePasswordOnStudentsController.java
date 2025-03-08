@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.controller.mvc;
 
+import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.controller.mvc.dto.PasswordChangeForm;
 import dk.digitalidentity.os2skoledata.controller.mvc.validator.PasswordChangeValidator;
@@ -7,10 +8,10 @@ import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
 import dk.digitalidentity.os2skoledata.security.RequireParent;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
+import dk.digitalidentity.os2skoledata.service.ADPasswordService;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.PasswordSettingService;
-import dk.digitalidentity.os2skoledata.service.model.ADPasswordResponse;
 import dk.digitalidentity.os2skoledata.service.model.StudentPasswordChangeDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -175,9 +176,9 @@ public class ParentsChangePasswordOnStudentsController {
 		}
 
 		try {
-			ADPasswordResponse.ADPasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), form.getPassword());
+			SetPasswordResponse.PasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), form.getPassword());
 
-			if (ADPasswordResponse.isCritical(adPasswordStatus)) {
+			if (ADPasswordService.isCritical(adPasswordStatus)) {
 				if (configuration.getStudentAdministration().isIndskolingSpecialEnabled() && Objects.equals(passwordSettingService.findGradeGroup(form.getUsername()), GradeGroup.YOUNGEST)) {
 					model.addAttribute("technicalError", true);
 					model.addAttribute("passwordWords", passwordSettingService.getPasswordWords());

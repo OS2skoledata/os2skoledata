@@ -1,6 +1,5 @@
 package dk.digitalidentity.os2skoledata.security;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -45,7 +44,7 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 
 		// check if the user is a school employee or external in OS2skoledata
 		String username = tokenUser.getUsername();
-		List<DBInstitutionPerson> people = institutionPersonService.findByUsername(username);
+		List<DBInstitutionPerson> people = institutionPersonService.findByUsernameAndDeletedFalse(username);
 		if (people.stream().anyMatch(p -> p.getEmployee() != null || p.getExtern() != null)) {
 			newAuthorities.add(new SamlGrantedAuthority(Constants.SCHOOL_EMPLOYEE));
 		}

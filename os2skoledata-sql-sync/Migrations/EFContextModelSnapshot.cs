@@ -328,6 +328,22 @@ namespace os2skoledata_sql_sync.Migrations
                         .HasColumnType("int")
                         .HasColumnName("id");
 
+                    b.Property<DateTime>("AdCreated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ad_created");
+
+                    b.Property<DateTime>("AdDeactivated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("ad_deactivated");
+
+                    b.Property<DateTime>("AzureCreated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("azure_created");
+
+                    b.Property<DateTime>("AzureDeactivated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("azure_deactivated");
+
                     b.Property<bool>("Deleted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("deleted");
@@ -339,6 +355,14 @@ namespace os2skoledata_sql_sync.Migrations
                     b.Property<int?>("ExternId")
                         .HasColumnType("int")
                         .HasColumnName("extern_id");
+
+                    b.Property<DateTime>("GwCreated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("gw_created");
+
+                    b.Property<DateTime>("GwDeactivated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("gw_deactivated");
 
                     b.Property<DateTime>("LastModified")
                         .HasColumnType("datetime(6)")
@@ -357,6 +381,14 @@ namespace os2skoledata_sql_sync.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("varchar(255)")
                         .HasColumnName("source");
+
+                    b.Property<DateTime>("StilCreated")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("stil_created");
+
+                    b.Property<DateTime>("StilDeleted")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("stil_deleted");
 
                     b.Property<int?>("StudentId")
                         .HasColumnType("int")

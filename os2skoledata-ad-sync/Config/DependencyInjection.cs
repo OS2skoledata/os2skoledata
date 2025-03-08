@@ -5,6 +5,8 @@ using os2skoledata_ad_sync.Services.LogUploader;
 using os2skoledata_ad_sync.Services.OS2skoledata;
 using os2skoledata_ad_sync.Services.PowerShellRunner;
 using Serilog;
+using System;
+using System.Net.Http;
 
 namespace os2skoledata_ad_sync.Config
 {
@@ -16,18 +18,33 @@ namespace os2skoledata_ad_sync.Config
                 .ReadFrom.Configuration(configuration)
                 .CreateLogger();
 
-            // Bind settings
+            // bind settings
             var settings = new Settings();
             configuration.Bind(settings);
             services.AddSingleton(settings);
 
-            // Add other required services
+            // add other required services
             services.AddSingleton<ActiveDirectoryService>();
-            services.AddSingleton<OS2skoledataService>();
             services.AddSingleton<SyncService>();
             services.AddSingleton<PowerShellRunnerService>();
             services.AddSingleton<PAMService>();
             services.AddSingleton<LogUploaderService>();
+
+            services.AddTransient<ApiKeyHandler>();
+
+            services.AddHttpClient<OS2skoledataService>()
+            .ConfigurePrimaryHttpMessageHandler(() =>
+            {
+                var handler = new HttpClientHandler
+                {
+                    ClientCertificateOptions = ClientCertificateOption.Manual
+                };
+                handler.ServerCertificateCustomValidationCallback =
+                    (httpRequestMessage, cert, certChain, policyErrors) => true;
+                return handler;
+            })
+            .AddHttpMessageHandler<ApiKeyHandler>();
+
 
             return services;
         }

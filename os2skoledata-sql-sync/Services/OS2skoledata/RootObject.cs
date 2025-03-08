@@ -30,6 +30,14 @@ namespace os2skoledata_sql_sync.Services.OS2skoledata
         public StudentDTO student { get; set; }
         public PersonDTO person { get; set; }
         public UniLoginDTO uniLogin { get; set; }
+        public DateTime StilCreated { get; set; }
+        public DateTime StilDeleted { get; set; }
+        public DateTime AdCreated { get; set; }
+        public DateTime AdDeactivated { get; set; }
+        public DateTime GwCreated { get; set; }
+        public DateTime GwDeactivated { get; set; }
+        public DateTime AzureCreated { get; set; }
+        public DateTime AzureDeactivated { get; set; }
     }
 
     public class EmployeeDTO

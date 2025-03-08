@@ -8,4 +8,6 @@ import lombok.Setter;
 public class UsernameSettings {
 	private UsernameStandard usernameStandard;
 	private String usernamePrefix;
+	private int randomStandardLetterCount = 4;
+	private int randomStandardNumberCount = 4;
 }

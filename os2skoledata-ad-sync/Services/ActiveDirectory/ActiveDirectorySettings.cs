@@ -8,6 +8,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public string DisabledUsersOU { get; set; }
         public string RootOU { get; set; }
         public string RootDeletedOusOu { get; set; }
+        public string KeepAliveOU { get; set; }
         public bool UseUsernameAsKey { get; set; }
         public string UsernameKeyField { get; set; } = "sAMAccountName";
         public UsernameKeyType UsernameKeyType { get; set; } = UsernameKeyType.SAM_ACCOUNT_NAME;
@@ -29,6 +30,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public FilteringSettings filteringSettings { get; set; }
         public NamingSettings namingSettings { get; set; }
         public bool MoveUsersEnabled { get; set; }
+        public string MultipleCprExcludedGroupDn { get; set; }
     }
 
     public enum UsernameStandardType
@@ -38,7 +40,8 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         PREFIX_NAME_FIRST,
         PREFIX_NAME_LAST,
         // numbers from 2-9 (0 and 1 is excluded) e.g. 222mad
-        THREE_NUMBERS_THREE_CHARS_FROM_NAME
+        THREE_NUMBERS_THREE_CHARS_FROM_NAME,
+        FROM_STIL_OR_AS_UNILOGIN_RANDOM
     }
 
     public enum UsernameKeyType

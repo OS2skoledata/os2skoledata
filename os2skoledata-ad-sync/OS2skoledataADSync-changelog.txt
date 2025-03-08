@@ -17,7 +17,7 @@
 2023.12.12 - 1.8.0 - Underståttelse for PAM til lagring af API någler
 2024.01.04 - 1.9.0 - HÅndtering af meget lange klassenavne og sikkerhedsgrupper
 2024.01.10 - 1.9.1 - Forbedringer til installer
-2024.01.11 - 1.9.2 - Kræver ikke længere dotnet 6 installeret pÅ serveren.
+2024.01.11 - 1.9.2 - Kræver ikke længere dotnet 6 installeret på serveren.
 2024.01.11 - 1.9.3 - Tilfåjet domaincontroller og rolle parametre til powershell script
 2024.01.23 - 1.9.4 - Udvidet navnestandav (klasse-bogstav) og låbende opdatering af displayName
 2024.02.08 - 1.9.5 - Fix der sikrer at brugere der har ekskluderede ansættelsestyper ikke står og flipper mellem spærret/aktiv
@@ -38,3 +38,13 @@
 2024.08.05 - 1.16.0 - Ny navnestandard tilføjet
 2024.09.20 - 1.16.1 - Fixet fejl der reaktiverer konti for brugere med eksluderede roller
 2024.10.04 - 1.16.2 - Fejlhåndtering til genåbning af lukkede enheder i institutioner
+2024.11.25 - 1.17.0 - Mulighed for prefix på enheder afhængig af institutionstype
+2025.01.02 - 1.18.0 - Sætter nu PasswordNotRequired til false på nye brugere ved oprettelse
+2025.01.02 - 1.18.1 - Sikrer nu at det tilfældigt genererede initielle kodeord lever op til minimumskrav for kodeord
+2025.01.15 - 1.18.2 - Replay overførsler ved fejl op til 3 gange
+2025.01.30 - 1.19.0 - Nye brugernavnestandarder, mail på klassegrupper muligt
+2025.02.04 - 1.19.1 - Fejlrettelse til håndtering af HTTP klienten der kalder OS2skoledata backenden
+2025.02.12 - 1.21.0 - Håndtering af flere brugere med samme cpr
+2025.02.12 - 1.21.0 - Håndtering af læsemidler
+2025.02.25 - 1.22.0 - Globale sikkerhedsgrupper til klassetrin og nuværende instititutionsnavn kan vedligeholdes i AD
+2025.03.07 - 1.22.1 - Bugfix til navne på enheder
