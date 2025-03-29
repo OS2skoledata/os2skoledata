@@ -43,6 +43,21 @@ namespace os2skoledata_google_workspace_sync.Config
                     .ForJob(setFullSyncJobKey)
                     .WithCronSchedule(settings.JobSettings.FullSyncCron)
                 );
+
+                // Add classroomSyncJob
+                if (settings.WorkspaceSettings.ClassroomSettings.Enabled)
+                {
+                    var classroomSyncJobKey = new JobKey("ClassroomSyncJob");
+                    q.AddJob<ClassroomSyncJob>(classroomSyncJobKey, j => j.WithDescription(classroomSyncJobKey.Name));
+
+                    // Add scheduled trigger
+                    q.AddTrigger(t => t
+                        .WithIdentity("Classroom Sync Cron Trigger")
+                        .ForJob(classroomSyncJobKey)
+                        .WithCronSchedule(settings.JobSettings.ClassroomSyncCron)
+                    );
+                }
+                
             });
 
             return services;

@@ -9,5 +9,7 @@
         public string IgnoreField { get; set; }
         public string StudentStartYearField { get; set; }
         public string CurrentInstitutionField { get; set; }
+        public string GlobalRoleField { get; set; }
+        public string DisabledDateField { get; set;}
     }
 }

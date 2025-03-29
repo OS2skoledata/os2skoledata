@@ -11,6 +11,7 @@
     <PackageReference Include="Google.Apis" Version="1.60.0" />
     <PackageReference Include="Google.Apis.Admin.Directory.directory_v1" Version="1.59.0.2952" />
     <PackageReference Include="Google.Apis.Auth" Version="1.60.0" />
+    <PackageReference Include="Google.Apis.Classroom.v1" Version="1.60.0.3092" />
     <PackageReference Include="Google.Apis.Drive.v3" Version="1.59.0.2922" />
     <PackageReference Include="Google.Apis.Licensing.v1" Version="1.60.0.2678" />
     <PackageReference Include="JWT" Version="9.0.3" />

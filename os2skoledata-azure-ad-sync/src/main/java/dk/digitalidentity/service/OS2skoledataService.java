@@ -269,6 +269,40 @@ public class OS2skoledataService {
 		return Arrays.asList(response.getBody());
 	}
 
+	record SetGroupIdentifierRequest(long institutionId, String groupKey, String groupEmail) {}
+	public void setGroupIdentifier(long institutionId, String groupKey, String value) throws Exception {
+		SetGroupIdentifierRequest setGroupIdentifierRequest = new SetGroupIdentifierRequest(institutionId, groupKey, value);
+		HttpEntity<SetGroupIdentifierRequest> request = new HttpEntity<>(setGroupIdentifierRequest, getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/setgroupemail?integration=AZURE";
+
+		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
+		if (!response.getStatusCode().equals(HttpStatus.OK)) {
+			throw new Exception("Failed to set identifier on group in OS2skoledata. Message: " + response.getBody());
+		}
+	}
+
+	public String getSchemaId() throws Exception {
+		HttpEntity<String> request = new HttpEntity<>(getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/settings/azure/schemaId";
+
+		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.GET, request, String.class);
+		if (!response.getStatusCode().equals(HttpStatus.OK)) {
+			throw new Exception("Failed to fetch schema id");
+		}
+
+		return response.getBody();
+	}
+
+	public void setSchemaId(String schemaId) throws Exception {
+		HttpEntity<String> request = new HttpEntity<>(schemaId, getHeaders());
+		String query = config.getOs2skoledata().getBaseUrl() + "/api/settings/azure/schemaId";
+
+		ResponseEntity<String> response = new RestTemplate().exchange(query, HttpMethod.POST, request, String.class);
+		if (!response.getStatusCode().equals(HttpStatus.OK)) {
+			throw new Exception("Failed to set schemaID in OS2skoledata. Message: " + response.getBody());
+		}
+	}
+
 	private HttpHeaders getHeaders() {
 		HttpHeaders headers = new HttpHeaders();
 		headers.add("apiKey", config.getOs2skoledata().getApiKey());

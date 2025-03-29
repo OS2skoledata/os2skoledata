@@ -18,22 +18,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using System.Xml.Linq;
 using Unidecode.NET;
+using Google.Apis.Classroom.v1;
+using System.Reflection;
+using Google.Apis.Classroom.v1.Data;
 
 namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 {
     internal class WorkspaceService : ServiceBase<WorkspaceService>
     {
+        private readonly DirectoryService directoryService;
+        private readonly DriveService driveService;
+        private readonly LicensingService licenseService;
+        private readonly ClassroomService classroomService;
         private readonly OS2skoledataService oS2skoledataService;
+
         private readonly string emailAccountToImpersonate;
         private readonly string domain;
         private readonly string rootOrgUnitPath;
         private readonly string keepAliveOUPath;
         private readonly HierarchyType hierarchyType;
-        private readonly DirectoryService directoryService;
-        private readonly DriveService driveService;
-        private readonly LicensingService licenseService;
         private readonly string[] oUsToAlwaysCreate;
         private readonly string employeeOUName;
         private readonly string studentOUName;
@@ -82,6 +86,11 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private readonly int daysBeforeDeletionExternal;
         private readonly bool gwTraceLog;
         private readonly bool setContactCard;
+        private readonly bool onlyUseYearInClassGroupEmail;
+        private readonly string securityGroupForLevelNameStandard;
+        private readonly string globalSecurityGroupForLevelNameStandard;
+        private readonly string addEmployeesToClassroomGroup;
+        private readonly bool classroomEnabled;
 
         private readonly string KEYS_OS2SKOLEDATA = "OS2skoledata";
         private readonly string KEYS_ROLE = "ROLE";
@@ -160,6 +169,11 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             daysBeforeDeletionExternal = settings.WorkspaceSettings.DaysBeforeDeletionExternal;
             gwTraceLog = settings.WorkspaceSettings.GWTraceLog;
             setContactCard = settings.WorkspaceSettings.SetContactCard;
+            onlyUseYearInClassGroupEmail = settings.WorkspaceSettings.NamingSettings.OnlyUseYearInClassGroupEmail;
+            securityGroupForLevelNameStandard = settings.WorkspaceSettings.NamingSettings.SecurityGroupForLevelNameStandard;
+            globalSecurityGroupForLevelNameStandard = settings.WorkspaceSettings.NamingSettings.GlobalSecurityGroupForLevelNameStandard;
+            addEmployeesToClassroomGroup = settings.WorkspaceSettings.AddEmployeesToClassroomGroup;
+            classroomEnabled = settings.WorkspaceSettings.ClassroomSettings.Enabled;
 
             using FileStream fileStream = System.IO.File.OpenRead(serviceAccountDataFilePath);
             string fileContents;
@@ -169,17 +183,32 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             }
             ServiceAccountCredentialDTO serviceAccountCredentialDTO = JsonConvert.DeserializeObject<ServiceAccountCredentialDTO>(fileContents, jsonSerializerSettings);
 
-            ServiceAccountCredential credentialWithScopes = new ServiceAccountCredential(
-               new ServiceAccountCredential.Initializer(serviceAccountCredentialDTO.ClientEmail)
-               {
-                   Scopes = new[] {
+            var scopesForUser = new[] {
                         DirectoryService.Scope.AdminDirectoryUser,
                         DirectoryService.Scope.AdminDirectoryOrgunit,
                         DirectoryService.Scope.AdminDirectoryGroup,
                         DirectoryService.Scope.AdminDirectoryUserschema,
                         DriveService.Scope.Drive,
                         LicensingService.Scope.AppsLicensing
-                    },
+                    };
+
+            if (classroomEnabled)
+            {
+                scopesForUser = new[] {
+                        DirectoryService.Scope.AdminDirectoryUser,
+                        DirectoryService.Scope.AdminDirectoryOrgunit,
+                        DirectoryService.Scope.AdminDirectoryGroup,
+                        DirectoryService.Scope.AdminDirectoryUserschema,
+                        DriveService.Scope.Drive,
+                        LicensingService.Scope.AppsLicensing,
+                        ClassroomService.Scope.ClassroomCourses,
+                        ClassroomService.Scope.ClassroomRosters
+                    };
+            }
+
+            ServiceAccountCredential credentialWithScopes = new ServiceAccountCredential(
+               new ServiceAccountCredential.Initializer(serviceAccountCredentialDTO.ClientEmail)
+               {   Scopes = scopesForUser,
                    KeyId = serviceAccountCredentialDTO.KeyId,
                    User = emailAccountToImpersonate
                }.FromPrivateKey(serviceAccountCredentialDTO.PrivateKey));
@@ -201,6 +230,15 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 HttpClientInitializer = credentialWithScopes,
                 ApplicationName = "Licensing API",
             });
+
+            if (classroomEnabled)
+            {
+                classroomService = new ClassroomService(new BaseClientService.Initializer()
+                {
+                    HttpClientInitializer = credentialWithScopes,
+                    ApplicationName = "Classroom API",
+                });
+            }
 
             first = "23456789abcdefghjkmnpqrstuvxyz".ToCharArray();
             second = "abcdefghjkmnpqrstuvxyz".ToCharArray();
@@ -855,21 +893,44 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             }
         }
 
-        public void UpdateGlobalGroups(List<DBUser> users, List<string> lockedUsernames)
+        public void UpdateGlobalGroups(List<DBUser> users, List<string> lockedUsernames, HashSet<string> allClassLevels)
         {
             logger.LogInformation($"Handling global groups");
             Group globalEmployeeGroup = UpdateGroup(null, null, SetFieldType.NONE, "alle-ansatte@" + domain, globalEmployeeGroupName, "alle-ansatte@" + domain, null, false, null);
+            List<string> usersInEmployee = users.Where(u => (u.Role.Equals(DBRole.EMPLOYEE) || u.Role.Equals(DBRole.EXTERNAL)) && !u.IsExcluded && u.Username != null).Select(u => u.Username).ToList();
 
             // all employees in institution group
             if (globalEmployeeGroup != null)
             {
-                List<string> usersInEmployee = users.Where(u => (u.Role.Equals(DBRole.EMPLOYEE) || u.Role.Equals(DBRole.EXTERNAL)) && !u.IsExcluded && u.Username != null).Select(u => u.Username).ToList();
-                List<Member> membersInEmployeeGroup = ListGroupMembers(globalEmployeeGroup.Email);
-                HandleMembersForGroup(globalEmployeeGroup.Email, usersInEmployee, membersInEmployeeGroup, lockedUsernames);
+               List<Member> membersInEmployeeGroup = ListGroupMembers(globalEmployeeGroup.Email);
+               HandleMembersForGroup(globalEmployeeGroup.Email, usersInEmployee, membersInEmployeeGroup, lockedUsernames);
             }
+
+            if (!String.IsNullOrEmpty(globalSecurityGroupForLevelNameStandard))
+            {
+                foreach (string level in allClassLevels)
+                {
+                    UpdateGroup(null, null, SetFieldType.NONE, "alle" + level + "klasse@" + domain, GetLevelSecurityGroupName(level, null, true), "alle" + level + "klasse@" + domain, null, false, null);
+                }
+
+                foreach (string level in allClassLevels)
+                {
+                    List<string> usersInLevel = users.Where(u => !u.IsExcluded && u.Username != null && u.Role.Equals(DBRole.STUDENT) && u.StudentMainGroupLevelForInstitution != null && u.StudentMainGroupLevelForInstitution.Equals(level)).Select(u => u.Username).ToList();
+                    List<Member> membersInLevelGroup = ListGroupMembers("alle" + level + "klasse@" + domain);
+                    HandleMembersForGroup("alle" + level + "klasse@" + domain, usersInLevel, membersInLevelGroup, lockedUsernames);
+                }
+            }
+
+            if (!String.IsNullOrEmpty(addEmployeesToClassroomGroup))
+            {
+                List<Member> membersInEmployeeClassroomGroup = ListGroupMembers(addEmployeesToClassroomGroup);
+                HandleMembersForGroup(addEmployeesToClassroomGroup, usersInEmployee, membersInEmployeeClassroomGroup, lockedUsernames, true);
+            }
+
+            logger.LogInformation("Finished handling global security groups");
         }
 
-        public void UpdateGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<Group> allOurGWGroups)
+        public void UpdateGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<Group> allOurGWGroups, HashSet<string> allClassLevels)
         {
             logger.LogInformation($"Handling groups for institution {institution.InstitutionName}");
             bool hasRandomNumberEmployee = false;
@@ -884,14 +945,14 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             foreach (DBGroup currentClass in classes)
             {
                 bool hasRandomNumberClass = false;
-                Group classGroup = UpdateGroup(null, currentClass, SetFieldType.GROUP_GROUP_WORKSPACE_EMAIL, currentClass.GroupGoogleWorkspaceEmail, GetClassGroupName(currentClass, institution, false), GenerateEmailForGroup(currentClass.GroupName, institution.InstitutionName, institution.CurrentSchoolYear, ref hasRandomNumberClass), null, hasRandomNumberClass, allOurGWGroups);
+                Group classGroup = UpdateGroup(null, currentClass, SetFieldType.GROUP_GROUP_WORKSPACE_EMAIL, currentClass.GroupGoogleWorkspaceEmail, GetClassGroupName(currentClass, institution, false), GenerateEmailForGroup(currentClass.GroupName, institution.InstitutionName, institution.CurrentSchoolYear, ref hasRandomNumberClass, true), null, hasRandomNumberClass, allOurGWGroups);
                 if (classGroup == null)
                 {
                     createClassGroups = false;
                 }
 
                 bool hasRandomNumberStudents = false;
-                Group classGroupOnlyStudents = UpdateGroup(null, currentClass, SetFieldType.GROUP_ONLY_STUDENTS_GROUP_WORKSPACE_EMAIL, currentClass.GroupOnlyStudentsGoogleWorkspaceEmail, GetClassGroupName(currentClass, institution, true), GenerateEmailForGroup(currentClass.GroupName + "-elever", institution.InstitutionName, institution.CurrentSchoolYear, ref hasRandomNumberStudents), null, hasRandomNumberStudents, allOurGWGroups);
+                Group classGroupOnlyStudents = UpdateGroup(null, currentClass, SetFieldType.GROUP_ONLY_STUDENTS_GROUP_WORKSPACE_EMAIL, currentClass.GroupOnlyStudentsGoogleWorkspaceEmail, GetClassGroupName(currentClass, institution, true), GenerateEmailForGroup(currentClass.GroupName + "-elever", institution.InstitutionName, institution.CurrentSchoolYear, ref hasRandomNumberStudents, true), null, hasRandomNumberStudents, allOurGWGroups);
                 if (classGroupOnlyStudents == null)
                 {
                     createClassOnlyStudentsGroups = false;
@@ -951,6 +1012,45 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     HandleMembersForGroup(GetEmail(institution, year + ""), usersInYear, membersInYear, null);
                 }
             }
+
+            // securityGroups for class levels - the groups never change but the students do
+            List<string> classLevels = GetClassLevels(classes);
+            allClassLevels.UnionWith(classLevels);
+            Boolean createLevelGroups = true;
+            foreach (string level in classLevels)
+            {
+                bool hasRandomNumberYear = false;
+                Group institutionLevelGroup = UpdateGroup(institution, null, SetFieldType.NONE, GetEmail(institution, "level_" + level), GetLevelSecurityGroupName(level + "klasse", institution, false), GenerateEmailForGroup(level, institution.InstitutionName, institution.CurrentSchoolYear, ref hasRandomNumberYear), "level_" + level, hasRandomNumberYear, allOurGWGroups);
+                if (institutionLevelGroup == null)
+                {
+                    createLevelGroups = false;
+                    break;
+                }
+            }
+
+            foreach (string level in classLevels)
+            {
+                if (createLevelGroups)
+                {
+                    string levelEmail = GetEmail(institution, "level_" + level);
+                    List<string> usersInYear = users.Where(u => u.Role.Equals(DBRole.STUDENT) && !u.IsExcluded && u.Username != null && u.StudentMainGroupLevelForInstitution != null && u.StudentMainGroupLevelForInstitution.Equals(level)).Select(u => u.Username).ToList();
+                    List<Member> membersInYear = ListGroupMembers(levelEmail);
+                    HandleMembersForGroup(levelEmail, usersInYear, membersInYear, null);
+                }
+            }
+        }
+
+        private List<string> GetClassLevels(List<DBGroup> classes)
+        {
+            List<string> levels = new List<string>();
+            foreach (DBGroup group in classes)
+            {
+                if (group.GroupLevel != null && !levels.Contains(group.GroupLevel))
+                {
+                    levels.Add(group.GroupLevel);
+                }
+            }
+            return levels;
         }
 
         private string GetYearSecurityGroupName(int year, Institution institution)
@@ -959,6 +1059,34 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                         .Replace("{INSTITUTION_NAME}", institution.InstitutionName)
                         .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
                         .Replace("{YEAR}", year + "");
+
+            if (!useDanishCharacters)
+            {
+                name = name.Replace("æ", "ae");
+                name = name.Replace("ø", "oe");
+                name = name.Replace("å", "aa");
+                name = name.Unidecode();
+            }
+
+            if (name.Length > 64)
+            {
+                name = name.Substring(0, 64);
+            }
+
+            return name;
+        }
+
+        private string GetLevelSecurityGroupName(string level, Institution institution, bool global)
+        {
+            string name = global ? globalSecurityGroupForLevelNameStandard : securityGroupForLevelNameStandard
+                .Replace("{LEVEL}", level + "");
+
+            if (!global && institution != null)
+            {
+                name = name
+                    .Replace("{INSTITUTION_NAME}", institution.InstitutionName)
+                    .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber);
+            }
 
             if (!useDanishCharacters)
             {
@@ -1095,12 +1223,18 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             return null;
         }
 
-        private string GenerateEmailForGroup(string type, string institutionName, string institutionYear, ref bool hasRandomNumber)
+        private string GenerateEmailForGroup(string type, string institutionName, string institutionYear, ref bool hasRandomNumber, bool isClass = false)
         {
             string namePart = EscapeCharactersForGroupEmailHard(institutionName);
             string typePart = EscapeCharactersForGroupEmailHard(type);
 
             string emailPart = institutionYear + "-" + typePart + "-" + namePart;
+
+            if (onlyUseYearInClassGroupEmail && !isClass)
+            {
+                emailPart = typePart + "-" + namePart;
+            }
+
 
             // if mail is too long shorten it to 55 chars and append 8 random numbers at the end to ensure it is uniqe
             if (emailPart.Length > 64)
@@ -1182,7 +1316,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             HandlePersmissionsForDrive(institutionEmployeeDrive.Id, permissionsInEmployeeDrive, institution.EmployeeGroupGoogleWorkspaceEmail, "fileOrganizer", null, null);
         }
 
-        private void HandleMembersForGroup(string groupEmail, List<string> usernames, List<Member> members, List<string> lockedUsernames)
+        private void HandleMembersForGroup(string groupEmail, List<string> usernames, List<Member> members, List<string> lockedUsernames, bool skipOwner = false)
         {
             logger.LogInformation($"Handling members for group with email {groupEmail}");
             // delete permissions
@@ -1238,13 +1372,16 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 }
             }
 
-            // make sure our impersonated user owns the group. A group can have multiple owners
-            Member matchOwner = members.Where(m => m.Email != null && Object.Equals(m.Email, emailAccountToImpersonate) && m.Role.Equals("OWNER")).FirstOrDefault();
-            if (matchOwner == null)
+            if (!skipOwner)
             {
-                logger.LogInformation($"Trying to set group owner to our impersonated user for group with id {groupEmail}");
-                AddOwnerToGroup(groupEmail);
-                logger.LogInformation($"Sat group owner to our impersonated user for group with id {groupEmail}");
+                // make sure our impersonated user owns the group. A group can have multiple owners
+                Member matchOwner = members.Where(m => m.Email != null && Object.Equals(m.Email, emailAccountToImpersonate) && m.Role.Equals("OWNER")).FirstOrDefault();
+                if (matchOwner == null)
+                {
+                    logger.LogInformation($"Trying to set group owner to our impersonated user for group with id {groupEmail}");
+                    AddOwnerToGroup(groupEmail);
+                    logger.LogInformation($"Sat group owner to our impersonated user for group with id {groupEmail}");
+                }
             }
         }
 
@@ -1432,6 +1569,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             {
                 bool changes = false;
                 bool mailChanges = false;
+                string oldEmail = null;
 
                 if (!Object.Equals(match.Name, name))
                 {
@@ -1447,6 +1585,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     {
                         changes = true;
                         mailChanges = true;
+                        oldEmail = match.Email;
                         logger.LogInformation($"Updating email on group with name {match.Name} from {match.Email} to {generatedEmail}");
                     }
                 } 
@@ -1456,6 +1595,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     {
                         changes = true;
                         mailChanges = true;
+                        oldEmail = match.Email;
                         logger.LogInformation($"Updating email on group with name {match.Name} from {match.Email} to {generatedEmail}");
                     }
                 }
@@ -1476,6 +1616,11 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                         if (!setFieldType.Equals(SetFieldType.NONE))
                         {
                             SetFieldsAfterGroupUpdate(institution, group, setFieldType, match);
+                        }
+
+                        if (oldEmail != null)
+                        {
+                            logger.LogInformation($"The old email {oldEmail} will automaticly be added as alias for group with name {name} and email {match.Email}");
                         }
                     }
                 }
@@ -2300,9 +2445,15 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 }
             }
 
+            // password has to be set, so we use a random uuid if not supplied from the backend
+            string password = Guid.NewGuid().ToString();
+            if (user.SetPasswordOnCreate)
+            {
+                password = user.Password;
+            }
+
             return RetryUtil.WithRetry((() =>
             {
-                // password has to be set, so we use a random uuid
                 var insertRequest = directoryService.Users.Insert(new Google.Apis.Admin.Directory.directory_v1.Data.User
                 {
                     PrimaryEmail = user.Username + "@" + domain,
@@ -2312,7 +2463,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                         FamilyName = user.FamilyName,
                         FullName = user.Firstname + " " + user.FamilyName
                     },
-                    Password = Guid.NewGuid().ToString(),
+                    Password = password,
                     OrgUnitPath = path,
                     Organizations = organizations,
                     CustomSchemas = BuildInitialOS2skoledataSchemas(user)
@@ -3564,6 +3715,56 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
                 return true;
             }));
+        }
+
+        public void ArchiveClassroom(string courseId)
+        {
+            TraceLog("ArchiveClassroom", $"courseId: {courseId}");
+            RetryUtil.WithRetry((() =>
+            {
+                Course course = new Course
+                {
+                    CourseState = "ARCHIVED"
+                };
+
+                CoursesResource.PatchRequest request = classroomService.Courses.Patch(course, courseId);
+                request.UpdateMask = "courseState";
+                course = request.Execute();
+                logger.LogInformation($"Archived course with id {courseId} and name {course.Name}");
+
+                return true;
+            }));
+        }
+
+        public void TransferClassroom(string courseId, string username)
+        {
+            TraceLog("TransferClassroom", $"courseId: {courseId}, username: {username}");
+
+            RetryUtil.WithRetry(() =>
+            {
+                // retrieve the list of teachers for the course
+                ListTeachersResponse teachers = classroomService.Courses.Teachers.List(courseId).Execute();
+                string email = username.Contains("@" + domain) ? username : username + "@" + domain;
+                Teacher existingTeacher = teachers.Teachers?.FirstOrDefault(t => Object.Equals(t.Profile.EmailAddress, email));
+
+                if (existingTeacher == null)
+                {
+                    // add the user as a teacher if not already added
+                    Teacher newTeacher = new Teacher { UserId = email };
+                    classroomService.Courses.Teachers.Create(newTeacher, courseId).Execute();
+                    logger.LogInformation($"Added {email} as a teacher to course {courseId}");
+                }
+
+                // transfer ownership of the course to the user
+                Course course = new Course { OwnerId = email };
+                CoursesResource.PatchRequest request = classroomService.Courses.Patch(course, courseId);
+                request.UpdateMask = "ownerId";
+                course = request.Execute();
+
+                logger.LogInformation($"Transferred course with id {courseId} to {username}");
+
+                return true;
+            });
         }
     }
 }

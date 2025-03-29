@@ -48,3 +48,5 @@
 2025.02.12 - 1.21.0 - Håndtering af læsemidler
 2025.02.25 - 1.22.0 - Globale sikkerhedsgrupper til klassetrin og nuværende instititutionsnavn kan vedligeholdes i AD
 2025.03.07 - 1.22.1 - Bugfix til navne på enheder
+2025.03.20 - 1.24.0 - Mulighed for fuld sletning af brugere og bugfixes
+2025.03.26 - 1.25.0 - Mulighed for at sætte password på indskolingselever ved oprettelse til et kodeord genereret af OS2skoledata (kontakt Digital Identity for at tage dette i brug)

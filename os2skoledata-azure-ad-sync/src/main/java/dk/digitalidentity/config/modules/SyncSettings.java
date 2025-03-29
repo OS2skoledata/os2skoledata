@@ -13,4 +13,5 @@ public class SyncSettings {
 	private boolean useUsernameAsKey = false;
 	private AzureField uniIdField = AzureField.NONE;
 	private AzureTeamsSettings azureTeamsSettings = new AzureTeamsSettings();
+	private DeleteUserSettings deleteUserSettings = new DeleteUserSettings();
 }

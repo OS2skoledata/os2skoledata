@@ -98,6 +98,9 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 // institutions that are no longer locked will be removed from the list when the full sync is done (to make sure first sync of unlocked institutions is a full sync)
                 globalLockedInstitutionNumbers.AddRange(lockedInstitutionNumbers);
 
+                // delete users fully after x days if enabled
+                activeDirectoryService.deleteUsers();
+
                 // check and disable users
                 if (moveUsersEnabled)
                 {

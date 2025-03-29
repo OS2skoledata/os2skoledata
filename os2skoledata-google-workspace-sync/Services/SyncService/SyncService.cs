@@ -170,6 +170,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     logger.LogInformation($"Mainflow - fetched all groups from GW and found {allOurGWGroups.Count()} groups");
                 }
 
+                HashSet<string> allClassLevels = new HashSet<string>();
                 foreach (Institution institution in institutions)
                 {
                     logger.LogInformation("Mainflow - handling classes " + institution.InstitutionName);
@@ -300,7 +301,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
                     logger.LogInformation("Mainflow - handling groups " + institution.InstitutionName);
                     // groups for institution
-                    workspaceService.UpdateGroups(institution, users, classes, allOurGWGroups);
+                    workspaceService.UpdateGroups(institution, users, classes, allOurGWGroups, allClassLevels);
 
                     logger.LogInformation("Mainflow - handling drives " + institution.InstitutionName);
                     // shared drives for institution
@@ -308,7 +309,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 }
 
                 logger.LogInformation("Mainflow - handling global groups ");
-                workspaceService.UpdateGlobalGroups(allUsers, lockedUsernames);
+                workspaceService.UpdateGlobalGroups(allUsers, lockedUsernames, allClassLevels);
 
                 // move keep alive users
                 workspaceService.MoveKeepAliveUsers(keepAliveUsernames, allGWUsers);
@@ -853,6 +854,44 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 usernameMap.Add(key, new List<string>());
             }
             usernameMap[key].Add(stilUsername);
+        }
+
+        internal void SyncClassrooms()
+        {
+            try
+            {
+                List<ClassroomPendingChange> pendingChanges = oS2skoledataService.GetPendingClassroomChanges();
+                foreach (var pendingChange in pendingChanges)
+                {
+                    try
+                    {
+                        bool success = false;
+                        if (pendingChange.Action.Equals(ClassroomAction.TRANSFER))
+                        {
+                            workspaceService.TransferClassroom(pendingChange.CourseId, pendingChange.Username);
+                            success = true;
+                        } else if (pendingChange.Action.Equals(ClassroomAction.ARCHIVE))
+                        {
+                            workspaceService.ArchiveClassroom(pendingChange.CourseId);
+                            success = true;
+                        }
+
+                        if (success)
+                        {
+                            oS2skoledataService.SetClassroomActionStatus(pendingChange.Id, ClassroomActionStatus.DONE, null);
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        oS2skoledataService.SetClassroomActionStatus(pendingChange.Id, ClassroomActionStatus.FAILED, e.Message);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                oS2skoledataService.ReportError(e.Message);
+                logger.LogError(e, "Failed to execute SyncClassroomsJob");
+            }
         }
     }
 }

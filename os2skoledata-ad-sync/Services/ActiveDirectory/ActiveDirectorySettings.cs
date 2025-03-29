@@ -31,6 +31,10 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public NamingSettings namingSettings { get; set; }
         public bool MoveUsersEnabled { get; set; }
         public string MultipleCprExcludedGroupDn { get; set; }
+        public bool DeleteDisabledUsersFully { get; set; } = false;
+        public int DaysBeforeDeletionStudent { get; set; } = 60;
+        public int DaysBeforeDeletionEmployee { get; set; } = 60;
+        public int DaysBeforeDeletionExternal { get; set; } = 60;
     }
 
     public enum UsernameStandardType

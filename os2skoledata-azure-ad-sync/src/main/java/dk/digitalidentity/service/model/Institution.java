@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Map;
+
 @Getter
 @Setter
 public class Institution {
@@ -18,4 +20,5 @@ public class Institution {
 	private boolean locked;
 	private String employeeAzureTeamId;
 	private String teamAdminUsername;
+	private Map<String, String> azureIdentifierMappings;
 }

@@ -1,5 +1,8 @@
 package dk.digitalidentity.service;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonPrimitive;
 import com.microsoft.graph.models.User;
 import dk.digitalidentity.config.OS2skoledataAzureADConfiguration;
 import dk.digitalidentity.config.modules.UsernameStandard;
@@ -7,6 +10,7 @@ import dk.digitalidentity.service.model.DBGroup;
 import dk.digitalidentity.service.model.DBUser;
 import dk.digitalidentity.service.model.Institution;
 import dk.digitalidentity.service.model.ModificationHistory;
+import dk.digitalidentity.service.model.OS2skoledataSchemaDTO;
 import dk.digitalidentity.service.model.enums.EmployeeRole;
 import dk.digitalidentity.service.model.enums.EntityType;
 import dk.digitalidentity.service.model.enums.EventType;
@@ -60,11 +64,15 @@ public class SyncService {
 			// init
 			azureADService.initializeClient();
 
+			// ensure custom schema exists
+			String schemaId = os2skoledataService.getSchemaId();
+			schemaId = azureADService.ensureOS2SkoledataSchemaExists(schemaId);
+
 			// all users
-			List<User> allUsers = azureADService.getAllUsers();
+			List<User> allUsers = azureADService.getAllUsers(schemaId);
 
 			// all usernames
-			List<User> allUsersManagedByOS2skoledata = azureADService.getUsersManagedByOS2skoledata();
+			List<User> allUsersManagedByOS2skoledata = azureADService.getUsersManagedByOS2skoledata(schemaId);
 			List<String> allUsernames = azureADService.getAllUsernames();
 			if (allUsernames == null) {
 				throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
@@ -75,6 +83,9 @@ public class SyncService {
 			if (usernameMap == null) {
 				throw new Exception("Failed to generate username map from AD. Will not perform sync.");
 			}
+
+			// delete users fully after x days if enabled
+			azureADService.deleteUsers(allUsersManagedByOS2skoledata, schemaId);
 
 			// institutions
 			List<Institution> institutions = os2skoledataService.getInstitutions();
@@ -99,13 +110,14 @@ public class SyncService {
 			// fetch locked usernames to make sure they are not disabled - then check if others should be deleted
 			List<String> lockedUsernames = os2skoledataService.getLockedUsernames();
 			List<String> keepAliveUsernames = os2skoledataService.getKeepAliveUsernames();
-			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata, lockedUsernames, keepAliveUsernames);
+			azureADService.disableInactiveUsers(allDBUsers, allUsersManagedByOS2skoledata, lockedUsernames, keepAliveUsernames, schemaId);
 
 			List<String> securityGroupIds = new ArrayList<>();
 			List<String> securityGroupIdsForRenamedGroups = new ArrayList<>();
 			List<String> teamIds = new ArrayList<>();
 			List<String> teamIdsForRenamedTeams = new ArrayList<>();
 			List<DBUser> allDBUsersForGlobalGroups = new ArrayList<>();
+			Set<String> allClassLevels = new HashSet<>();
 			for (Institution institution : institutions) {
 				if (institution.isLocked()) {
 					log.info("Not updating users for institution " + institution.getInstitutionNumber() +  ". Institution is locked due to school year change.");
@@ -151,13 +163,13 @@ public class SyncService {
 						}
 
 						if (username == null) {
-							throw new Exception("Failed to generate username for user with LocalPersonId " + user.getLocalPersonId());
+							throw new Exception("Failed to generate username for user with database id " + user.getDatabaseId());
 						}
 
 						user.setUsername(username);
 						os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 						log.info("Generated username " + username + " for user with databaseId " + user.getDatabaseId());
-						User createdUser = azureADService.createAccount(username, user);
+						User createdUser = azureADService.createAccount(username, user, schemaId);
 
 						// is null if userDryRun
 						if (createdUser != null) {
@@ -180,7 +192,7 @@ public class SyncService {
 						boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
 						if (shouldBeExcluded) {
 							if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
-								azureADService.disableUser(match.id, username);
+								azureADService.disableUser(match.id, username, schemaId);
 							}
 						} else {
 							user.setAzureId(match.id);
@@ -191,14 +203,14 @@ public class SyncService {
 								os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 							}
 
-							azureADService.updateAccount(user, match);
+							azureADService.updateAccount(user, match, schemaId);
 						}
 					}
 				}
 
 				// security groups for institution
 				List<DBGroup> classes = os2skoledataService.getClassesForInstitution(institution);
-				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups);
+				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups, allClassLevels);
 
 				// teams for institution
 				azureADService.updateTeams(institution, users, classes, teamIds, teamIdsForRenamedTeams, allDBUsers);
@@ -206,7 +218,7 @@ public class SyncService {
 				allDBUsersForGlobalGroups.addAll(users);
 			}
 
-			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams);
+			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams, allClassLevels);
 
 			setHeadOnInstitutions(institutions, head);
 
@@ -231,9 +243,9 @@ public class SyncService {
 		}
 	}
 
-	private void handleGlobalGroupsAndCleanUp(List<DBUser> allDBUsersForGlobalGroups, List<String> securityGroupIds, List<String> lockedUsernames, List<String> securityGroupIdsForRenamedGroups, List<String> teamIds, List<String> teamIdsForRenamedTeams) throws Exception {
+	private void handleGlobalGroupsAndCleanUp(List<DBUser> allDBUsersForGlobalGroups, List<String> securityGroupIds, List<String> lockedUsernames, List<String> securityGroupIdsForRenamedGroups, List<String> teamIds, List<String> teamIdsForRenamedTeams, Set<String> allClassLevels) throws Exception {
 		// global security groups
-		azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames);
+		azureADService.updateGlobalSecurityGroups(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, allClassLevels);
 
 		// fetch group ids from locked institutions to make sure they are not deleted and delete groups that are not needed anymore
 		List<String> lockedGroupIds = os2skoledataService.getLockedGroupIds();
@@ -264,8 +276,12 @@ public class SyncService {
 					// init
 					azureADService.initializeClient();
 
+					// ensure custom schema exists
+					String schemaId = os2skoledataService.getSchemaId();
+					schemaId = azureADService.ensureOS2SkoledataSchemaExists(schemaId);
+
 					// all usernames
-					List<User> allUsers = azureADService.getAllUsers();
+					List<User> allUsers = azureADService.getAllUsers(schemaId);
 					List<String> allUsernames = azureADService.getAllUsernames();
 					if (allUsernames == null) {
 						throw new Exception("Failed to get all usernames from AD. Will not perform sync.");
@@ -295,7 +311,7 @@ public class SyncService {
 					// handle changes
 					//				handleInstitutionChanges(typeInstitution, changedInstitutions);
 					//				handleGroupChanges(typeGroup, changedGroups);
-					handlePersonChanges(typePerson, changedUsers, usernameMap, allUsers);
+					handlePersonChanges(typePerson, changedUsers, usernameMap, allUsers, schemaId);
 
 					// setting head last
 					os2skoledataService.setHead(changes.get(0).getId(), institution.getInstitutionNumber());
@@ -313,7 +329,7 @@ public class SyncService {
 		}
 	}
 
-	private void handlePersonChanges(List<ModificationHistory> typePerson, List<DBUser> changedUsers, Map<String, List<String>> usernameMap, List<User> allUsers) throws Exception {
+	private void handlePersonChanges(List<ModificationHistory> typePerson, List<DBUser> changedUsers, Map<String, List<String>> usernameMap, List<User> allUsers, String schemaId) throws Exception {
 		List<String> keepAliveUsernames = os2skoledataService.getKeepAliveUsernames();
 		for (DBUser user : changedUsers) {
 			if (user.getInstitutions().stream().anyMatch(i -> i.isLocked() || globalLockedInstitutionNumbers.contains(i.getInstitutionNumber()))) {
@@ -361,13 +377,13 @@ public class SyncService {
 				}
 
 				if (username == null) {
-					throw new Exception("Failed to generate username for user with LocalPersonId " + user.getLocalPersonId());
+					throw new Exception("Failed to generate username for user with databaseId " + user.getDatabaseId());
 				}
 
 				user.setUsername(username);
 				os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 				log.info("Delta sync generated username " + username + " for user with databaseId " + user.getDatabaseId());
-				User createdUser = azureADService.createAccount(username, user);
+				User createdUser = azureADService.createAccount(username, user, schemaId);
 
 				// is null if userDryRun
 				if (createdUser != null) {
@@ -394,7 +410,7 @@ public class SyncService {
 				boolean shouldBeExcluded = shouldBeExcluded(user, excludedRoles);
 				if (shouldBeExcluded) {
 					if (match.companyName != null && match.companyName.equals("OS2skoledata")) {
-						azureADService.disableUser(match.id, username);
+						azureADService.disableUser(match.id, username, schemaId);
 					}
 				} else {
 					// update username in OS2skoledata
@@ -403,7 +419,7 @@ public class SyncService {
 						os2skoledataService.setUsernameOnUser(user.getDatabaseId(), username);
 					}
 
-					azureADService.updateAccount(user, match);
+					azureADService.updateAccount(user, match, schemaId);
 				}
 			}
 
@@ -415,7 +431,7 @@ public class SyncService {
 					}
 
 					if (allowDisabling) {
-						azureADService.disableUser(match.id, match.mailNickname);
+						azureADService.disableUser(match.id, match.mailNickname, schemaId);
 					}
 				}
 			}
@@ -614,7 +630,7 @@ public class SyncService {
 			azureADService.initializeClient();
 
 			// all users
-			List<User> allUsers = azureADService.getAllUsers();
+			List<User> allUsers = azureADService.getAllUsers(null);
 
 			// institutions
 			List<Institution> institutions = os2skoledataService.getInstitutions();
@@ -636,6 +652,9 @@ public class SyncService {
 			List<String> teamIds = new ArrayList<>();
 			List<String> teamIdsForRenamedTeams = new ArrayList<>();
 			List<DBUser> allDBUsersForGlobalGroups = new ArrayList<>();
+			Set<String> allClassLevels = new HashSet<>();
+
+			// handle users first to allow cross institution team admins
 			for (Institution institution : institutions) {
 				if (institution.isLocked()) {
 					log.info("Not updating teams and groups for institution " + institution.getInstitutionNumber() +  ". Institution is locked due to school year change.");
@@ -669,10 +688,19 @@ public class SyncService {
 
 					user.setAzureId(match.id);
 				}
+			}
+
+			for (Institution institution : institutions) {
+				if (institution.isLocked()) {
+					log.info("Not updating teams and groups for institution " + institution.getInstitutionNumber() +  ". Institution is locked due to school year change.");
+					continue;
+				}
+
+				List<DBUser> users = institutionUserMap.get(institution.getInstitutionNumber());
 
 				// security groups for institution
 				List<DBGroup> classes = os2skoledataService.getClassesForInstitution(institution);
-				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups);
+				azureADService.updateSecurityGroups(institution, users, classes, securityGroupIds, securityGroupIdsForRenamedGroups, allClassLevels);
 
 				// teams for institution
 				azureADService.updateTeams(institution, users, classes, teamIds, teamIdsForRenamedTeams, allDBUsers);
@@ -684,7 +712,7 @@ public class SyncService {
 			List<String> lockedUsernames = os2skoledataService.getLockedUsernames();
 
 			// global security groups
-			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams);
+			handleGlobalGroupsAndCleanUp(allDBUsersForGlobalGroups, securityGroupIds, lockedUsernames, securityGroupIdsForRenamedGroups, teamIds, teamIdsForRenamedTeams, allClassLevels);
 
 			// set head on not locked institutions
 			setHeadOnInstitutions(institutions, head);

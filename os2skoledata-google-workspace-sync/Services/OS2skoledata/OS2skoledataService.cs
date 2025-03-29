@@ -98,7 +98,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             using var httpClient = GetHttpClient();
             var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
-            var response = httpClient.PostAsync(new Uri(baseUri + "api/setgroupemail"), content);
+            var response = httpClient.PostAsync(new Uri(baseUri + "api/setgroupemail?integration=GW"), content);
             response.Wait();
             response.Result.EnsureSuccessStatusCode();
         }
@@ -333,6 +333,36 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
 
             logger.LogInformation($"Finshed fetching keep alive usernames OS2skoledata");
             return new List<string>(usernameArray);
+        }
+
+        public List<ClassroomPendingChange> GetPendingClassroomChanges()
+        {
+            logger.LogInformation($"Fetching all pending classroom changes from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/classrooms/pending"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var changesArray = JsonConvert.DeserializeObject<ClassroomPendingChange[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation("finished fetching all pending classroom changes from OS2skoledata");
+            return new List<ClassroomPendingChange>(changesArray);
+        }
+
+        public void SetClassroomActionStatus(long id, ClassroomActionStatus status, string error)
+        {
+            SetClassroomStatusRequest request = new SetClassroomStatusRequest();
+            request.Id = id;
+            request.Status = status;
+            request.ErrorMessage = error;
+
+            using var httpClient = GetHttpClient();
+            var content = new StringContent(JsonConvert.SerializeObject(request, getSerializerSettings()), Encoding.UTF8, "application/json");
+            var response = httpClient.PostAsync(new Uri(baseUri + "api/classrooms/status"), content);
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
         }
 
         private HttpClient GetHttpClient()

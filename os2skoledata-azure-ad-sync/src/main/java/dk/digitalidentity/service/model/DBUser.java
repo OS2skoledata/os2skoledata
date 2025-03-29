@@ -26,7 +26,6 @@ public class DBUser {
 	private String username;
 	private String stilUsername;
 	private Role role;
-
 	private Role globalRole;
 	private List<String> groupIds;
 	private List<Institution> institutions;
@@ -40,6 +39,9 @@ public class DBUser {
 	private ExternalRole globalExternalRole;
 	private boolean deleted;
 	private String uniId;
+	private String studentMainGroupLevelForInstitution;
+	private boolean setPasswordOnCreate;
+	private String password;
 
 	// not from api. Used to securityGroup and team sync in full sync
 	private String azureId;

@@ -10,7 +10,6 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string Firstname { get; set; }
         public string FamilyName { get; set; }
         public string Username { get; set; }
-        // TODO skal EXTERNAL håndteres anerledes end employee?
         public DBRole Role { get; set; }
         public DBRole GlobalRole { get; set; }
         public List<string> GroupIds { get; set; }
@@ -21,6 +20,8 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string StilUsername { get; set; }
         public string UniId { get; set; }
         public List<DBContactCard> ContactCards { get; set; }
+        public bool SetPasswordOnCreate { get; set; }
+        public string Password { get; set; }
 
         // empty for all other than students
         public List<string> StudentMainGroups { get; set; }
@@ -28,6 +29,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public StudentRole StudentRole { get; set; }
         public StudentRole GlobalStudentRole { get; set; }
         public long StudentMainGroupStartYearForInstitution { get; set; }
+        public string StudentMainGroupLevelForInstitution { get; set; }
 
         // empty for all other than employees
         public List<EmployeeRole> EmployeeRoles { get; set; }

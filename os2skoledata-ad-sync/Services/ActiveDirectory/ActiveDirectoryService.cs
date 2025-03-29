@@ -10,6 +10,7 @@ using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using Unidecode.NET;
 using static Microsoft.ApplicationInsights.MetricDimensionNames.TelemetryContext;
 using Group = os2skoledata_ad_sync.Services.OS2skoledata.Model.Group;
@@ -88,6 +89,12 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly string securityGroupNoLineNoYearMailNameStandard;
         private readonly string multipleCprExcludedGroupDn;
         private readonly string globalSecurityGroupForLevelNameStandard;
+        private readonly bool deleteDisabledUsersFully;
+        private readonly int daysBeforeDeletionStudent;
+        private readonly int daysBeforeDeletionEmployee;
+        private readonly int daysBeforeDeletionExternal;
+        private readonly string globalRoleField;
+        private readonly string disabledDateField;
 
         private char[] first;
         private char[] second;
@@ -162,13 +169,19 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             ignoreField = settings.ActiveDirectorySettings.optionalUserFields.IgnoreField;
             studentStartYearField = settings.ActiveDirectorySettings.optionalUserFields.StudentStartYearField;
             currentInstitutionField = settings.ActiveDirectorySettings.optionalUserFields.CurrentInstitutionField;
-            securityGroupMailField = settings.ActiveDirectorySettings.optionalSecurityGroupFields.MailField;
-            securityGroupMailDomain = settings.ActiveDirectorySettings.optionalSecurityGroupFields.MailDomain;
-            securityGroupNormalMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields.NormalMailNameStandard;
-            securityGroupNoLineMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNameStandard;
-            securityGroupNoLineNoYearMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNoYearNameStandard;
+            securityGroupMailField = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.MailField;
+            securityGroupMailDomain = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.MailDomain;
+            securityGroupNormalMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NormalMailNameStandard;
+            securityGroupNoLineMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNameStandard;
+            securityGroupNoLineNoYearMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNoYearNameStandard;
             multipleCprExcludedGroupDn = settings.ActiveDirectorySettings.MultipleCprExcludedGroupDn;
             globalSecurityGroupForLevelNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForLevelNameStandard;
+            deleteDisabledUsersFully = settings.ActiveDirectorySettings.DeleteDisabledUsersFully;
+            daysBeforeDeletionStudent = settings.ActiveDirectorySettings.DaysBeforeDeletionStudent;
+            daysBeforeDeletionEmployee = settings.ActiveDirectorySettings.DaysBeforeDeletionEmployee;
+            daysBeforeDeletionExternal = settings.ActiveDirectorySettings.DaysBeforeDeletionExternal;
+            globalRoleField = settings.ActiveDirectorySettings.optionalUserFields.GlobalRoleField;
+            disabledDateField = settings.ActiveDirectorySettings.optionalUserFields.DisabledDateField;
 
             first = "23456789abcdefghjkmnpqrstuvxyz".ToCharArray();
             second = "abcdefghjkmnpqrstuvxyz".ToCharArray();
@@ -186,6 +199,49 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             powerShellRunner = sp.GetService<PowerShellRunnerService>();
             os2SkoledataService = sp.GetService<OS2skoledataService>();
         }
+
+        public void deleteUsers()
+        {
+            if (deleteDisabledUsersFully && moveUsersEnabled && !dryRun)
+            {
+                DateTime studentDaysAgo = DateTime.Now.AddDays(-daysBeforeDeletionStudent);
+                DateTime employeeDaysAgo = DateTime.Now.AddDays(-daysBeforeDeletionEmployee);
+                DateTime externalDaysAgo = DateTime.Now.AddDays(-daysBeforeDeletionExternal);
+
+                List<DirectoryEntry> disabledUsers = GetDisabledUsers(disabledUsersOU);
+                foreach (var user in disabledUsers)
+                {
+                    string role = user.Properties[globalRoleField]?.Value?.ToString();
+                    string date = user.Properties[disabledDateField]?.Value?.ToString();
+
+                    if (string.IsNullOrEmpty(role) || string.IsNullOrEmpty(date))
+                    {
+                        continue; // skip if no role or date
+                    }
+
+                    bool shouldDelete = false;
+                    if (DateTime.TryParse(date, out DateTime parsedDateTime))
+                    {
+                        if ((Role.STUDENT.ToString().Equals(role) && parsedDateTime < studentDaysAgo) ||
+                            (Role.EMPLOYEE.ToString().Equals(role) && parsedDateTime < employeeDaysAgo) ||
+                            (Role.EXTERNAL.ToString().Equals(role) && parsedDateTime < externalDaysAgo))
+                        {
+                            shouldDelete = true;
+                        }
+                    }
+
+                    if (shouldDelete)
+                    {
+                        string username = user.Properties["sAMAccountName"]?.Value.ToString();
+                        user.DeleteTree();
+                        user.CommitChanges();
+                        logger.LogInformation($"User with username {username} was fully deleted. Role: {role} - disabled date: {date}");
+                        
+                    }
+                }
+            }
+        }
+
 
         public string GenerateUsername(string firstname, Dictionary<string, List<string>> usernameMap)
         {
@@ -462,6 +518,20 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 {
                     principalEntry.Properties[stilRolesField].Value = totalRoles;
                     logger.LogInformation($"Updated {stilRolesField} (stilRolesField) on user with username {username} and db id {user.DatabaseId} to {totalRoles}");
+                    changes = true;
+                }
+
+                if (!string.IsNullOrEmpty(disabledDateField) && !string.IsNullOrEmpty(principalEntry.Properties[disabledDateField].Value?.ToString()))
+                {
+                    entry.Properties[disabledDateField].Value = "";
+                    logger.LogInformation($"Updated {disabledDateField} (disabledDateField) on user with username {username} to be empty as user is active");
+                    changes = true;
+                }
+
+                if (!string.IsNullOrEmpty(globalRoleField) && !object.Equals(principalEntry.Properties[globalRoleField].Value, user.GlobalRole.ToString()))
+                {
+                    entry.Properties[globalRoleField].Value = user.GlobalRole.ToString();
+                    logger.LogInformation($"Updated {globalRoleField} (globalRoleField) on user with username {username} and db id {user.DatabaseId} to {user.GlobalRole}");
                     changes = true;
                 }
 
@@ -1616,9 +1686,12 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         public DirectoryEntry GetUserFromCpr(string cpr)
         {
-            var filter = multipleCprExcludedGroupDn == null
-                ? string.Format("(&(objectClass=user)(objectClass=person)({0}={1}))", cprField, cpr)
-                : string.Format("(&(objectClass=user)(objectClass=person)({0}={1})(!(memberOf={2})))", cprField, cpr, multipleCprExcludedGroupDn);
+            var filter = string.Format("(&(objectClass=user)(objectClass=person)({0}={1}))", cprField, cpr);
+
+            if (!String.IsNullOrEmpty(multipleCprExcludedGroupDn))
+            {
+                filter = string.Format("(&(objectClass=user)(objectClass=person)({0}={1})(!(memberOf={2})))", cprField, cpr, multipleCprExcludedGroupDn);
+            };
 
             return SearchForDirectoryEntry(filter);
         }
@@ -1771,11 +1844,19 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 newUser.UserPrincipalName = username + emailDomain;
                 newUser.Enabled = true;
                 newUser.PasswordNotRequired = false;
-                // the Aa!1 is to ensure we have a character from all four complexity categories (upper case, lower case, digit, special char)
-                // so that user creation doesn't fail due to complexity requirements not met
-                // password should still be safe enough due to the leading random uuid
-                newUser.SetPassword(Guid.NewGuid().ToString() + "Aa1$");
-                newUser.ExpirePasswordNow();
+
+                if (user.SetPasswordOnCreate)
+                {
+                    newUser.SetPassword(user.Password);
+                } else
+                {
+                    // the Aa!1 is to ensure we have a character from all four complexity categories (upper case, lower case, digit, special char)
+                    // so that user creation doesn't fail due to complexity requirements not met
+                    // password should still be safe enough due to the leading random uuid
+                    newUser.SetPassword(Guid.NewGuid().ToString() + "Aa1$");
+                    newUser.ExpirePasswordNow();
+                }
+                
                 newUser.Save();
 
                 // set cpr
@@ -1818,6 +1899,11 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 if (studentStartYearField != null && !studentStartYearField.Equals("") && classYearForOU != 0)
                 {
                     directoryEntry.Properties[studentStartYearField].Value = classYearForOU;
+                }
+
+                if (!string.IsNullOrEmpty(globalRoleField))
+                {
+                    directoryEntry.Properties[globalRoleField].Value = user.GlobalRole.ToString();
                 }
 
                 // mark user
@@ -2438,6 +2524,15 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                         user.Enabled = false;
                         user.Save();
 
+                        // set deleted date on user
+                        if (!string.IsNullOrEmpty(disabledDateField))
+                        {
+                            using DirectoryEntry entry = (DirectoryEntry)user.GetUnderlyingObject();
+                            entry.Properties[disabledDateField].Value = DateTime.Now.ToString();
+                            logger.LogInformation($"Updated {disabledDateField} (disabledDateField) on user with username {username} after disabling user");
+                            entry.CommitChanges();
+                        }
+
                         // move user to date specific disabled user group
                         string ouDn = CreateOrGetDisabledUserOUDN();
                         MoveUser(username, user.DistinguishedName, ouDn);
@@ -2574,6 +2669,46 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 return false;
             }
             return true;
+        }
+
+        private List<DirectoryEntry> GetDisabledUsers(string ouPath)
+        {
+            logger.LogInformation("ouPath " + ouPath);
+            List<DirectoryEntry> disabledUsers = new List<DirectoryEntry>();
+            using DirectoryEntry entry = new DirectoryEntry(@"LDAP://" + disabledUsersOU);
+            logger.LogInformation(entry.Name);
+            using DirectorySearcher search = new DirectorySearcher(entry);
+            search.Filter = "(&(objectCategory=person)(objectClass=user))";
+
+            // to ensure loading all - set pageSize
+            search.PageSize = 1000;
+            using SearchResultCollection users = search.FindAll();
+
+            if (users != null)
+            {
+                List<string> usernames = new List<string>();
+                foreach (SearchResult result in users)
+                {
+                    DirectoryEntry userEntry = result.GetDirectoryEntry();
+                    if (IsUserDisabled(userEntry))
+                    {
+                        disabledUsers.Add(userEntry);
+                    }
+                }
+                return disabledUsers;
+            }
+
+            return null;
+        }
+
+        public static bool IsUserDisabled(DirectoryEntry user)
+        {
+            if (user.Properties["userAccountControl"].Value != null)
+            {
+                int userAccountControl = (int)user.Properties["userAccountControl"].Value;
+                return (userAccountControl & 2) != 0;
+            }
+            return false;
         }
 
         private List<string> GetAllUsernames(DirectoryEntry entry, bool filterByMark)

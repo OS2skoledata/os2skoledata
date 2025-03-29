@@ -27,6 +27,8 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         public int DaysBeforeDeletionExternal { get; set; } = 60;
         public bool GWTraceLog { get; set; } = false;
         public bool SetContactCard { get; set; } = false;
+        public string AddEmployeesToClassroomGroup { get; set; }
+        public ClassroomSettings ClassroomSettings { get; set; } = new ClassroomSettings();
     }
 
     public enum HierarchyType

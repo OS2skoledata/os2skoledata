@@ -2,6 +2,7 @@ package dk.digitalidentity.service;
 
 import com.azure.identity.ClientSecretCredential;
 import com.azure.identity.ClientSecretCredentialBuilder;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -11,8 +12,10 @@ import com.microsoft.graph.models.AadUserConversationMember;
 import com.microsoft.graph.models.ConversationMember;
 import com.microsoft.graph.models.DirectoryObject;
 import com.microsoft.graph.models.EducationClass;
+import com.microsoft.graph.models.ExtensionSchemaProperty;
 import com.microsoft.graph.models.Group;
 import com.microsoft.graph.models.PasswordProfile;
+import com.microsoft.graph.models.SchemaExtension;
 import com.microsoft.graph.models.Team;
 import com.microsoft.graph.models.TeamArchiveParameterSet;
 import com.microsoft.graph.models.User;
@@ -34,12 +37,16 @@ import dk.digitalidentity.config.modules.UsernameStandard;
 import dk.digitalidentity.service.model.DBGroup;
 import dk.digitalidentity.service.model.DBUser;
 import dk.digitalidentity.service.model.Institution;
+import dk.digitalidentity.service.model.OS2skoledataSchemaDTO;
 import dk.digitalidentity.service.model.enums.Action;
 import dk.digitalidentity.service.model.enums.EntityType;
 import dk.digitalidentity.service.model.enums.Role;
 import dk.digitalidentity.service.model.enums.SetFieldType;
 import lombok.extern.slf4j.Slf4j;
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.logging.HttpLoggingInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -70,6 +77,12 @@ public class AzureADService {
 
 	private ClientSecretCredential clientSecretCredential;
 	private GraphServiceClient<Request> appClient;
+	private GraphServiceClient<Request> appClientWithoutLogging;
+
+	private final String OS2SKOLEDATA_SCHEMA_KEY = "OS2skoledata";
+	private final String OS2SKOLEDATA_SCHEMA_GLOBAL_ROLE = "globalRole";
+	private final String OS2SKOLEDATA_SCHEMA_DISABLED_DATE = "disabledDate";
+	private Gson gson = null;
 
 	public void initializeClient() {
 		if (clientSecretCredential == null) {
@@ -84,11 +97,80 @@ public class AzureADService {
 			List<String> scopes = new ArrayList<>();
 			scopes.add("https://graph.microsoft.com/.default");
 			final TokenCredentialAuthProvider authProvider = new TokenCredentialAuthProvider(scopes, clientSecretCredential);
+			final TokenCredentialAuthProvider authProviderNoLog = new TokenCredentialAuthProvider(scopes, clientSecretCredential);
+
+			HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
+			loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.NONE);
+			loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+
+			OkHttpClient okHttpClient = new OkHttpClient.Builder()
+					.addInterceptor(loggingInterceptor)
+					.build();
 
 			appClient = GraphServiceClient.builder()
 					.authenticationProvider(authProvider)
 					.buildClient();
+
+			appClientWithoutLogging = GraphServiceClient.builder().httpClient(okHttpClient)
+					.authenticationProvider(authProviderNoLog)
+					.buildClient();
 		}
+
+		if (gson == null) {
+			gson = new Gson();
+		}
+	}
+
+	public String ensureOS2SkoledataSchemaExists(String schemaId) throws Exception {
+		// deleteSchemaExtension(schemaId);
+
+		SchemaExtension existingSchema = null;
+		try {
+			existingSchema = appClient.schemaExtensions(schemaId)
+					.buildRequest()
+					.get();
+		} catch (Exception e) {
+			// throws exception if the schema does not exists. This means we want to create the schema, so do nothing
+		}
+
+		if (existingSchema != null) {
+			return schemaId;
+		}
+
+		SchemaExtension schemaExtension = new SchemaExtension();
+		schemaExtension.id = OS2SKOLEDATA_SCHEMA_KEY;
+		schemaExtension.description = "Schema extension for OS2skoledata";
+		schemaExtension.targetTypes = Arrays.asList("user");
+		schemaExtension.properties = createSchemaProperties();
+
+		SchemaExtension createdSchema = appClient.schemaExtensions()
+				.buildRequest()
+				.post(schemaExtension);
+
+		os2skoledataService.setSchemaId(createdSchema.id);
+
+		SchemaExtension schemaToUpdate = new SchemaExtension();
+		schemaToUpdate.status = "Available";
+
+		appClient.schemaExtensions(createdSchema.id)
+				.buildRequest()
+				.patch(schemaToUpdate);
+
+		log.info("Schema OS2skoledata created with ID: " + createdSchema.id);
+
+		return createdSchema.id;
+	}
+
+	private List<ExtensionSchemaProperty> createSchemaProperties() {
+		ExtensionSchemaProperty globalRole = new ExtensionSchemaProperty();
+		globalRole.name = OS2SKOLEDATA_SCHEMA_GLOBAL_ROLE;
+		globalRole.type = "String";
+
+		ExtensionSchemaProperty disabledDate = new ExtensionSchemaProperty();
+		disabledDate.name = OS2SKOLEDATA_SCHEMA_DISABLED_DATE;
+		disabledDate.type = "String";
+
+		return Arrays.asList(globalRole, disabledDate);
 	}
 
 	public Map<String, List<String>> generateUsernameMap(List<String> allUsernamesAzure, List<String> allOS2skoledataUsernames) throws Exception {
@@ -161,7 +243,7 @@ public class AzureADService {
 	}
 
 	// not all user fields are returned, expand to get more fields
-	public List<User> getUsersManagedByOS2skoledata() throws Exception {
+	public List<User> getUsersManagedByOS2skoledata(String schemaId) throws Exception {
 		LinkedList<Option> requestOptions = new LinkedList<Option>();
 		requestOptions.add(new HeaderOption("ConsistencyLevel", "eventual"));
 		requestOptions.add(new QueryOption("$count", "true"));
@@ -169,7 +251,7 @@ public class AzureADService {
 		// the companyName eq 'OS2skoledata'" marks that the user is managed by OS2skoledata
 		UserCollectionPage userCollection = appClient.users()
 				.buildRequest(requestOptions)
-				.select("id,givenName,surname,displayName,userPrincipalName,employeeId,companyName,accountEnabled,mailNickname,department")
+				.select("id,givenName,surname,displayName,userPrincipalName,employeeId,companyName,accountEnabled,mailNickname,department," + schemaId)
 				.filter("companyName eq 'OS2skoledata'")
 				.get();
 
@@ -190,14 +272,19 @@ public class AzureADService {
 	}
 
 	// not all user fields are returned, expand to get more fields
-	public List<User> getAllUsers() throws Exception {
+	public List<User> getAllUsers(String schemaId) throws Exception {
 		LinkedList<Option> requestOptions = new LinkedList<Option>();
 		requestOptions.add(new HeaderOption("ConsistencyLevel", "eventual"));
 		requestOptions.add(new QueryOption("$count", "true"));
 
+		String selectString = "id,givenName,surname,displayName,userPrincipalName,employeeId,companyName,accountEnabled,mailNickname,mail,department";
+		if (schemaId != null) {
+			selectString += "," + schemaId;
+		}
+
 		UserCollectionPage userCollection = appClient.users()
 				.buildRequest(requestOptions)
-				.select("id,givenName,surname,displayName,userPrincipalName,employeeId,companyName,accountEnabled,mailNickname,mail,department")
+				.select(selectString)
 				.get();
 
 		// returns 100 users pr page
@@ -243,7 +330,7 @@ public class AzureADService {
 		return appClient.users().buildRequest().post(user);
 	}
 
-	public void disableUser(String id, String username) throws Exception {
+	public void disableUser(String id, String username, String schemaId) throws Exception {
 		if (config.getAzureAd().isUserDryRun()) {
 			log.info("UserDryRun: Would have disabled user with username " + username);
 			return;
@@ -251,6 +338,12 @@ public class AzureADService {
 
 		User user = new User();
 		user.accountEnabled = false;
+
+		String disabledDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE); // format: "YYYY-MM-DD"
+		OS2skoledataSchemaDTO schemaDTO = new OS2skoledataSchemaDTO();
+		schemaDTO.setDisabledDate(disabledDate);
+		JsonElement jsonElement = gson.toJsonTree(schemaDTO);
+		user.additionalDataManager().put(schemaId, jsonElement);
 
 		try {
 			updateUser(user, id);
@@ -274,6 +367,39 @@ public class AzureADService {
 				.buildRequest()
 				.patch(user);
 	}
+
+	public void deleteUsers(List<User> allUsersManagedByOS2skoledata, String schemaId) {
+		if (config.getSyncSettings().getDeleteUserSettings().isEnabled() && !config.getAzureAd().isUserDryRun()) {
+			LocalDate studentDaysAgo = LocalDate.now().minusDays(config.getSyncSettings().getDeleteUserSettings().getDaysBeforeDeletionStudent());
+			LocalDate employeeDaysAgo = LocalDate.now().minusDays(config.getSyncSettings().getDeleteUserSettings().getDaysBeforeDeletionEmployee());
+			LocalDate externalDaysAgo = LocalDate.now().minusDays(config.getSyncSettings().getDeleteUserSettings().getDaysBeforeDeletionExternal());
+
+			for (User managedUser : allUsersManagedByOS2skoledata) {
+				if (Boolean.FALSE.equals(managedUser.accountEnabled)) {
+					OS2skoledataSchemaDTO schemaDTO = getOS2skoledataSchemaDTO(managedUser, schemaId);
+					if (StringUtils.hasLength(schemaDTO.getGlobalRole()) && StringUtils.hasLength(schemaDTO.getDisabledDate())) {
+						LocalDate disabledDateParsed = LocalDate.parse(schemaDTO.getDisabledDate());
+						if ((schemaDTO.getGlobalRole().equals(Role.STUDENT.toString()) && disabledDateParsed.isBefore(studentDaysAgo)) ||
+							(schemaDTO.getGlobalRole().equals(Role.EMPLOYEE.toString()) && disabledDateParsed.isBefore(employeeDaysAgo) ||
+							(schemaDTO.getGlobalRole().equals(Role.EXTERNAL.toString()) && disabledDateParsed.isBefore(externalDaysAgo)))) {
+
+							deleteUser(managedUser);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	private void deleteUser(User user) {
+		String username = user.mailNickname;
+		appClient.users(user.id)
+				.buildRequest()
+				.delete();
+
+		log.info("Deleted user with mailNickname: " + username);
+	}
+
 
 	public List<Group> getSecurityGroups() {
 
@@ -307,8 +433,33 @@ public class AzureADService {
 		return appClient.education().classes().buildRequest().post(educationClass);
 	}
 
-	public Group getGroup(String id) {
-		return appClient.groups(id).buildRequest().get();
+	public Group getGroup(String id, boolean retry) {
+		if (!retry) {
+			return appClient.groups(id).buildRequest().get();
+		} else {
+			// will throw exception if null. We need to try again - it takes som time after the team is created until the group is created
+			int count = 0;
+			int maxTries = 10;
+			while(true) {
+				try {
+					log.info("getGroup attempt: " + (count + 1));
+					return appClientWithoutLogging.groups(id).buildRequest().get();
+				} catch (Exception e) {
+					// handle exception
+					if (++count == maxTries) {
+						throw e;
+					}
+
+					try {
+						log.info("getGroup: sleep for 2 sec");
+						Thread.sleep(2000);
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+						throw new RuntimeException("Retry GetGroup interrupted", ie);
+					}
+				}
+			}
+		}
 	}
 
 	public EducationClass getEducationClass(String id) {
@@ -389,7 +540,7 @@ public class AzureADService {
 		appClient.groups(groupId).owners(objectId).reference().buildRequest().delete();
 	}
 
-	public void disableInactiveUsers(List<DBUser> dbUsers, List<User> azureOS2skoledataUsers, List<String> lockedUsernames, List<String> keepAliveUsernames) throws Exception {
+	public void disableInactiveUsers(List<DBUser> dbUsers, List<User> azureOS2skoledataUsers, List<String> lockedUsernames, List<String> keepAliveUsernames, String schemaId) throws Exception {
 		for (User azureUser : azureOS2skoledataUsers) {
 			if (azureUser.mailNickname != null) {
 
@@ -411,7 +562,7 @@ public class AzureADService {
 				}
 
 				if (!exists) {
-					disableUser(azureUser.id, azureUser.mailNickname);
+					disableUser(azureUser.id, azureUser.mailNickname, schemaId);
 				}
 			}
 		}
@@ -433,7 +584,7 @@ public class AzureADService {
 		}
 	}
 
-	public User createAccount(String username, DBUser user) throws Exception {
+	public User createAccount(String username, DBUser user, String schemaId) throws Exception {
 		if (config.getAzureAd().isUserDryRun()) {
 			log.info("UserDryRun: would have created new Azure user with username " + username);
 			return null;
@@ -465,9 +616,21 @@ public class AzureADService {
 
 		newUser.companyName = "OS2skoledata";
 
+		OS2skoledataSchemaDTO schemaDTO = new OS2skoledataSchemaDTO();
+		schemaDTO.setGlobalRole(user.getGlobalRole().toString());
+		JsonElement jsonElement = gson.toJsonTree(schemaDTO);
+		newUser.additionalDataManager().put(schemaId, jsonElement);
+
 		PasswordProfile passwordProfile = new PasswordProfile();
-		passwordProfile.forceChangePasswordNextSignIn = true;
-		passwordProfile.password = UUID.randomUUID().toString();
+
+		if (user.isSetPasswordOnCreate()) {
+			passwordProfile.forceChangePasswordNextSignIn = false;
+			passwordProfile.password = user.getPassword();
+		} else {
+			passwordProfile.forceChangePasswordNextSignIn = true;
+			passwordProfile.password = UUID.randomUUID().toString();
+		}
+
 		newUser.passwordProfile = passwordProfile;
 
 		User createdUser;
@@ -478,7 +641,7 @@ public class AzureADService {
 			os2skoledataService.setActionOnUser(username, Action.CREATE);
 		}
 		catch (Exception e) {
-			throw new Exception("Failed to create user with LocalPersonId " + user.getLocalPersonId(), e);
+			throw new Exception("Failed to create user with database id " + user.getDatabaseId(), e);
 		}
 
 		user.setAzureId(createdUser.id);
@@ -486,7 +649,7 @@ public class AzureADService {
 		return createdUser;
 	}
 
-	public void updateAccount(DBUser user, User match) throws Exception {
+	public void updateAccount(DBUser user, User match, String schemaId) throws Exception {
 		User userToUpdate = new User();
 		boolean changes = false;
 		boolean reactivated = false;
@@ -531,6 +694,15 @@ public class AzureADService {
 			changes = true;
 		}
 
+		OS2skoledataSchemaDTO schemaDTO = getOS2skoledataSchemaDTO(match, schemaId);
+		if (schemaDTO.getGlobalRole() == null || !schemaDTO.getGlobalRole().equals(user.getGlobalRole().toString())) {
+			schemaDTO.setGlobalRole(user.getGlobalRole().toString());
+			JsonElement jsonElement = gson.toJsonTree(schemaDTO);
+			userToUpdate.additionalDataManager().put(schemaId, jsonElement);
+			log.info("Will update globalRole on user with username " + user.getUsername() + " to " + user.getGlobalRole());
+			changes = true;
+		}
+
 		// set UNI-ID
 		switch (config.getSyncSettings().getUniIdField()) {
 			case DEPARTMENT -> {
@@ -560,27 +732,38 @@ public class AzureADService {
 				if (!config.getAzureAd().isUserDryRun()) {
 					log.info("Updated user with username " + user.getUsername());
 
-					// register as reactivated in OS2skoledata
-					os2skoledataService.setActionOnUser(user.getUsername(), Action.REACTIVATE);
+					if (reactivated) {
+						// register as reactivated in OS2skoledata
+						os2skoledataService.setActionOnUser(user.getUsername(), Action.REACTIVATE);
+					}
 				}
 			}
 			catch (Exception e) {
-				throw new Exception("Failed to update user with LocalPersonId " + user.getLocalPersonId() + " and username " + user.getUsername(), e);
+				throw new Exception("Failed to update user with database id " + user.getDatabaseId() + " and username " + user.getUsername(), e);
 			}
 		}
 	}
 
-	public void updateSecurityGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<String> securityGroupIds, List<String> securityGroupIdsForRenamedGroups) throws Exception {
+	public OS2skoledataSchemaDTO getOS2skoledataSchemaDTO(User user, String schemaId) {
+		OS2skoledataSchemaDTO schemaDTO = new OS2skoledataSchemaDTO();
+		JsonElement jsonElement = user.additionalDataManager().get(schemaId);
+		if (jsonElement != null) {
+			schemaDTO = gson.fromJson(jsonElement, OS2skoledataSchemaDTO.class);
+		}
+		return schemaDTO;
+	}
+
+	public void updateSecurityGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<String> securityGroupIds, List<String> securityGroupIdsForRenamedGroups, Set<String> allClassLevels) throws Exception {
 		log.info("Handling security groups for institution " + institution.getInstitutionName());
-		Group institutionEmployeeGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_EMPLOYEE_AZURE_SECURITY_GROUP_ID, institution.getEmployeeAzureSecurityGroupId(), getInstitutionGroupName("EMPLOYEES", institution), null);
-		Group institutionStudentGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_STUDENT_AZURE_SECURITY_GROUP_ID, institution.getStudentAzureSecurityGroupId(), getInstitutionGroupName("STUDENTS", institution), null);
-		Group institutionAllGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_ALL_AZURE_SECURITY_GROUP_ID, institution.getAllAzureSecurityGroupId(), getInstitutionGroupName("ALL", institution), null);
+		Group institutionEmployeeGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_EMPLOYEE_AZURE_SECURITY_GROUP_ID, institution.getEmployeeAzureSecurityGroupId(), getInstitutionGroupName("EMPLOYEES", institution), null, null);
+		Group institutionStudentGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_STUDENT_AZURE_SECURITY_GROUP_ID, institution.getStudentAzureSecurityGroupId(), getInstitutionGroupName("STUDENTS", institution), null, null);
+		Group institutionAllGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_ALL_AZURE_SECURITY_GROUP_ID, institution.getAllAzureSecurityGroupId(), getInstitutionGroupName("ALL", institution), null, null);
 
 		// handle group security group
 		classes.sort((o1, o2) -> convertToInt(o2.getGroupLevel()) - convertToInt(o1.getGroupLevel()));
 		for (DBGroup currentClass : classes) {
 			List<DBUser> usersInClass = users.stream().filter(u -> u.getGroupIds().contains(String.valueOf(currentClass.getDatabaseId())) || (u.getStudentMainGroups() != null && u.getStudentMainGroups().contains(String.valueOf(currentClass.getDatabaseId())))).toList();
-			Group classSecurityGroup = handleGroupUpdate(null, currentClass, SetFieldType.GROUP_AZURE_SECURITY_GROUP_ID, currentClass.getAzureSecurityGroupId(), getClassSecurityGroupName(currentClass, institution), securityGroupIdsForRenamedGroups);
+			Group classSecurityGroup = handleGroupUpdate(null, currentClass, SetFieldType.GROUP_AZURE_SECURITY_GROUP_ID, currentClass.getAzureSecurityGroupId(), getClassSecurityGroupName(currentClass, institution), securityGroupIdsForRenamedGroups, null);
 			if (classSecurityGroup != null) {
 				handleGroupMembers(classSecurityGroup, usersInClass, null);
 				securityGroupIds.add(classSecurityGroup.id);
@@ -607,7 +790,66 @@ public class AzureADService {
 			securityGroupIds.add(institutionEmployeeGroup.id);
 		}
 
+		List<String> classLevels = getClassLevels(classes);
+		allClassLevels.addAll(classLevels);
+		for (String level : classLevels) {
+			Group levelSecurityGroup = handleGroupUpdate(institution, null, null, getGroupIdentifier(institution, "level_" + level), getLevelSecurityGroupName(level, institution, config.getSyncSettings().getNameStandards().getLevelSecurityGroupNameStandard(), false), null, "level_" + level);
+			if (levelSecurityGroup != null) {
+				List<DBUser> usersInLevel = users.stream().filter(u -> u.getRole().equals(Role.STUDENT) && u.getStudentMainGroupLevelForInstitution() != null && u.getStudentMainGroupLevelForInstitution().equals(level)).toList();
+				handleGroupMembers(levelSecurityGroup, usersInLevel, null);
+				securityGroupIds.add(levelSecurityGroup.id);
+			}
+		}
+
 		log.info("Finished handling security groups for institution " + institution.getInstitutionName());
+	}
+
+	private String getLevelSecurityGroupName(String level, Institution institution, String standard, boolean global) {
+		String name = "";
+		if (standard != null) {
+			name = standard
+					.replace("{LEVEL}", level);
+
+			if (!global && institution != null) {
+				name = name
+					.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
+					.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+			}
+		}
+
+		name = escapeCharacters(name);
+
+		if (name.length() > 256) {
+			name = name.substring(0, 256);
+		}
+		return name;
+	}
+
+	private List<String> getClassLevels(List<DBGroup> classes) {
+		List<String> levels = new ArrayList<>();
+		for (DBGroup group : classes) {
+			if (group.getGroupLevel() != null && !levels.contains(group.getGroupLevel())) {
+				levels.add(group.getGroupLevel());
+			}
+		}
+		return levels;
+	}
+
+	private void handleSetIdentifierAfterCreate(Institution institution, String os2skoledataKey, Group match) throws Exception {
+		os2skoledataService.setGroupIdentifier(institution.getDatabaseId(), os2skoledataKey, match.id);
+		institution.getAzureIdentifierMappings().put(os2skoledataKey, match.id);
+	}
+
+	public String getGroupIdentifier(Institution institution, String key)
+	{
+		if (institution.getAzureIdentifierMappings() != null)
+		{
+			if (institution.getAzureIdentifierMappings().containsKey(key))
+			{
+				return institution.getAzureIdentifierMappings().get(key);
+			}
+		}
+		return null;
 	}
 
 	public void updateTeams(Institution institution, List<DBUser> users, List<DBGroup> classes, List<String> teamIds, List<String> teamIdsForRenamedTeams, List<DBUser> allDBUsers) throws Exception {
@@ -629,7 +871,7 @@ public class AzureADService {
 
 			// all employees in institution security group
 			List<DBUser> members = users.stream().filter(u -> u.getAzureId() != null && u.getUsername() != null && (u.getRole().equals(Role.EMPLOYEE) || u.getRole().equals(Role.EXTERNAL)) && !u.getUsername().equalsIgnoreCase(institution.getTeamAdminUsername())).toList();
-			List<DBUser> owners = allDBUsers.stream().filter(u -> u.getUsername() != null && u.getUsername().equalsIgnoreCase(institution.getTeamAdminUsername())).collect(Collectors.toList());
+			List<DBUser> owners = allDBUsers.stream().filter(u -> u.getAzureId() != null && u.getUsername() != null && u.getUsername().equalsIgnoreCase(institution.getTeamAdminUsername())).collect(Collectors.toList());
 			Team institutionEmployeeTeam = handleTeamUpdate(institution, null, SetFieldType.INSTITUTION_EMPLOYEE_AZURE_TEAM_ID, institution.getEmployeeAzureTeamId(), getInstitutionTeamName("EMPLOYEES", institution), getInstitutionTeamMail("EMPLOYEES", institution), null, members, owners, config.getSyncSettings().getAzureTeamsSettings().getEmployeeTeamTemplate(), false);
 			if (institutionEmployeeTeam != null) {
 				teamIds.add(institutionEmployeeTeam.id);
@@ -641,7 +883,7 @@ public class AzureADService {
 		}
 	}
 
-	public void updateGlobalSecurityGroups(List<DBUser> allUsers, List<String> securityGroupIds, List<String> lockedUsernames) throws Exception {
+	public void updateGlobalSecurityGroups(List<DBUser> allUsers, List<String> securityGroupIds, List<String> lockedUsernames, Set<String> allClassLevels) throws Exception {
 		log.info("Handling global security groups");
 		Group globalEmployeeSecurityGroup = updateGlobalSecurityGroup(config.getSyncSettings().getNameStandards().getGlobalEmployeeSecurityGroupName());
 		Group globalStudentSecurityGroup = updateGlobalSecurityGroup(config.getSyncSettings().getNameStandards().getGlobalStudentSecurityGroupName());
@@ -658,6 +900,15 @@ public class AzureADService {
 			List<DBUser> usersInStudent = allUsers.stream().filter(u -> u.getRole().equals(Role.STUDENT)).toList();
 			handleGroupMembers(globalStudentSecurityGroup, usersInStudent, lockedUsernames);
 			securityGroupIds.add(globalStudentSecurityGroup.id);
+		}
+
+		for (String level : allClassLevels) {
+			Group globalLevelGroup = updateGlobalSecurityGroup(getLevelSecurityGroupName(level, null, config.getSyncSettings().getNameStandards().getGlobalLevelSecurityGroupNameStandard(), true));
+			if (globalLevelGroup != null) {
+				List<DBUser> usersInLevel = allUsers.stream().filter(u -> u.getRole().equals(Role.STUDENT) && u.getStudentMainGroupLevelForInstitution() != null && u.getStudentMainGroupLevelForInstitution().equals(level)).toList();
+				handleGroupMembers(globalLevelGroup, usersInLevel, lockedUsernames);
+				securityGroupIds.add(globalLevelGroup.id);
+			}
 		}
 		
 		log.info("Finished handling global security groups");
@@ -693,38 +944,38 @@ public class AzureADService {
 		List<String> usernames = usersInClass.stream().map(DBUser::getUsername).toList();
 
 		// delete permissions
-		handleDeleteMemberships(group, lockedUsernames, members, usernames, "member");
+		handleDeleteMemberships(group.id, group.displayName, lockedUsernames, members, usernames, "member");
 
 		// create permissions
 		Set<DBUser> toAssign = usersInClass.stream().filter(u -> u.getAzureId() != null).collect(Collectors.toSet());
-		handleCreateMemberships(group, toAssign, azureIds, "member");
+		handleCreateMemberships(group.id, group.displayName, toAssign, azureIds, "member");
 	}
 
-	private void handleTeamGroupMembers(Group group, List<DBUser> members, List<DBUser> owners) {
-		log.info("Handling members for team group with name" + group.displayName);
-		List<User> membersFromAzure = getUserMembersOfGroup(group.id);
-		List<User> ownersFromAzure = getUserOwnersOfGroup(group.id);
+	private void handleTeamGroupMembers(String groupId, String groupName, List<DBUser> members, List<DBUser> owners) {
+		log.info("Handling members for team group with name" + groupName);
+		List<User> membersFromAzure = getUserMembersOfGroup(groupId);
+		List<User> ownersFromAzure = getUserOwnersOfGroup(groupId);
 		List<String> memberAzureIds = membersFromAzure.stream().filter(m -> m.id != null).map(m -> m.id).collect(Collectors.toList());
 		List<String> ownerAzureIds = ownersFromAzure.stream().filter(m -> m.id != null).map(m -> m.id).collect(Collectors.toList());
 		List<String> memberUsernames = members.stream().map(DBUser::getUsername).toList();
 		List<String> ownerUsernames = owners.stream().map(DBUser::getUsername).toList();
 
 		// delete member permissions
-		handleDeleteMemberships(group, null, membersFromAzure, memberUsernames, "member");
+		handleDeleteMemberships(groupId, groupName, null, membersFromAzure, memberUsernames, "member");
 
 		// delete owner permissions
-		handleDeleteMemberships(group, null, ownersFromAzure, ownerUsernames, "member");
+		handleDeleteMemberships(groupId, groupName, null, ownersFromAzure, ownerUsernames, "owner");
 
 		// create member permissions
 		Set<DBUser> toAssign = members.stream().filter(u -> u.getAzureId() != null).collect(Collectors.toSet());
-		handleCreateMemberships(group, toAssign, memberAzureIds, "member");
+		handleCreateMemberships(groupId, groupName, toAssign, memberAzureIds, "member");
 
 		// create owner permissions
 		Set<DBUser> toAssignOwner = owners.stream().filter(u -> u.getAzureId() != null).collect(Collectors.toSet());
-		handleCreateMemberships(group, toAssignOwner, ownerAzureIds, "owner");
+		handleCreateMemberships(groupId, groupName, toAssignOwner, ownerAzureIds, "owner");
 	}
 
-	private void handleDeleteMemberships(Group group, List<String> lockedUsernames, List<User> membersFromAzure, List<String> usernames, String type) {
+	private void handleDeleteMemberships(String groupId, String groupName, List<String> lockedUsernames, List<User> membersFromAzure, List<String> usernames, String type) {
 		for (User user : membersFromAzure) {
 			if (user.userPrincipalName == null) {
 				continue;
@@ -739,36 +990,36 @@ public class AzureADService {
 
 			if (!usernames.contains(username)) {
 				if (config.getAzureAd().isUserDryRun()) {
-					log.info("UserDryRun: would have removed " + type + " with UPN " + user.userPrincipalName + " from group " + group.displayName);
+					log.info("UserDryRun: would have removed " + type + " with UPN " + user.userPrincipalName + " from group " + groupName);
 				} else {
 					if (type.equals("owner")) {
-						removeOwnerFromGroup(group.id, user.id);
+						removeOwnerFromGroup(groupId, user.id);
 					}
 					else if (type.equals("member")) {
-						removeMemberFromGroup(group.id, user.id);
+						removeMemberFromGroup(groupId, user.id);
 					}
 
-					log.info("Removed " + type + " with UPN " + user.userPrincipalName + " from group " + group.displayName);
+					log.info("Removed " + type + " with UPN " + user.userPrincipalName + " from group " + groupName);
 				}
 			}
 		}
 	}
 
-	private void handleCreateMemberships(Group group, Set<DBUser> toAssign, List<String> azureIds, String type) {
+	private void handleCreateMemberships(String groupId, String groupName, Set<DBUser> toAssign, List<String> azureIds, String type) {
 		for (DBUser user : toAssign) {
 			if (!azureIds.contains(user.getAzureId())) {
 				if (config.getAzureAd().isUserDryRun()) {
-					log.info("UserDryRun: would have added " + type + " with username " + user.getUsername() + " to group " + group.displayName);
+					log.info("UserDryRun: would have added " + type + " with username " + user.getUsername() + " to group " + groupName);
 				} else {
 					if (type.equals("owner")) {
-						addOwnerToGroup(group.id, user.getAzureId());
+						addOwnerToGroup(groupId, user.getAzureId());
 					}
 					else if (type.equals("member")) {
-						addMemberToGroup(group.id, user.getAzureId());
+						addMemberToGroup(groupId, user.getAzureId());
 					}
 
 					azureIds.add(user.getAzureId());
-					log.info("Added " + type + " with username " + user.getUsername() + " to group " + group.displayName);
+					log.info("Added " + type + " with username " + user.getUsername() + " to group " + groupName);
 				}
 			}
 		}
@@ -921,7 +1172,7 @@ public class AzureADService {
 		return name;
 	}
 
-	public Group handleGroupUpdate(Institution institution, DBGroup group, SetFieldType setFieldType, String groupId, String name, List<String> securityGroupIdsForRenamedGroups) throws Exception {
+	public Group handleGroupUpdate(Institution institution, DBGroup group, SetFieldType setFieldType, String groupId, String name, List<String> securityGroupIdsForRenamedGroups, String os2skoledataKey) throws Exception {
 		if (StringUtils.isEmpty(name)) {
 			return null;
 		}
@@ -930,7 +1181,7 @@ public class AzureADService {
 		Group match = null;
 		boolean hasPrefix = false;
 		if (groupId != null) {
-			match = getGroup(groupId);
+			match = getGroup(groupId, false);
 		}
 
 		if (match == null) {
@@ -941,24 +1192,31 @@ public class AzureADService {
 
 			match = handleCreateGroup(name);
 
-			if (institution != null) {
+			if (os2skoledataKey != null && institution != null)
+			{
+				handleSetIdentifierAfterCreate(institution, os2skoledataKey, match);
+			}
+
+			if (institution != null && setFieldType != null) {
 				os2skoledataService.setFields(institution.getDatabaseId(), EntityType.INSTITUTION, setFieldType, match.id);
 			}
-			else if (group != null) {
+			else if (group != null && setFieldType != null) {
 				os2skoledataService.setFields(group.getDatabaseId(), EntityType.GROUP, setFieldType, match.id);
 			}
 
-			if (setFieldType.equals(SetFieldType.INSTITUTION_STUDENT_AZURE_SECURITY_GROUP_ID)) {
-				institution.setStudentAzureSecurityGroupId(match.id);
-			}
-			else if (setFieldType.equals(SetFieldType.INSTITUTION_ALL_AZURE_SECURITY_GROUP_ID)) {
-				institution.setAllAzureSecurityGroupId(match.id);
-			}
-			else if (setFieldType.equals(SetFieldType.INSTITUTION_EMPLOYEE_AZURE_SECURITY_GROUP_ID)) {
-				institution.setEmployeeAzureSecurityGroupId(match.id);
-			}
-			else if (setFieldType.equals(SetFieldType.GROUP_AZURE_SECURITY_GROUP_ID)) {
-				group.setAzureSecurityGroupId(match.id);
+			if (setFieldType != null) {
+				if (setFieldType.equals(SetFieldType.INSTITUTION_STUDENT_AZURE_SECURITY_GROUP_ID)) {
+					institution.setStudentAzureSecurityGroupId(match.id);
+				}
+				else if (setFieldType.equals(SetFieldType.INSTITUTION_ALL_AZURE_SECURITY_GROUP_ID)) {
+					institution.setAllAzureSecurityGroupId(match.id);
+				}
+				else if (setFieldType.equals(SetFieldType.INSTITUTION_EMPLOYEE_AZURE_SECURITY_GROUP_ID)) {
+					institution.setEmployeeAzureSecurityGroupId(match.id);
+				}
+				else if (setFieldType.equals(SetFieldType.GROUP_AZURE_SECURITY_GROUP_ID)) {
+					group.setAzureSecurityGroupId(match.id);
+				}
 			}
 
 			log.info("Created security group with name " + name + " and id " + groupId);
@@ -989,7 +1247,7 @@ public class AzureADService {
 		}
 
 		if (owners.isEmpty()) {
-			log.warn("Won't create or update group and team with name " + name + " for instituion " + institution.getInstitutionName() + " - no owners found.");
+			log.warn("Won't create or update group and team with name " + name + " - no owners found.");
 			return null;
 		}
 
@@ -998,30 +1256,32 @@ public class AzureADService {
 		Group matchGroup = null;
 		boolean hasPrefix = false;
 		if (teamId != null) {
-			matchGroup = getGroup(teamId);
+			matchGroup = getGroup(teamId, false);
 			matchTeam = getTeam(teamId);
 		}
+
+		String id = null;
 
 		if (matchGroup == null || matchTeam == null) {
 
 			// do not add prefix on create - if we do the sharepoint page will have c_ in its name forever - not good
-			matchGroup = handleCreateTeamAndGroup(mailNickmame, name, template, owners);
+			id = handleCreateTeamAndGroup(mailNickmame, name, template, owners);
 
 			// the group and the team based on the group will have the same ids
 			if (institution != null) {
-				os2skoledataService.setFields(institution.getDatabaseId(), EntityType.INSTITUTION, setFieldType, matchGroup.id);
+				os2skoledataService.setFields(institution.getDatabaseId(), EntityType.INSTITUTION, setFieldType, id);
 				if (setFieldType.equals(SetFieldType.INSTITUTION_EMPLOYEE_AZURE_TEAM_ID)) {
-					institution.setEmployeeAzureTeamId(matchGroup.id);
+					institution.setEmployeeAzureTeamId(id);
 				}
 			}
 			else if (group != null) {
-				os2skoledataService.setFields(group.getDatabaseId(), EntityType.GROUP, setFieldType, matchGroup.id);
+				os2skoledataService.setFields(group.getDatabaseId(), EntityType.GROUP, setFieldType, id);
 				if (setFieldType.equals(SetFieldType.GROUP_AZURE_TEAM_ID)) {
-					group.setAzureTeamId(matchGroup.id);
+					group.setAzureTeamId(id);
 				}
 			}
 
-			log.info("Created team and group with name " + name + " and id " + matchGroup.id);
+			log.info("Created team and group with name " + name + " and id " + id);
 
 		} else {
 			if (Boolean.TRUE.equals(matchTeam.isArchived)) {
@@ -1055,9 +1315,11 @@ public class AzureADService {
 				callUpdateGroup(name, matchGroup, mailNickmame);
 				log.info("Updated team with name " + name + " and id " + teamId);
 			}
+
+			id = teamId;
 		}
 
-		handleTeamGroupMembers(matchGroup, members, owners);
+		handleTeamGroupMembers(id, name, members, owners);
 
 		if (hasPrefix)
 		{
@@ -1067,7 +1329,7 @@ public class AzureADService {
 		return matchTeam;
 	}
 
-	private Group handleCreateTeamAndGroup(String mailNickmame, String name, String template, List<DBUser> owners) {
+	private String handleCreateTeamAndGroup(String mailNickmame, String name, String template, List<DBUser> owners) {
 		Team newTeam = new Team();
 		newTeam.description = "ManagedByOS2skoledata";
 		newTeam.displayName = name;
@@ -1092,17 +1354,16 @@ public class AzureADService {
 		String contentLocation = jsonObject.getAsJsonArray("content-location").get(0).getAsString();
 		String id = contentLocation.replace("/teams('", "").replace("')", "");
 
-		team = getTeam(id);
-
-		Group group = getGroup(team.id);
+		// get group with retry to make sure the group exists before proceeding
+		Group group = getGroup(id, true);
 
 		Group updatedGroup = new Group();
 		updatedGroup.mailNickname = mailNickmame;
 		updatedGroup.displayName = name;
 
-		group = updateGroup(updatedGroup, group.id);
+		updateGroup(updatedGroup, id);
 
-		return group;
+		return id;
 	}
 
 	public void deleteNotNeededGroups(List<String> securityGroupIds, List<String> lockedGroupIds, List<String> securityGroupIdsForRenamedGroups) {

@@ -19,6 +19,8 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
         public string CurrentInstitutionNumber { get; set; }
         public bool Deleted { get; set; }
         public List<string> TotalRoles { get; set; }
+        public bool SetPasswordOnCreate { get; set; }
+        public string Password { get; set; }
 
         // empty for all other than students
         public List<string> StudentMainGroups { get; set; }

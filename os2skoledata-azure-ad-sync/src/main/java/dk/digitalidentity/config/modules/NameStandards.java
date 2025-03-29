@@ -19,4 +19,6 @@ public class NameStandards {
 	private String classTeamNameStandardNoClassYear;
 	private String classTeamMailStandard;
 	private String classTeamMailStandardNoClassYear;
+	private String levelSecurityGroupNameStandard;
+	private String globalLevelSecurityGroupNameStandard;
 }

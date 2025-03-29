@@ -28,6 +28,9 @@
         public string SchoolOUName { get; set; }
         public string DaycareOUName { get; set; }
         public string InstitutitonStaffGroupEmailTypeName { get; set; } = "staff";
+        public bool OnlyUseYearInClassGroupEmail { get; set; } = false;
+        public string SecurityGroupForLevelNameStandard { get; set; }
+        public string GlobalSecurityGroupForLevelNameStandard { get; set; }
 
     }
 }
