@@ -23,19 +23,15 @@ public class ClientController {
 
 	@GetMapping("/ui/clients")
 	public String list(Model model) {
-		List<Client> clients = clientService.findAll();
-
-		model.addAttribute("clients", clients);
-
 		return "client/list";
 	}
 
-	record ClientRecord(long id, String name, String apiKey, LocalDateTime lastActive, boolean paused) {}
+	record ClientRecord(long id, String name, String apiKey, LocalDateTime lastActive, boolean paused, String accessRole) {}
 
 	@RequestMapping(value = "/ui/clients/clientTable")
 	public String clientListFragment(Model model) {
 		
-		List<ClientRecord> clients = clientService.findAll().stream().map(c -> new ClientRecord(c.getId(), c.getName(), c.getApiKey(), c.getLastActive(), c.isPaused())).collect(Collectors.toList());
+		List<ClientRecord> clients = clientService.findAll().stream().map(c -> new ClientRecord(c.getId(), c.getName(), c.getApiKey(), c.getLastActive(), c.isPaused(), c.getAccessRole().getMessage())).collect(Collectors.toList());
 		model.addAttribute("clients", clients);
 
 		return "client/fragments/clientTable :: clientTable";

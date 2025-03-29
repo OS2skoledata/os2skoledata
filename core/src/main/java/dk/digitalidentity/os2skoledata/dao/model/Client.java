@@ -6,6 +6,8 @@ import java.util.List;
 import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.FetchType;
 import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
@@ -14,6 +16,7 @@ import javax.persistence.OneToMany;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
+import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -38,6 +41,10 @@ public class Client {
 
 	@Column
 	private boolean paused;
+
+	@Column
+	@Enumerated(EnumType.STRING)
+	private ClientAccessRole accessRole;
 
 	// Eager loading is important!
 	@OneToMany(mappedBy = "client", fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)

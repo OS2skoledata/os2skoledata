@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true)" />
+<body class="top-navigation">
+<div id="wrapper">
+    <div id="page-wrapper" class="gray-bg">
+        <div th:replace="fragments/topbar :: topbar (page = 'classroom')" />
+
+        <div class="wrapper wrapper-content">
+            <div class="row">
+
+                <div class="col-lg-12">
+                    <div class="ibox">
+                        <div class="ibox-title" style="line-height: 40px;">
+                            <h5><em class="fa fa-cogs"></em> &nbsp; <span th:text="#{html.classroom.queue.header}"></span></h5>
+                            <div class="ibox-tools">
+                                <button id="classroomActionCreateBtn" type="button" class="btn btn-lg btn-primary" style="width:auto; margin-right:10px">
+                                    <em class="fa fa-plus"></em>
+                                    <span th:text="#{html.control.button.create}"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="ibox-content">
+                            <p th:text="#{html.classroom.queue.explainer}"></p>
+
+                            <div class="table-responsive">
+                                <table id="googleClassroomConfiguration" class="table table-striped table-hover">
+                                    <thead>
+                                    <tr>
+                                        <th th:text="#{html.classroom.queue.created}"></th>
+                                        <th th:text="#{html.classroom.queue.requestedBy}"></th>
+                                        <th th:text="#{html.classroom.queue.action}"></th>
+                                        <th th:text="#{html.classroom.queue.username}"></th>
+                                        <th th:text="#{html.classroom.queue.course}"></th>
+                                        <th th:text="#{html.classroom.queue.status}"></th>
+                                        <th th:text="#{html.classroom.queue.error}"></th>
+                                        <th th:text="#{html.classroom.queue.performed}"></th>
+                                    </tr>
+                                    </thead>
+
+                                    <tbody>
+                                    <tr th:each="row : ${queue}">
+                                        <td th:text="${#temporals.format(row.created, 'yyyy-MM-dd HH:mm')}" />
+                                        <td th:text="${row.requester}" />
+                                        <td th:text="${row.action}" />
+                                        <td th:text="${row.username}" />
+                                        <td th:text="${row.courseId}" />
+                                        <td th:text="${row.status}" />
+                                        <td th:text="${row.errorMessage}" />
+                                        <td th:text="${#temporals.format(row.performed, 'yyyy-MM-dd HH:mm')}" />
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="modal fade" id="modal-classroom" role="dialog">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 th:text="#{html.classroom.queue.modal.title}"></h4>
+                    <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span class="sr-only" th:text="#{html.control.button.cancel}"></span></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group row">
+                        <label class="col-lg-2 col-form-label" for="classroomAction" th:text="#{html.classroom.queue.action}" />
+                        <div class="col-lg-8">
+                            <select id="classroomAction" class="form-control">
+                                <option th:value="TRANSFER" th:text="#{html.classroom.queue.action.transfer}"></option>
+                                <option th:value="ARCHIVE" th:text="#{html.classroom.queue.action.archive}"></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group row" id="classroomTransferSection">
+                        <label class="col-lg-2 col-form-label" for="username" th:text="#{html.classroom.queue.username}" />
+                        <div class="col-lg-8">
+                            <input id="username" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-lg-2 col-form-label" for="courseId" th:text="#{html.classroom.queue.course}" />
+                        <div class="col-lg-8">
+                            <input id="courseId" class="form-control">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="classroomService.save();" th:text="#{html.control.button.create}"></button>
+                    <button type="button" class="btn btn-danger" data-dismiss="modal" th:text="#{html.control.button.cancel}"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div th:replace="fragments/footer :: scripts (datatables = true)" />
+<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+		    var modalNewTitle = [[#{html.config.students.modal.header.new}]];
+            var modalEditTitle = [[#{html.config.students.modal.header.edit}]];
+            var successMessage = [[#{html.messages.saved}]];
+            var errorMessage = [[#{html.messages.error}]];
+            var passwordSettings = [[${passwordSettings}]];
+
+		+]*/
+
+        var token = $("meta[name='_csrf']").attr("content");
+		var classroomService;
+		$(document).ready(function(){
+			classroomService = new ClassroomService();
+			classroomService.init();
+		});
+
+        function ClassroomService() {
+		    this.init = function() {
+		        $("#classroomActionCreateBtn").on("click", classroomService.openCreateModal);
+
+		        $("#classroomAction").on("change", classroomService.actionChanged);
+		    }
+
+		    this.actionChanged = function() {
+		        var value = $("#classroomAction").val();
+		        if (value == "TRANSFER") {
+		            $("#classroomTransferSection").show();
+		        } else if (value == "ARCHIVE") {
+		            $("#classroomTransferSection").hide();
+		        }
+		    }
+
+		    this.openCreateModal = function() {
+		        classroomService.actionChanged();
+		        $("#modal-classroom").modal("show");
+		    }
+
+			this.save = function(elem) {
+                const action = $("#classroomAction").val();
+                let course = $("#courseId").val();
+                let username = null
+                if (action == "TRANSFER") {
+		            username = $("#username").val();
+		        }
+
+                body = {
+                    "action": action,
+                    "course": course,
+                    "username": username
+                };
+
+                $.ajax({
+                    contentType: 'application/json',
+                    url: "/rest/classrooms/action/save",
+                    method : "POST",
+                    headers: {
+                        'X-CSRF-TOKEN': token
+                    },
+                    data: JSON.stringify(body),
+                    error: function(response) {
+                        toastr.error(response.responseText);
+                    },
+                    success: function(response) {
+                        $("#modal-classroom").modal("hide");
+                        window.location.reload();
+                    }
+                });
+			}
+        }
+
+		/*]]>*/
+	</script>
+</body>
+</html>

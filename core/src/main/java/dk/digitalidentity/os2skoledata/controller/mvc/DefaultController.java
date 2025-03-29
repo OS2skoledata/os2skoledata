@@ -29,9 +29,11 @@ public class DefaultController implements ErrorController {
 		if (SecurityUtil.isAuthenticated()) {
 			if (SecurityUtil.hasRole(Constants.PARENT.toString())) {
 				return "redirect:/ui/students/parents/changepassword";
+			} else if (SecurityUtil.hasRole(Constants.ADMIN.toString())) {
+				return "redirect:/ui/showQueue";
 			}
 
-			return "redirect:/ui/showQueue";
+			return "welcome";
 		}
 
 		return "index";

@@ -31,7 +31,13 @@ public class LogApiController {
 			return new ResponseEntity<>("Unknown client", HttpStatus.FORBIDDEN);
 		}
 
-		log.error("Received error from Client with id " + client.getId() + " and name " + client.getName() + ". Message: " + errorRecord.message());
+		// ignore DNS errors for now
+		if (errorRecord.message() != null && errorRecord.message().contains("No such host is known")) {
+			log.warn("Received error from Client with id " + client.getId() + " and name " + client.getName() + ". Message: " + errorRecord.message());
+		}
+		else {
+			log.error("Received error from Client with id " + client.getId() + " and name " + client.getName() + ". Message: " + errorRecord.message());
+		}
 
 		return new ResponseEntity<>(HttpStatus.OK);
 	}

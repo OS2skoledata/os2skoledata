@@ -4,8 +4,9 @@
 			<thead>
 				<tr>
 					<th class="col-md-4" th:text="#{html.entity.client.name}"></th>
+					<th class="col-md-4" th:text="#{html.entity.client.access}"></th>
 					<th class="col-md-4" th:text="#{html.entity.client.apiKey}"></th>
-					<th class="col-md-3" th:text="#{html.entity.client.lastActive}"></th>
+					<th class="col-md-3" th:text="#{html.entity.client.lastSync}"></th>
 					<th class="col-md-1" th:text="#{html.control.operations}"></th>
 				</tr>
 			</thead>
@@ -16,6 +17,7 @@
 						<span th:text="${client.name}"></span>
 						<span th:if="${client.paused}" th:text="#{html.page.client.paused}" style="font-size: smaller; color: red;"></span>
 					</td>
+					<td th:text="${client.accessRole}"></td>
 					<td>
 						<em onclick="clientTable.togglePassword(this.getAttribute('data-client-id'));" th:data-client-id="${client.id}" class="fa fa-fw fa-eye"></em>&nbsp;&nbsp;
 						<span th:attr="data-key=${client.apiKey}" th:id="'pwd-' + ${client.id}">********</span>

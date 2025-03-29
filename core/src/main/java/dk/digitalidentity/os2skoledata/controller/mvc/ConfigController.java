@@ -8,6 +8,7 @@ import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
 import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
+import dk.digitalidentity.os2skoledata.service.ClassroomAdminService;
 import dk.digitalidentity.os2skoledata.service.PasswordSettingService;
 import dk.digitalidentity.os2skoledata.service.StudentPasswordChangeConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,10 +34,13 @@ public class ConfigController {
     @Autowired
     private OS2SkoleDataConfiguration configuration;
 
+    @Autowired
+    private ClassroomAdminService classroomAdminService;
+
     record RoleSettingDTO(long id, StudentPasswordChangerSTILRoles role, RoleSettingType type, String filter, String filterValues) {}
     @GetMapping("/ui/config")
     public String list(Model model) {
-        if (!configuration.getStudentAdministration().isEnabled()) {
+        if (!configuration.getStudentAdministration().isEnabled() && !configuration.getClassroomAdministration().isEnabled()) {
             return "redirect:/error";
         }
 
@@ -52,6 +56,9 @@ public class ConfigController {
         // password settings section
         model.addAttribute("gradeGroups", GradeGroup.values());
         model.addAttribute("passwordSettings", passwordSettingService.getAllPasswordSettings());
+
+        // classroom admin settings section
+        model.addAttribute("classroomAdmins", classroomAdminService.getAll());
 
         return "config";
     }

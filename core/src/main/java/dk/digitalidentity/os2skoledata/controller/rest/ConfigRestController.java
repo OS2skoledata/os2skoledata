@@ -1,11 +1,13 @@
 package dk.digitalidentity.os2skoledata.controller.rest;
 
+import dk.digitalidentity.os2skoledata.dao.model.ClassroomAdmin;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
 import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
+import dk.digitalidentity.os2skoledata.service.ClassroomAdminService;
 import dk.digitalidentity.os2skoledata.service.PasswordSettingService;
 import dk.digitalidentity.os2skoledata.service.StudentPasswordChangeConfigurationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,9 @@ public class ConfigRestController {
 
     @Autowired
     private PasswordSettingService passwordSettingService;
+
+    @Autowired
+    private ClassroomAdminService classroomAdminService;
 
     @DeleteMapping("/rest/config/{id}/delete")
     public ResponseEntity<?> deleteConfig(@PathVariable long id) {
@@ -64,5 +69,24 @@ public class ConfigRestController {
         passwordSettingService.save(match);
 
         return new ResponseEntity<>(passwordSettingService.getAllPasswordSettings(), HttpStatus.OK);
+    }
+
+    @DeleteMapping("/rest/config/classroomadmin/{id}/delete")
+    public ResponseEntity<?> deleteClassroomAdmin(@PathVariable long id) {
+        classroomAdminService.delete(id);
+        return ResponseEntity.ok().build();
+    }
+
+    private record ClassroomAdminDTO(StudentPasswordChangerSTILRoles role, String username) {}
+    @ResponseBody
+    @PostMapping("/rest/config/classroomadmin/save")
+    public ResponseEntity<?> saveClassroomAdmin(@RequestBody ClassroomAdminDTO dto) {
+
+        ClassroomAdmin classroomAdmin = new ClassroomAdmin();
+        classroomAdmin.setRole(dto.role);
+        classroomAdmin.setUsername(dto.username);
+        classroomAdminService.save(classroomAdmin);
+
+        return ResponseEntity.ok().build();
     }
 }

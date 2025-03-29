@@ -1,5 +1,22 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
+import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.service.stil.StilService;
+import https.unilogin_dk.data.Group;
+import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
+import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionPersonFullMyndighed;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -8,21 +25,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
-import https.unilogin_dk.data.Group;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
-import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
-import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
-import dk.digitalidentity.os2skoledata.service.stil.StilService;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionPersonFullMyndighed;
-import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -36,6 +38,21 @@ public class SyncService {
 
 	@Autowired
 	private InstitutionPersonService institutionPersonService;
+
+	@Autowired
+	private EmailService emailService;
+
+	@Autowired
+	private SettingService settingService;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
+	@Autowired
+	private PasswordSettingService passwordSettingService;
+
+	@Autowired
+	private CprPasswordMappingService cprPasswordMappingService;
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void sync(InstitutionDTO institutionDTO) {
@@ -64,6 +81,8 @@ public class SyncService {
 		// bypass check once if flag is sat
 		if (dbInstitution != null && dbInstitution.isBypassTooFewPeople()) {
 			dbInstitution.setBypassTooFewPeople(false);
+			dbInstitution.setTooFewPeopleErrorCount(0);
+			dbInstitution.setTooFewPeopleErrorMessage(null);
 			institutionService.save(dbInstitution);
 		} else {
 			// sanity check: too few people?
@@ -77,8 +96,36 @@ public class SyncService {
 				int stilCount = stilInstitution.getInstitutionPerson().size();
 
 				if (stilCount <= dbCount/2) {
-					log.error("Institution in db has " + dbCount + " people, but institution in STIL has " + stilCount + " people. Might be an error - skipping sync of: " + institutionDTO.getInstitutionNumber());
+					String tooFewChangeText = "Institutionen har i databasen " + dbCount + " brugere, men i STIL har institutionen kun " + stilCount + " brugere.";
+					dbInstitution.setTooFewPeopleErrorCount(dbInstitution.getTooFewPeopleErrorCount() + 1);
+					dbInstitution.setTooFewPeopleErrorMessage(tooFewChangeText);
+					institutionService.save(dbInstitution);
+					if (dbInstitution.getTooFewPeopleErrorCount() >= 5) {
+						log.error("Error for " + dbInstitution.getTooFewPeopleErrorCount() + " in a row: Institution in db has " + dbCount + " people, but institution in STIL has " + stilCount + " people. Might be an error - skipping sync of: " + institutionDTO.getInstitutionNumber());
+					}
+
+					String emails = settingService.getStringValueByKey(CustomerSetting.STIL_CHANGE_EMAIL);
+					if (StringUtils.hasLength(emails)) {
+						String message = "Der er sket en stor ændring i antallet af brugere i STIL for institutionen " + dbInstitution.getInstitutionName() + ".\n"
+								+ tooFewChangeText
+								+ "\nDu skal tjekke om ændringen er meningen, eller om der er tale om en fejl i STIL."
+								+ "\nHvis det er meningen, skal du logge ind i OS2skoledata brugergrænsefladen og gå til siden \"Institutioner\", hvor du har mulighed for at godkende ændringen."
+								+ "\nData for denne institution vil ikke blive opdateret inden ændringen er rettet i STIL eller godkendt.";
+
+						emails = emails.replace(" ", "");
+						String[] emailArray = emails.split(";");
+						for (String email : emailArray) {
+							emailService.sendMessage(email, "OS2skoledata: STIL ændringer til godkendelse", message);
+						}
+					}
+
 					return;
+				} else {
+					if (dbInstitution.getTooFewPeopleErrorCount() != 0) {
+						dbInstitution.setTooFewPeopleErrorCount(0);
+						dbInstitution.setTooFewPeopleErrorMessage(null);
+						institutionService.save(dbInstitution);
+					}
 				}
 			}
 		}
@@ -134,6 +181,19 @@ public class SyncService {
 					dbInstitutionPerson.copyFields(stilInstitutionPerson);
 					dbInstitutionPerson.setInstitution(dbInstitution);
 					dbInstitutionPerson.setStilCreated(LocalDateTime.now());
+
+					// check if we should generate password
+					if (configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate() && dbInstitutionPerson.getStudent() != null) {
+
+						// make sure the password has not been sat for this cpr before
+						if (!cprPasswordMappingService.exists(dbInstitutionPerson.getPerson().getCivilRegistrationNumber())) {
+							Integer level = institutionPersonService.getLevel(dbInstitutionPerson);
+							if (level != null && level <= 3) {
+								cprPasswordMappingService.setPassword(dbInstitutionPerson.getPerson().getCivilRegistrationNumber(), passwordSettingService.generateEncryptedPasswordForIndskolingStudent());
+							}
+						}
+					}
+
 					institutionPersonService.save(dbInstitutionPerson);
 				}
 				else {

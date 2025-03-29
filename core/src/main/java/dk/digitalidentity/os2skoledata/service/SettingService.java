@@ -52,6 +52,15 @@ public class SettingService {
 		return false;
 	}
 
+	public String getStringValueByKey(CustomerSetting customerSetting) {
+		Setting setting = getByKey(customerSetting);
+		if (setting != null) {
+			return setting.getValue();
+		}
+
+		return customerSetting.getDefaultValue();
+	}
+
 	public Setting getByKey(CustomerSetting key) {
 		return getByKey(key.toString());
 	}
@@ -74,6 +83,17 @@ public class SettingService {
 		}
 
 		setting.setValue(Boolean.toString(enabled));
+		settingDao.save(setting);
+	}
+
+	public void setValueForKey(String key, String value) {
+		Setting setting = settingDao.findByKey(key);
+		if (setting == null) {
+			setting = new Setting();
+			setting.setKey(key);
+		}
+
+		setting.setValue(value);
 		settingDao.save(setting);
 	}
 }

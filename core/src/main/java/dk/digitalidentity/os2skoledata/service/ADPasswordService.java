@@ -30,6 +30,9 @@ public class ADPasswordService {
 	@Autowired
 	private ActiveDirectoryService activeDirectoryService;
 
+	@Autowired
+	private CprPasswordMappingService cprPasswordMappingService;
+
 	@Transactional(rollbackFor = Exception.class)
 	public void syncQueueCleanupTask() {
 
@@ -70,6 +73,8 @@ public class ADPasswordService {
 				continue;
 			}
 
+			DBInstitutionPerson firstPerson = persons.get(0);
+
 			SetPasswordRequest setPasswordRequest = getSetPasswordRequest(change);
 			if (setPasswordRequest == null) {
 				change.setMessage("Failed to decrypt password");
@@ -78,7 +83,36 @@ public class ADPasswordService {
 				continue;
 			}
 
-			activeDirectoryService.setPassword(setPasswordRequest);
+			SetPasswordResponse setPasswordResponse = activeDirectoryService.setPassword(setPasswordRequest);
+			SetPasswordResponse.PasswordStatus status = setPasswordResponse.getStatus();
+			switch (status) {
+				// inform user through UI (but also save result in queue for debugging purposes)
+				case TECHNICAL_ERROR:
+				case INSUFFICIENT_PERMISSION:
+				case UNKNOWN_USER:
+					// FINAL_ERROR prevent any retries on this
+					change.setStatus(ReplicationStatus.FINAL_ERROR);
+					change.setMessage(setPasswordResponse.getMessage());
+					break;
+				case OK:
+					change.setStatus(ReplicationStatus.SYNCHRONIZED);
+					change.setMessage(setPasswordResponse.getMessage());
+					cprPasswordMappingService.setPassword(firstPerson.getPerson().getCivilRegistrationNumber(), change.getPassword());
+					break;
+				// delay replication in case of a timeout
+				case TIMEOUT:
+					change.setStatus(ReplicationStatus.ERROR);
+					change.setMessage(setPasswordResponse.getMessage());
+					if (change.getTts() != null && LocalDateTime.now().minusMinutes(10).isAfter(change.getTts())) {
+						log.error("Replication failed, password change has not been replicated for more than 10 minutes (ID: " + change.getId() + ")");
+						change.setStatus(ReplicationStatus.FINAL_ERROR);
+					}
+					else {
+						log.debug("Password Replication failed, trying again in 1 minute (ID: " + change.getId() + ")");
+					}
+					break;
+			}
+
 
 			passwordChangeQueueService.save(change, ReplicationStatus.SYNCHRONIZED.equals(change.getStatus()));
 		}

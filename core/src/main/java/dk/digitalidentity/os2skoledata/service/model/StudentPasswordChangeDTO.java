@@ -14,4 +14,5 @@ public class StudentPasswordChangeDTO {
 	private String institutions;
 	private String classes;
 	private boolean canChangePassword;
+	private String cpr;
 }

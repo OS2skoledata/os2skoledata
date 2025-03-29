@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import javax.validation.Valid;
 
+import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +22,7 @@ public class ClientRestController {
 	@Autowired
 	private ClientService clientService;
 
-	record ClientRecord(long id, String name, String apiKey, boolean paused) {}
+	record ClientRecord(long id, String name, String apiKey, boolean paused, ClientAccessRole accessRole) {}
 
 	@PostMapping("/rest/clients/create")
 	public ResponseEntity<?> createClient(@Valid @RequestBody ClientRecord body) {
@@ -34,6 +35,7 @@ public class ClientRestController {
 		client = new Client();
 		client.setName(body.name);
 		client.setApiKey(UUID.randomUUID().toString());
+		client.setAccessRole(body.accessRole);
 
 		clientService.save(client);
 

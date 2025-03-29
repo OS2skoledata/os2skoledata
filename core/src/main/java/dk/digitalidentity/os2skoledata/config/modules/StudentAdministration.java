@@ -14,4 +14,5 @@ public class StudentAdministration {
 	private boolean parentPasswordChangeEnabled = false;
 	// this setting shows the dropdown special for selecting a new password
 	private boolean indskolingSpecialEnabled = false;
+	private boolean setIndskolingPasswordOnCreate = false;
 }

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true)" />
+<body class="top-navigation">
+<div id="wrapper">
+	<div id="page-wrapper" class="gray-bg">
+		<div th:replace="fragments/topbar :: topbar (page = 'groups')" />
+
+		<div class="wrapper wrapper-content">
+			<div class="row">
+
+				<div class="col-lg-12">
+					<div class="ibox">
+						<div class="ibox-title">
+							<h5><em class="fa fa-cogs"></em> &nbsp; <span th:text="#{html.groups.header}"></span></h5>
+						</div>
+
+						<div class="ibox-content">
+							<p th:text="#{html.groups.explainer}"></p>
+
+							<div class="table-responsive">
+								<table id="groups" class="table table-striped table-bordered table-hover" >
+									<thead>
+									<tr>
+										<th th:text="#{html.groups.table.headers.institution}"></th>
+										<th th:text="#{html.groups.table.headers.name}"></th>
+										<th th:text="#{html.groups.table.headers.level}"></th>
+										<th style="width: 80px;" th:text="#{html.control.operations}"></th>
+									</tr>
+									</thead>
+
+									<tfoot style="display: table-row-group">
+									<tr>
+										<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+										<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+										<td class="input-filter"><input type="text" class="form-control input-sm" style="width: 100%;" placeholder="Søg" /></td>
+										<td></td>
+									</tr>
+									</tfoot>
+
+									<tbody>
+									<tr th:each="group : ${groups}">
+										<td th:text="${group.institutionName}" />
+										<td th:text="${group.groupName}" />
+										<td th:text="${group.level}" />
+										<td style="text-align: center">
+											<a href="#" th:onclick="'return groupService.printClass(' + ${group.id} + ', ' + ${group.canPrintPassword} + ', ' + this + ');'" data-type="print" style="color: black;" title="Print klasse"><em class="fa fa-fw fa-print"></em></a>
+											<a href="#" th:onclick="'return groupService.printClass(' + ${group.id} + ', ' + ${group.canPrintPassword} + ', ' + this + ');'" data-type="csv" style="color: black;" title="Download klasseliste som csv"><em class="fa fa-fw fa-file-excel-o"></em></a>
+										</td>
+									</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
+
+			</div>
+		</div>
+	</div>
+</div>
+
+<div th:replace="fragments/footer :: scripts (datatables = true)" />
+<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+			var flashSuccess = [[${flashSuccess}]];
+			var flashWarning = [[${flashWarning}]];
+			var flashError = [[${flashError}]];
+			var printClassUrl = [[@{/students/groups/}]];
+		+]*/
+
+        var token = $("meta[name='_csrf']").attr("content");
+		var groupService;
+		$(document).ready(function(){
+			groupService = new GroupService();
+			groupService.initializeDatatable();
+
+			if (flashSuccess != undefined) {
+				toastr.success(flashSuccess);
+			}
+			if (flashWarning != undefined) {
+				toastr.warning(flashWarning);
+			}
+			if (flashError != undefined) {
+				toastr.error(flashError);
+			}
+		});
+
+		function GroupService() {
+		    this.initializeDatatable = function() {
+				table = $('#groups').DataTable({
+					"destroy": true,
+					"columns": [
+						{
+							"orderable": true
+						},
+						{
+							"orderable": true
+						},
+						{
+							"orderable": true
+						},
+						{
+							"searchable": false,
+							"orderable": false,
+						}
+					],
+					"ordering": true,
+					"info": true,
+					"pageLength": 20,
+					"lengthChange": false,
+					"bSort": false,
+					"dom": "<'row'<'col-sm-12'tr>><'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+					"responsive": true,
+					"language": {
+						"search":	   "Søg",
+						"lengthMenu":   "_MENU_ rækker per side",
+						"info":		 "Viser _START_ til _END_ af _TOTAL_ klasser",
+						"zeroRecords":  "Ingen data...",
+						"infoEmpty":	"Henter data...",
+						"infoFiltered": "(ud af _MAX_ klasser)",
+						"paginate": {
+							"previous": "Forrige",
+							"next": "Næste"
+						}
+					}
+				});
+
+				$.each($('.input-filter', table.table().footer()), function() {
+					var column = table.column($(this).index());
+
+					$('input', this).on('keyup change', function () {
+						if (column.search() !== this.value) {
+							column.search(this.value).draw();
+						}
+					});
+				});
+			}
+
+			this.printClass = function(classId, canPrintPassword, elem) {
+				let type = elem.dataset.type;
+				if (canPrintPassword) {
+					swal({
+						title: 'Print klasse',
+						text: 'Hvis muligt, ønsker du så også at printe elevernes kodeord?',
+						showCancelButton: true,
+						confirmButtonColor: "#1ab394",
+						cancelButtonText: 'Med kodeord',
+						confirmButtonText: 'Uden kodeord',
+						closeOnConfirm: true,
+						closeOnCancel: true
+					},
+					function(isConfirm) {
+						if (isConfirm) {
+							window.open(printClassUrl + classId + "/" + type + "?withPassword=false");
+						}
+						else {
+							window.open(printClassUrl + classId + "/" + type + "?withPassword=true");
+						}
+					});
+				} else {
+					window.open(printClassUrl + classId + "/" + type + "?withPassword=false");
+				}
+			}
+        }
+
+		/*]]>*/
+	</script>
+</body>
+</html>

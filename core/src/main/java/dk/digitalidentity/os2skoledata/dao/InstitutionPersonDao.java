@@ -25,6 +25,7 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
     List<DBInstitutionPerson> findByUsername(String username);
     List<DBInstitutionPerson> findByStudentNotNullAndDeletedFalseAndInstitutionIdIn(List<Long> institutionIds);
 	void deleteByDeletedTrueAndStilDeletedBefore(LocalDateTime before);
+	List<DBInstitutionPerson> findByStudentNotNullAndDeletedFalseAndInstitution(DBInstitution institution);
 
 	// search in all institutions
 	@Query("SELECT ip FROM DBInstitutionPerson ip JOIN ip.person p WHERE " +

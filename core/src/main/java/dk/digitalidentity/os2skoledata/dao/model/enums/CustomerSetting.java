@@ -8,7 +8,9 @@ public enum CustomerSetting {
 	CURRENT_SCHOOL_YEAR_(null),
 	LOCKED_INSTITUTION_("false"),
 	GLOBAL_SCHOOL_YEAR(null),
-	REQUEST_LOG_("false");
+	REQUEST_LOG_("false"),
+	STIL_CHANGE_EMAIL(null),
+	AZURE_SCHEMA_ID(null);
 
 	private String defaultValue;
 

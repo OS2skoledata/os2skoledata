@@ -2,9 +2,10 @@ package dk.digitalidentity.os2skoledata.service;
 
 import dk.digitalidentity.os2skoledata.dao.InstitutionDao;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
-import dk.digitalidentity.os2skoledata.dao.model.InstitutionGoogleWorkspaceGroupMapping;
+import dk.digitalidentity.os2skoledata.dao.model.InstitutionGroupIdentifierMapping;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -46,12 +47,12 @@ public class InstitutionService {
 		return institutionDao.findByIdIn(ids);
 	}
 
-	public Map<String, String> generateEmailMap(DBInstitution institution) {
+	public Map<String, String> generateEmailMap(DBInstitution institution, IntegrationType integrationType) {
 		Map<String, String> result = new HashMap<>();
-		if (institution.getGoogleWorkspaceGroupEmailMappings() != null) {
-			for (InstitutionGoogleWorkspaceGroupMapping mapping : institution.getGoogleWorkspaceGroupEmailMappings()) {
-				if (!result.containsKey(mapping.getGroupKey())) {
-					result.put(mapping.getGroupKey(), mapping.getGroupEmail());
+		if (institution.getIntegrationGroupIdentifierMappings() != null) {
+			for (InstitutionGroupIdentifierMapping mapping : institution.getIntegrationGroupIdentifierMappings()) {
+				if (mapping.getIntegrationType().equals(integrationType) && !result.containsKey(mapping.getGroupKey())) {
+					result.put(mapping.getGroupKey(), mapping.getGroupIdentifier());
 				}
 			}
 		}

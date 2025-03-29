@@ -176,7 +176,7 @@ public class ParentsChangePasswordOnStudentsController {
 		}
 
 		try {
-			SetPasswordResponse.PasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), form.getPassword());
+			SetPasswordResponse.PasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), student.getCpr(), form.getPassword());
 
 			if (ADPasswordService.isCritical(adPasswordStatus)) {
 				if (configuration.getStudentAdministration().isIndskolingSpecialEnabled() && Objects.equals(passwordSettingService.findGradeGroup(form.getUsername()), GradeGroup.YOUNGEST)) {

@@ -18,7 +18,6 @@ import javax.persistence.GeneratedValue;
 import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
-import javax.persistence.ManyToOne;
 import javax.persistence.OneToMany;
 import javax.persistence.OneToOne;
 import javax.persistence.Table;
@@ -100,13 +99,19 @@ public class DBInstitution {
 	private InstitutionType type;
 
 	@Column
-	private boolean bypassTooFewPeople;
-
-	@Column
 	private boolean ignoreEmptyError;
 
 	@Column
 	private String employeeAzureTeamId;
+
+	@Column
+	private boolean bypassTooFewPeople;
+
+	@Column
+	private String tooFewPeopleErrorMessage;
+
+	@Column
+	private long tooFewPeopleErrorCount;
 
 	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY)
@@ -123,7 +128,7 @@ public class DBInstitution {
 
 	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "institution", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
-	private List<InstitutionGoogleWorkspaceGroupMapping> googleWorkspaceGroupEmailMappings;
+	private List<InstitutionGroupIdentifierMapping> integrationGroupIdentifierMappings;
 
 	public boolean apiEquals(InstitutionFullMyndighed other) {
 		if (other == null) {

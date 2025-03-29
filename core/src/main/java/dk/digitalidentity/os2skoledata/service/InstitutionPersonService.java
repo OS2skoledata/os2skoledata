@@ -1,7 +1,7 @@
 package dk.digitalidentity.os2skoledata.service;
 
 import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
-import dk.digitalidentity.os2skoledata.api.enums.PersonRole;
+import dk.digitalidentity.os2skoledata.api.model.enums.PersonRole;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.controller.mvc.enums.SchoolYear;
 import dk.digitalidentity.os2skoledata.dao.InstitutionPersonDao;
@@ -25,6 +25,7 @@ import dk.digitalidentity.os2skoledata.service.model.ChildDTO;
 import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
 import dk.digitalidentity.os2skoledata.service.model.CprLookupDTO;
 import dk.digitalidentity.os2skoledata.service.model.NameDTO;
+import dk.digitalidentity.os2skoledata.service.model.PrintStudentDTO;
 import dk.digitalidentity.os2skoledata.service.model.StudentPasswordChangeDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -89,6 +90,9 @@ public class InstitutionPersonService {
 	@Autowired
 	private GhostService ghostService;
 
+	@Autowired
+	private CprPasswordMappingService cprPasswordMappingService;
+
 	public DBInstitutionPerson save(DBInstitutionPerson dbInstitutionPerson) {
 		return institutionPersonDao.save(dbInstitutionPerson);
 	}
@@ -109,6 +113,10 @@ public class InstitutionPersonService {
 
 	public List<DBInstitutionPerson> findByInstitution(DBInstitution institution) {
 		return institutionPersonDao.findByInstitution(institution);
+	}
+
+	public List<DBInstitutionPerson> findStudentsByInstitution(DBInstitution institution) {
+		return institutionPersonDao.findByStudentNotNullAndDeletedFalseAndInstitution(institution);
 	}
 
 	public List<DBInstitutionPerson> findAllIncludingDeleted() {
@@ -383,7 +391,7 @@ public class InstitutionPersonService {
 				String classes = allStudentGroups.stream()
 						.map(DBGroup::getGroupName)
 						.collect(Collectors.joining(", "));
-				result.add(new StudentPasswordChangeDTO(firstname + " " + surname, student.getUsername(), uniLogin, institutions, classes, canChangePassword));
+				result.add(new StudentPasswordChangeDTO(firstname + " " + surname, student.getUsername(), uniLogin, institutions, classes, canChangePassword, student.getPerson().getCivilRegistrationNumber()));
 
 				handledStudentUsernames.add(student.getUsername());
 			}
@@ -394,42 +402,36 @@ public class InstitutionPersonService {
 	}
 
 	public Integer getLevel(String username) {
-		Integer level = null;
 		List<DBInstitutionPerson> people = findByUsernameAndDeletedFalse(username);
 		if (people.isEmpty()) {
 			return null;
 		}
 
-		List<DBGroup> groups = groupService.findByInstitutionIdIn(people.stream()
-				.map(p -> p.getInstitution().getId())
-				.collect(Collectors.toList()));
 		for (DBInstitutionPerson person : people) {
-			if (person.getStudent() != null) {
-				DBGroup mainGroup = groups.stream()
-						.filter(g -> g.getInstitution().getId() == person.getInstitution().getId())
-						.filter(g -> Objects.equals(g.getGroupId(), person.getStudent().getMainGroupId()))
-						.findAny().orElse(null);
-				if (mainGroup != null && mainGroup.getGroupLevel() != null) {
-					try {
-						int currentLevel = Integer.parseInt(mainGroup.getGroupLevel());
-						if (level == null || currentLevel > level) {
-							level = currentLevel;
-						}
-
-					}
-					catch (NumberFormatException ignored) {
-
-					}
-				}
+			Integer level = getLevel(person);
+			if (level != null) {
+				return level;
 			}
 		}
-		return level;
+		return null;
 	}
 
-	public SetPasswordResponse.PasswordStatus changePassword(String username, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+	public Integer getLevel(DBInstitutionPerson institutionPerson) {
+		if (institutionPerson.getStudent() != null && institutionPerson.getStudent().getLevel() != null) {
+			try {
+				return Integer.parseInt(institutionPerson.getStudent().getLevel());
+			} catch (NumberFormatException e) {
+				return null;
+			}
+		}
+
+		return null;
+	}
+
+	public SetPasswordResponse.PasswordStatus changePassword(String username, String cpr, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
 		SetPasswordResponse.PasswordStatus adPasswordStatus = SetPasswordResponse.PasswordStatus.INSUFFICIENT_PERMISSION;
 		if (configuration.getStudentAdministration().isEnabled() && StringUtils.hasLength(username)) {
-			adPasswordStatus = passwordChangeQueueService.attemptPasswordChangeFromUI(username, newPassword);
+			adPasswordStatus = passwordChangeQueueService.attemptPasswordChangeFromUI(username, cpr, newPassword);
 		}
 
 		return adPasswordStatus;
@@ -512,7 +514,7 @@ public class InstitutionPersonService {
 		return new NameDTO(firstname, surname);
 	}
 
-	private List<String> getLevelFiltersAsNumbers(StudentPasswordChangeConfiguration setting) {
+	public List<String> getLevelFiltersAsNumbers(StudentPasswordChangeConfiguration setting) {
 		List<String> levels = new ArrayList<>();
 		if (setting.getFilter() != null && !setting.getFilter().isEmpty()) {
 			List<String> filterYears = Arrays.asList(setting.getFilter().split(","));
@@ -522,7 +524,7 @@ public class InstitutionPersonService {
 		return levels;
 	}
 
-	private List<String> findAdultRoles(DBInstitutionPerson loggedInPersonInstitutionPerson) {
+	public List<String> findAdultRoles(DBInstitutionPerson loggedInPersonInstitutionPerson) {
 		List<String> roles = new ArrayList<>();
 		if (loggedInPersonInstitutionPerson.getEmployee() != null) {
 			roles.addAll(loggedInPersonInstitutionPerson.getEmployee().getRoles().stream().map(r -> r.getEmployeeRole().toString()).collect(Collectors.toList()));
@@ -580,7 +582,7 @@ public class InstitutionPersonService {
 				String classes = findAllClasses(usernamePersonList.getValue(), allGroups).stream()
 						.map(DBGroup::getGroupName)
 						.collect(Collectors.joining(", "));
-				result.add(new StudentPasswordChangeDTO(firstname + " " + surname, username, uniLogin, institutions, classes, true));
+				result.add(new StudentPasswordChangeDTO(firstname + " " + surname, username, uniLogin, institutions, classes, true, student.getPerson().getCivilRegistrationNumber()));
 			}
 		}
 
@@ -702,5 +704,21 @@ public class InstitutionPersonService {
 	private void cleanUpInstitutionPeople() {
 		LocalDateTime xMonthsAgo = LocalDateTime.now().minusMonths(configuration.getDeleteInstitutionPersonAfterMonths());
 		institutionPersonDao.deleteByDeletedTrueAndStilDeletedBefore(xMonthsAgo);
+	}
+
+	public List<PrintStudentDTO> getStudentsInClassForPrint(DBGroup group, boolean withPassword) {
+		List<PrintStudentDTO> result = new ArrayList<>();
+		List<DBInstitutionPerson> students = findStudentsByInstitution(group.getInstitution());
+		for (DBInstitutionPerson student : students) {
+			List<String> groupIds = student.getStudent().getGroupIds().stream().map(DBStudentGroupId::getGroupId).collect(Collectors.toList());
+			if (student.getStudent().getMainGroupId().equals(group.getGroupId()) || groupIds.contains(group.getGroupId())) {
+				if (withPassword) {
+					result.add(new PrintStudentDTO(student, cprPasswordMappingService.getDecryptedPassword(student.getPerson().getCivilRegistrationNumber())));
+				} else {
+					result.add(new PrintStudentDTO(student, null));
+				}
+			}
+		}
+		return result;
 	}
 }

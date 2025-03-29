@@ -14,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -35,7 +36,7 @@ public class InstitutionRestController {
 	private InstitutionPersonService institutionPersonService;
 
 	@PostMapping("/rest/institutions/unlock/{number}")
-	public ResponseEntity<?> createClient(@PathVariable String number) {
+	public ResponseEntity<?> unlockInstitution(@PathVariable String number) {
 		DBInstitution institution = institutionService.findByInstitutionNumber(number);
 
 		if (institution == null) {
@@ -48,6 +49,26 @@ public class InstitutionRestController {
 			settingService.save(setting);
 		}
 
+		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/rest/institutions/stil/{number}")
+	public ResponseEntity<?> approveStilChange(@PathVariable String number) {
+		DBInstitution institution = institutionService.findByInstitutionNumber(number);
+
+		if (institution == null) {
+			return ResponseEntity.badRequest().build();
+		}
+
+		institution.setBypassTooFewPeople(true);
+		institutionService.save(institution);
+
+		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/rest/stil/email")
+	public ResponseEntity<?> setSTILContactEmail(@RequestBody String email) {
+		settingService.setValueForKey(CustomerSetting.STIL_CHANGE_EMAIL.toString(), email);
 		return ResponseEntity.ok().build();
 	}
 

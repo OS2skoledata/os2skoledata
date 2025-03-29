@@ -22,6 +22,7 @@ import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
@@ -41,6 +42,9 @@ public class PasswordChangeQueueService {
 
 	@Autowired
 	private ActiveDirectoryService activeDirectoryService;
+
+	@Autowired
+	private CprPasswordMappingService cprPasswordMappingService;
 
 	private SecretKeySpec secretKey;
 
@@ -62,8 +66,9 @@ public class PasswordChangeQueueService {
 		return passwordChangeQueueDao.save(passwordChangeQueue);
 	}
 
-	public SetPasswordResponse.PasswordStatus attemptPasswordChangeFromUI(String username, String newPassword) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, UnsupportedEncodingException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
-		PasswordChangeQueue change = new PasswordChangeQueue(username, encryptPassword(newPassword));
+	public SetPasswordResponse.PasswordStatus attemptPasswordChangeFromUI(String username, String cpr, String newPassword) throws InvalidKeyException, NoSuchPaddingException, NoSuchAlgorithmException, UnsupportedEncodingException, BadPaddingException, IllegalBlockSizeException, InvalidAlgorithmParameterException {
+		String encryptedPassword = encryptPassword(newPassword);
+		PasswordChangeQueue change = new PasswordChangeQueue(username, encryptedPassword);
 
 		SetPasswordRequest setPasswordRequest = new SetPasswordRequest();
 		setPasswordRequest.setUserId(change.getUsername());
@@ -74,15 +79,29 @@ public class PasswordChangeQueueService {
 			// inform user through UI (but also save result in queue for debugging purposes)
 			case TECHNICAL_ERROR:
 			case INSUFFICIENT_PERMISSION:
+			case UNKNOWN_USER:
 				// FINAL_ERROR prevent any retries on this
 				change.setStatus(ReplicationStatus.FINAL_ERROR);
+				change.setMessage(setPasswordResponse.getMessage());
 				save(change);
 				break;
 			case OK:
+				cprPasswordMappingService.setPassword(cpr, encryptedPassword);
+				change.setStatus(ReplicationStatus.SYNCHRONIZED);
+				change.setMessage(setPasswordResponse.getMessage());
 				save(change);
 				break;
 			// delay replication in case of a timeout
 			case TIMEOUT:
+				change.setStatus(ReplicationStatus.ERROR);
+				change.setMessage(setPasswordResponse.getMessage());
+				if (change.getTts() != null && LocalDateTime.now().minusMinutes(10).isAfter(change.getTts())) {
+					log.error("Replication failed, password change has not been replicated for more than 10 minutes (ID: " + change.getId() + ")");
+					change.setStatus(ReplicationStatus.FINAL_ERROR);
+				}
+				else {
+					log.debug("Password Replication failed, trying again in 1 minute (ID: " + change.getId() + ")");
+				}
 				save(change);
 				break;
 		}

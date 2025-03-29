@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header" />
+<body class="top-navigation">
+	<div id="wrapper">
+		<div id="page-wrapper" class="gray-bg">
+			<div th:replace="fragments/topbar :: topbar (page = 'index')" />
+
+			<div class="wrapper wrapper-content">
+				<div class="row">
+
+					<div class="col-lg-12">
+						<div class="ibox">
+							<div class="ibox-title">
+								<h5><em class="fa fa-lock"></em> &nbsp; <span th:text="#{html.welcome.header}"/></h5>
+							</div>
+							<div class="ibox-content">
+								<div th:utext="#{html.welcome.text}" style="margin-bottom: 40px;"></div>
+							</div>
+						</div>
+					</div>
+					
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<div th:replace="fragments/footer :: scripts" />
+
+	<script th:inline="javascript">
+		/*<![CDATA[*/
+
+		/*[+
+		+]*/
+
+		var token = $("meta[name='_csrf']").attr("content");
+
+		$(document).ready(function(){
+		});
+		
+		/*]]>*/
+	</script>
+</body>
+</html>

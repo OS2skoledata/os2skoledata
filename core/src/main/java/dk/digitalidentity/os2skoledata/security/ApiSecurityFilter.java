@@ -12,6 +12,8 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
+import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -21,6 +23,9 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class ApiSecurityFilter implements Filter {
+
+	private static final String ROLE_API = "ROLE_API_";
+
 	private ClientService clientService;
 
 	public ApiSecurityFilter(ClientService clientService) {
@@ -46,6 +51,19 @@ public class ApiSecurityFilter implements Filter {
 			}
 
 			ArrayList<GrantedAuthority> authorities = new ArrayList<>();
+			switch (client.getAccessRole()) {
+				case SYNC_API_ACCESS:
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.SYNC_API_ACCESS.toString()));
+					break;
+				case PASSWORD_ACCESS:
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.SYNC_API_ACCESS.toString()));
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.PASSWORD_ACCESS.toString()));
+					break;
+			}
+
+			if (authorities.isEmpty()) {
+				unauthorized(response, "Client is missing roles", authHeader);
+			}
 
 			ClientToken token = new ClientToken(client.getName(), client.getApiKey(), authorities);
 			token.setClient(client);

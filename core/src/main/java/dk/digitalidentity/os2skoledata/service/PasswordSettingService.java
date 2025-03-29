@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.PasswordSettingDao;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
@@ -9,6 +10,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import java.io.UnsupportedEncodingException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -31,6 +39,12 @@ public class PasswordSettingService {
 	@Autowired
 	private InstitutionPersonService institutionPersonService;
 
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
+	@Autowired
+	private PasswordChangeQueueService passwordChangeQueueService;
+
 	public record IndskolingPasswordWords(List<String> wordsColumn1, String word1, List<String> wordsColumn2, String word2, List<String> wordsColumn3, String word3) {}
 	public IndskolingPasswordWords getPasswordWords() {
 		List<String> wordsColumn1 = Arrays.asList(WORDS_1.split(","));
@@ -40,6 +54,28 @@ public class PasswordSettingService {
 		Collections.shuffle(wordsColumn2);
 		Collections.shuffle(wordsColumn3);
 		return new IndskolingPasswordWords(wordsColumn1, wordsColumn1.get(random.nextInt(wordsColumn1.size())), wordsColumn2, wordsColumn2.get(random.nextInt(wordsColumn2.size())), wordsColumn3, wordsColumn3.get(random.nextInt(wordsColumn3.size())));
+	}
+
+	public String generateEncryptedPasswordForIndskolingStudent() {
+		if (configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate()) {
+			List<String> wordsColumn1 = Arrays.asList(WORDS_1.split(","));
+			List<String> wordsColumn2 = Arrays.asList(WORDS_2.split(","));
+			List<String> wordsColumn3 = Arrays.asList(WORDS_3.split(","));
+			Collections.shuffle(wordsColumn1);
+			Collections.shuffle(wordsColumn2);
+			Collections.shuffle(wordsColumn3);
+
+			String pw = wordsColumn1.get(random.nextInt(wordsColumn1.size())) + wordsColumn2.get(random.nextInt(wordsColumn2.size())) + wordsColumn3.get(random.nextInt(wordsColumn3.size()));
+
+			try {
+				return passwordChangeQueueService.encryptPassword(pw);
+			}
+			catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidKeyException | UnsupportedEncodingException |
+					BadPaddingException | IllegalBlockSizeException | InvalidAlgorithmParameterException e) {
+				log.error("Failed to encrypt generated indskoling password");
+			}
+		}
+		return null;
 	}
 
 	public List<PasswordSetting> getAllPasswordSettings() {

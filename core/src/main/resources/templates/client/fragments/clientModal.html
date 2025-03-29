@@ -16,6 +16,15 @@
 								<input type="text" id="name" name="name" class="form-control" th:placeholder="#{html.page.client.new.modal.name.placeholder}" autofocus="autofocus" />
 							</div>
 						</div>
+						<div class="form-group row">
+							<label class="col-sm-2 col-form-label" th:text="#{html.entity.client.access}" />
+							<div class="col-sm-8">
+								<select name="accessRole" id="accessRole" class="form-control">
+									<option th:each="access : ${T(dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole).values()}"
+											th:value="${access}" th:text="${access.message}"></option>
+								</select>
+							</div>
+						</div>
 					</form>
 				</div>
 	
@@ -59,7 +68,8 @@
 			};
 			this.postNewClient = function() {
 				var formData = {
-					name : $('#newClientForm #name').val()
+					name : $('#newClientForm #name').val(),
+					accessRole : $("#accessRole").val(),
 				};
 
 				$.ajax({

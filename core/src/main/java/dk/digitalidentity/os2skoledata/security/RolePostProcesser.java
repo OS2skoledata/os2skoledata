@@ -1,22 +1,22 @@
 package dk.digitalidentity.os2skoledata.security;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
-
-import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.config.Constants;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
+import dk.digitalidentity.os2skoledata.service.ClassroomAdminService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
+import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
+import dk.digitalidentity.samlmodule.model.SamlLoginPostProcessor;
+import dk.digitalidentity.samlmodule.model.TokenUser;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
-import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
-import dk.digitalidentity.samlmodule.model.SamlLoginPostProcessor;
-import dk.digitalidentity.samlmodule.model.TokenUser;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 @Component
 public class RolePostProcesser implements SamlLoginPostProcessor {
@@ -29,6 +29,9 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 
 	@Autowired
 	private AuditLogger auditLogger;
+
+	@Autowired
+	private ClassroomAdminService classroomAdminService;
 
 	@Override
 	public void process(TokenUser tokenUser) {
@@ -47,6 +50,11 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 		List<DBInstitutionPerson> people = institutionPersonService.findByUsernameAndDeletedFalse(username);
 		if (people.stream().anyMatch(p -> p.getEmployee() != null || p.getExtern() != null)) {
 			newAuthorities.add(new SamlGrantedAuthority(Constants.SCHOOL_EMPLOYEE));
+		}
+
+		// check if the user is a Google Classroom admin
+		if (classroomAdminService.isClassroomAdmin(username)) {
+			newAuthorities.add(new SamlGrantedAuthority(Constants.GOOGLE_CLASSROOM_ADMIN));
 		}
 
 		// if none of the above roles, check if user is parent

@@ -29,7 +29,7 @@
 						<a role="button" th:href="@{/ui/institutions/teamadmins}"><span th:text="#{html.navbar.teamadmins}"></span></a>
 					</li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'config')} ? 'active' : ''">
+					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} OR @{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'config')} ? 'active' : ''">
 						<a role="button" th:href="@{/ui/config}"><span th:text="#{html.navbar.config}"></span></a>
 					</li>
 
@@ -41,8 +41,16 @@
 						<a role="button" th:href="@{/ui/students/parents/changepassword}"><span th:text="#{html.navbar.students}"></span></a>
 					</li>
 
+					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}" sec:authorize="hasRole('ROLE_SCHOOL_EMPLOYEE')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'groups')} ? 'active' : ''">
+						<a role="button" th:href="@{/ui/students/groups}"><span th:text="#{html.navbar.groups}"></span></a>
+					</li>
+
 					<li th:if="@{__${@OS2SkoleDataConfiguration.ghostAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'ghosts')} ? 'active' : ''">
 						<a role="button" th:href="@{/ui/keepalive}"><span th:text="#{html.navbar.ghosts}"></span></a>
+					</li>
+
+					<li th:if="@{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" sec:authorize="hasRole('ROLE_GOOGLE_CLASSROOM_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'classroom')} ? 'active' : ''">
+						<a role="button" th:href="@{/ui/classrooms}"><span th:text="#{html.navbar.classrooms}"></span></a>
 					</li>
 				</ul>
 
