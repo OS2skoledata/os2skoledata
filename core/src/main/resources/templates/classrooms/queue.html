@@ -126,8 +126,29 @@
 
         function ClassroomService() {
 		    this.init = function() {
-		        $("#classroomActionCreateBtn").on("click", classroomService.openCreateModal);
+                table = $('#googleClassroomConfiguration').DataTable({
+                    "destroy": true,
+                    "ordering": true,
+                    "info": true,
+                    "pageLength": 20,
+                    "lengthChange": false,
+                    "bSort": false,
+                    "responsive": true,
+                    "language": {
+                        "search":	   "Søg",
+                        "lengthMenu":   "_MENU_ rækker per side",
+                        "info":		 "Viser _START_ til _END_ af _TOTAL_ rækker",
+                        "zeroRecords":  "Ingen data...",
+                        "infoEmpty":	"Henter data...",
+                        "infoFiltered": "(ud af _MAX_ klasser)",
+                        "paginate": {
+                            "previous": "Forrige",
+                            "next": "Næste"
+                        }
+                    }
+                });
 
+		        $("#classroomActionCreateBtn").on("click", classroomService.openCreateModal);
 		        $("#classroomAction").on("change", classroomService.actionChanged);
 		    }
 

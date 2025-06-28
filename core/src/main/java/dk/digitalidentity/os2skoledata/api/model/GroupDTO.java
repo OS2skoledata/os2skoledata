@@ -27,6 +27,7 @@ public class GroupDTO {
 	private String line;
 	private String institutionNumber;
 	private String institutionName;
+	private String institutionAbbreviation;
 	private boolean institutionLocked;
 	private String institutionGoogleWorkspaceId;
 	private String studentInstitutionGoogleWorkspaceId;
@@ -38,4 +39,6 @@ public class GroupDTO {
 	private String groupGoogleWorkspaceEmail;
 	private String groupOnlyStudentsGoogleWorkspaceEmail;
 	private String azureTeamId;
+	private String currentYearGWGroupIdentifier;
+	private String currentYearGWFolderIdentifier;
 }

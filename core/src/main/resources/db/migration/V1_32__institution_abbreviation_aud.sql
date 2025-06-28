@@ -1,0 +1,1 @@
+ALTER TABLE institution_aud ADD abbreviation VARCHAR(255) NULL;

@@ -10,6 +10,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string GroupLevel { get; set; }
         public string InstitutionNumber { get; set; }
         public string InstitutionName { get; set; }
+        public string InstitutionAbbreviation { get; set; }
         public string InstitutionGoogleWorkspaceId { get; set; }
         public bool InstitutionLocked { get; set; }
         public string GoogleWorkspaceId { get; set; }
@@ -19,5 +20,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string GroupGoogleWorkspaceEmail { get; set; }
         public string GroupOnlyStudentsGoogleWorkspaceEmail { get; set; }
         public int StartYear { get; set; }
+        public string CurrentYearGWGroupIdentifier { get; set; }
+        public string CurrentYearGWFolderIdentifier { get; set; }
     }
 }

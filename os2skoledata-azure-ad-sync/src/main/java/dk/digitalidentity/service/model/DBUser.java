@@ -42,6 +42,7 @@ public class DBUser {
 	private String studentMainGroupLevelForInstitution;
 	private boolean setPasswordOnCreate;
 	private String password;
+	private String reservedUsername;
 
 	// not from api. Used to securityGroup and team sync in full sync
 	private String azureId;

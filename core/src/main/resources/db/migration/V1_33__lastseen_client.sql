@@ -1,0 +1,1 @@
+ALTER TABLE client ADD last_Seen TIMESTAMP NULL;

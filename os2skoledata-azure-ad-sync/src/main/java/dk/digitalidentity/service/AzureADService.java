@@ -1,6 +1,7 @@
 package dk.digitalidentity.service;
 
-import com.azure.identity.ClientSecretCredential;
+import com.azure.core.credential.TokenCredential;
+import com.azure.identity.ClientCertificateCredentialBuilder;
 import com.azure.identity.ClientSecretCredentialBuilder;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -8,6 +9,11 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonPrimitive;
 import com.microsoft.graph.authentication.TokenCredentialAuthProvider;
+import com.microsoft.graph.httpcore.AuthenticationHandler;
+import com.microsoft.graph.httpcore.RedirectHandler;
+import com.microsoft.graph.httpcore.RetryHandler;
+import com.microsoft.graph.httpcore.middlewareoption.RetryOptions;
+import com.microsoft.graph.logger.DefaultLogger;
 import com.microsoft.graph.models.AadUserConversationMember;
 import com.microsoft.graph.models.ConversationMember;
 import com.microsoft.graph.models.DirectoryObject;
@@ -43,10 +49,8 @@ import dk.digitalidentity.service.model.enums.EntityType;
 import dk.digitalidentity.service.model.enums.Role;
 import dk.digitalidentity.service.model.enums.SetFieldType;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.logging.HttpLoggingInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -75,7 +79,7 @@ public class AzureADService {
 	@Autowired
 	private OS2skoledataService os2skoledataService;
 
-	private ClientSecretCredential clientSecretCredential;
+	private TokenCredential clientCredential;
 	private GraphServiceClient<Request> appClient;
 	private GraphServiceClient<Request> appClientWithoutLogging;
 
@@ -85,8 +89,19 @@ public class AzureADService {
 	private Gson gson = null;
 
 	public void initializeClient() {
-		if (clientSecretCredential == null) {
-			clientSecretCredential = new ClientSecretCredentialBuilder()
+		if (config.getAzureAd().isUsingPEMCertificate()
+				&& config.getAzureAd().getCertificatePath() != null
+				&& clientCredential == null
+		) {
+			// Using PEM certificate for credentials
+			clientCredential = new ClientCertificateCredentialBuilder()
+					.clientId(config.getAzureAd().getClientID())
+					.tenantId(config.getAzureAd().getTenantID())
+					.pemCertificate(config.getAzureAd().getCertificatePath())
+					.build();
+		} else if (clientCredential == null) {
+			// Using secret for credentials
+			clientCredential = new ClientSecretCredentialBuilder()
 					.clientId(config.getAzureAd().getClientID())
 					.clientSecret(config.getAzureAd().getClientSecret())
 					.tenantId(config.getAzureAd().getTenantID())
@@ -96,15 +111,15 @@ public class AzureADService {
 		if (appClient == null) {
 			List<String> scopes = new ArrayList<>();
 			scopes.add("https://graph.microsoft.com/.default");
-			final TokenCredentialAuthProvider authProvider = new TokenCredentialAuthProvider(scopes, clientSecretCredential);
-			final TokenCredentialAuthProvider authProviderNoLog = new TokenCredentialAuthProvider(scopes, clientSecretCredential);
-
-			HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor();
-			loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.NONE);
-			loggingInterceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+			final TokenCredentialAuthProvider authProvider = new TokenCredentialAuthProvider(scopes, clientCredential);
+			final TokenCredentialAuthProvider authProviderNoLog = new TokenCredentialAuthProvider(scopes, clientCredential);
 
 			OkHttpClient okHttpClient = new OkHttpClient.Builder()
-					.addInterceptor(loggingInterceptor)
+					.addInterceptor(new RetryHandler(
+							new DefaultLogger(), new RetryOptions(RetryOptions.DEFAULT_SHOULD_RETRY, 10, 2))
+					)
+					.addInterceptor(new RedirectHandler())
+					.addInterceptor(new AuthenticationHandler(authProviderNoLog))
 					.build();
 
 			appClient = GraphServiceClient.builder()
@@ -113,6 +128,7 @@ public class AzureADService {
 
 			appClientWithoutLogging = GraphServiceClient.builder().httpClient(okHttpClient)
 					.authenticationProvider(authProviderNoLog)
+					.logger(new AzureLogger())
 					.buildClient();
 		}
 
@@ -437,28 +453,7 @@ public class AzureADService {
 		if (!retry) {
 			return appClient.groups(id).buildRequest().get();
 		} else {
-			// will throw exception if null. We need to try again - it takes som time after the team is created until the group is created
-			int count = 0;
-			int maxTries = 10;
-			while(true) {
-				try {
-					log.info("getGroup attempt: " + (count + 1));
-					return appClientWithoutLogging.groups(id).buildRequest().get();
-				} catch (Exception e) {
-					// handle exception
-					if (++count == maxTries) {
-						throw e;
-					}
-
-					try {
-						log.info("getGroup: sleep for 2 sec");
-						Thread.sleep(2000);
-					} catch (InterruptedException ie) {
-						Thread.currentThread().interrupt();
-						throw new RuntimeException("Retry GetGroup interrupted", ie);
-					}
-				}
-			}
+			return appClientWithoutLogging.groups(id).buildRequest().get();
 		}
 	}
 
@@ -689,7 +684,7 @@ public class AzureADService {
 			changes = true;
 		}
 		if (match.mail == null || !match.mail.equals(user.getUsername() + "@" + config.getSyncSettings().getDomain())) {
-			userToUpdate.userPrincipalName = user.getUsername() + "@" + config.getSyncSettings().getDomain();
+			userToUpdate.mail = user.getUsername() + "@" + config.getSyncSettings().getDomain();
 			log.info("Will update mail on user with username " + user.getUsername() + " to " + user.getUsername() + "@" + config.getSyncSettings().getDomain());
 			changes = true;
 		}
@@ -813,7 +808,8 @@ public class AzureADService {
 			if (!global && institution != null) {
 				name = name
 					.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-					.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+					.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+					.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 			}
 		}
 
@@ -910,7 +906,7 @@ public class AzureADService {
 				securityGroupIds.add(globalLevelGroup.id);
 			}
 		}
-		
+
 		log.info("Finished handling global security groups");
 	}
 
@@ -1032,21 +1028,24 @@ public class AzureADService {
 				if (config.getSyncSettings().getNameStandards().getAllInInstitutionSecurityGroupNameStandard() != null) {
 					name = config.getSyncSettings().getNameStandards().getAllInInstitutionSecurityGroupNameStandard()
 							.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+							.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 				}
 				break;
 			case "EMPLOYEES":
 				if (config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionSecurityGroupNameStandard() != null) {
 					name = config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionSecurityGroupNameStandard()
 							.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+							.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 				}
 				break;
 			case "STUDENTS":
 				if (config.getSyncSettings().getNameStandards().getAllStudentsInInstitutionSecurityGroupNameStandard() != null) {
 					name = config.getSyncSettings().getNameStandards().getAllStudentsInInstitutionSecurityGroupNameStandard()
 							.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+							.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 				}
 				break;
 			default:
@@ -1069,7 +1068,8 @@ public class AzureADService {
 				if (config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionTeamNameStandard() != null) {
 					name = config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionTeamNameStandard()
 							.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+							.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 				}
 				break;
 			default:
@@ -1090,7 +1090,8 @@ public class AzureADService {
 				if (config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionTeamMailStandard() != null) {
 					name = config.getSyncSettings().getNameStandards().getAllEmployeesInInstitutionTeamMailStandard()
 							.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
-							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber());
+							.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+							.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "");
 				}
 				break;
 			default:
@@ -1142,6 +1143,7 @@ public class AzureADService {
 				name = normalStandard
 						.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
 						.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+						.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "")
 						.replace("{CLASS_NAME}", currentClass.getGroupName())
 						.replace("{CLASS_ID}", currentClass.getGroupId())
 						.replace("{CLASS_LEVEL}", currentClass.getGroupLevel())
@@ -1158,6 +1160,7 @@ public class AzureADService {
 				name = nameStandard
 						.replace("{INSTITUTION_NAME}", institution.getInstitutionName())
 						.replace("{INSTITUTION_NUMBER}", institution.getInstitutionNumber())
+						.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "")
 						.replace("{CLASS_NAME}", currentClass.getGroupName())
 						.replace("{CLASS_ID}", currentClass.getGroupId())
 						.replace("{CLASS_LEVEL}", currentClass.getGroupLevel());
@@ -1256,8 +1259,11 @@ public class AzureADService {
 		Group matchGroup = null;
 		boolean hasPrefix = false;
 		if (teamId != null) {
-			matchGroup = getGroup(teamId, false);
-			matchTeam = getTeam(teamId);
+			// some employees might delete teams manually - then recreate
+			ensureTeamExists(teamId);
+
+			matchGroup = getGroup(teamId, true);
+			matchTeam = getTeam(teamId, true);
 		}
 
 		String id = null;
@@ -1329,6 +1335,19 @@ public class AzureADService {
 		return matchTeam;
 	}
 
+	private void ensureTeamExists(String teamId) {
+		try {
+			DirectoryObject deletedItem = appClientWithoutLogging.directory().deletedItems(teamId).buildRequest().get();
+
+			if (deletedItem instanceof Group) {
+				// restore group
+				appClientWithoutLogging.directory().deletedItems(teamId).restore().buildRequest().post();
+			}
+		} catch (Exception e) {
+			// ignore if not in deletedItems
+		}
+	}
+
 	private String handleCreateTeamAndGroup(String mailNickmame, String name, String template, List<DBUser> owners) {
 		Team newTeam = new Team();
 		newTeam.description = "ManagedByOS2skoledata";
@@ -1396,7 +1415,7 @@ public class AzureADService {
 			LocalDate today = LocalDate.now();
 			for (Team lightTeam : allTeamsManagedByOS2skoledata) {
 				// we need to fetch the team because isArchived can not be returned in the bulk getTeams
-				Team team = getTeam(lightTeam.id);
+				Team team = getTeam(lightTeam.id, false);
 
 				if (Boolean.TRUE.equals(team.isArchived)) {
 					try {
@@ -1517,12 +1536,11 @@ public class AzureADService {
 		log.info("Reactivated team with id " + teamId);
 	}
 
-	public Team getTeam(String id) {
-		try {
+	public Team getTeam(String id, boolean retry) {
+		if (!retry) {
 			return appClient.teams(id).buildRequest().get();
-		} catch (Exception ex) {
-			// throws exception if not found
-			return null;
+		} else {
+			return appClientWithoutLogging.teams(id).buildRequest().get();
 		}
 	}
 
@@ -1760,4 +1778,5 @@ public class AzureADService {
 			return Integer.MIN_VALUE;
 		}
 	}
+
 }

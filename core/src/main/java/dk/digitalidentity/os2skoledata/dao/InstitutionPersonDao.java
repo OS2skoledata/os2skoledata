@@ -17,8 +17,10 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
 	DBInstitutionPerson findById(long id);
 	DBInstitutionPerson findByIdAndDeletedFalse(long id);
 	List<DBInstitutionPerson> findAll();
+	List<DBInstitutionPerson> findByEmployeeNotNullOrExternNotNull();
 	List<DBInstitutionPerson> findByDeletedFalse();
 	List<DBInstitutionPerson> findByInstitution(DBInstitution institution);
+	List<DBInstitutionPerson> findByInstitutionAndEmployeeNotNullOrExternNotNull(DBInstitution institution);
 	List<DBInstitutionPerson> findByIdIn(List<Long> ids);
 	List<DBInstitutionPerson> findByPersonCivilRegistrationNumber(String civilRegistrationNumber);
     List<DBInstitutionPerson> findByUsernameAndDeletedFalse(String username);
@@ -26,6 +28,7 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
     List<DBInstitutionPerson> findByStudentNotNullAndDeletedFalseAndInstitutionIdIn(List<Long> institutionIds);
 	void deleteByDeletedTrueAndStilDeletedBefore(LocalDateTime before);
 	List<DBInstitutionPerson> findByStudentNotNullAndDeletedFalseAndInstitution(DBInstitution institution);
+	List<DBInstitutionPerson> findByPersonCivilRegistrationNumberAndInstitution(String civilRegistrationNumber, DBInstitution institution);
 
 	// search in all institutions
 	@Query("SELECT ip FROM DBInstitutionPerson ip JOIN ip.person p WHERE " +
@@ -101,5 +104,4 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
 	@Modifying
 	@Query(value = "delete from institutionperson_aud where rev <= :rev", nativeQuery = true)
 	void deleteInstitutionPersonAud(int rev);
-
 }

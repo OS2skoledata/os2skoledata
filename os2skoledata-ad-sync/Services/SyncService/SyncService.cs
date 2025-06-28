@@ -248,18 +248,25 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 // find available username and create
 
                 string username = null;
-                if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+                if (user.ReservedUsername != null && !activeDirectoryService.AccountExists(user.ReservedUsername))
+                {
+                    // we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+                    username = user.ReservedUsername;
+                }
+                else if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                 {
                     bool exists = activeDirectoryService.AccountExists(user.StilUsername);
                     if (!exists)
                     {
                         username = user.StilUsername;
                         AddUsernameToMap(user.StilUsername, usernameMap);
-                    } else
+                    }
+                    else
                     {
                         username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
                     }
-                } else
+                }
+                else
                 {
                     username = activeDirectoryService.GenerateUsername(user.Firstname, usernameMap);
                 }
@@ -466,7 +473,12 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 // find available username and create
                 string username = null;
-                if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+                if (user.ReservedUsername != null && !activeDirectoryService.AccountExists(user.ReservedUsername))
+                {
+                    // we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+                    username = user.ReservedUsername;
+                }
+                else if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                 {
                     bool exists = activeDirectoryService.AccountExists(user.StilUsername);
                     if (!exists)
@@ -569,7 +581,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 if (delete && entry != null)
                 {
-                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, group.InstitutionName, group.InstitutionNumber, null, null, null, 0, null));
+                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, group.InstitutionName, group.InstitutionNumber, group.InstitutionAbbreviation, null, null, null, 0, null));
                 }
 
             }
@@ -606,7 +618,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 if (delete && entry != null)
                 {
-                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, null, null, null, 0, null));
+                    activeDirectoryService.MoveToDeletedOUs(entry, activeDirectoryService.GetNameForOU(true, institution.InstitutionName, institution.InstitutionNumber, institution.Abbreviation, null, null, null, 0, null));
                 }
 
             }

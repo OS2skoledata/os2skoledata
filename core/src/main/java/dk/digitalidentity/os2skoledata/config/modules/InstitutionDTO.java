@@ -9,4 +9,5 @@ import lombok.Setter;
 public class InstitutionDTO {
 	private String institutionNumber;
 	private InstitutionType type;
+	private String abbreviation;
 }

@@ -53,12 +53,20 @@ public class SettingService {
 	}
 
 	public String getStringValueByKey(CustomerSetting customerSetting) {
+		return getStringValueByKey(customerSetting.toString(), customerSetting.getDefaultValue());
+	}
+
+	public String getStringValueByKey(String customerSetting) {
+		return getStringValueByKey(customerSetting, null);
+	}
+
+	public String getStringValueByKey(String customerSetting, String defaultValue) {
 		Setting setting = getByKey(customerSetting);
 		if (setting != null) {
 			return setting.getValue();
 		}
 
-		return customerSetting.getDefaultValue();
+		return defaultValue;
 	}
 
 	public Setting getByKey(CustomerSetting key) {

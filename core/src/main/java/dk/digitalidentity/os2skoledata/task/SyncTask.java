@@ -10,6 +10,8 @@ import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.service.SyncService;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.List;
+
 @Slf4j
 @Component
 @EnableScheduling
@@ -31,7 +33,11 @@ public class SyncTask {
 
 		log.info("Running STIL synchronization");
 
-		for (InstitutionDTO institutionDTO : configuration.getInstitutions()) {
+		List<InstitutionDTO> institutionDTOList = configuration.getInstitutions();
+
+		syncService.deleteInstitutions(institutionDTOList);
+
+		for (InstitutionDTO institutionDTO : institutionDTOList) {
 			syncService.sync(institutionDTO);
 		}
 

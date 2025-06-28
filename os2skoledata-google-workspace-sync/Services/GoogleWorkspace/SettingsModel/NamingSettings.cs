@@ -9,8 +9,6 @@
         public string ClassOUNameStandardNoClassYear { get; set; }
         public string InstitutionOUNameStandard { get; set; }
         public string GlobalEmployeeDriveName { get; set; }
-        public string AllInInstitutionDriveNameStandard { get; set; }
-        public string AllStudentsInInstitutionDriveNameStandard { get; set; }
         public string AllEmployeesInInstitutionDriveNameStandard { get; set; }
         public string ClassDriveNameStandard { get; set; }
         public string ClassDriveNameStandardNoClassYear { get; set; }
@@ -27,10 +25,16 @@
         public string GlobalEmployeeGroupName { get; set; }
         public string SchoolOUName { get; set; }
         public string DaycareOUName { get; set; }
+        public string FUOUName { get; set; }
         public string InstitutitonStaffGroupEmailTypeName { get; set; } = "staff";
         public bool OnlyUseYearInClassGroupEmail { get; set; } = false;
         public string SecurityGroupForLevelNameStandard { get; set; }
         public string GlobalSecurityGroupForLevelNameStandard { get; set; }
+        public string InstitutionDriveNameStandard { get; set; }
+        public string YearlyClassGroupOnlyStudentsNameStandard { get; set; }
+        public string YearlyClassGroupOnlyStudentsNameStandardNoClassYear { get; set; }
+        public string YearlyClassFolderNameStandard { get; set; }
+        public string YearlyClassFolderNameStandardNoClassYear { get; set; }
 
     }
 }

@@ -57,4 +57,6 @@ public class InstitutionPersonDTO {
 	private List<ContactCardDTO> contactCards;
 	private boolean setPasswordOnCreate;
 	private String password;
+	private String reservedUsername;
+	private InstitutionDTO primaryInstitution;
 }

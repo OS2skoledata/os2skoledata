@@ -10,7 +10,7 @@
             <div class="row">
 
                 <div class="col-lg-12">
-                    <div class="ibox" th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}">
+                    <div class="ibox" th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}">
                         <div class="ibox-title" style="line-height: 40px;">
                             <h5><em class="fa fa-cogs"></em> &nbsp; <span th:text="#{html.config.students.header}"></span></h5>
                             <div class="ibox-tools">
@@ -55,6 +55,46 @@
                     </div>
 
                     <div class="ibox" th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}">
+                        <div class="ibox-title" style="line-height: 40px;">
+                            <h5><em class="fa fa-users"></em> &nbsp; <span th:text="#{html.config.passwordAdmin.header}"></span></h5>
+                            <div class="ibox-tools">
+                                <button id="createPasswordAdminBtn" type="button" class="btn btn-lg btn-primary" style="width:auto; margin-right:10px">
+                                    <em class="fa fa-plus"></em>
+                                    <span th:text="#{html.control.button.create}"></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="ibox-content">
+                            <p th:text="#{html.config.passwordAdmin.explainer}"></p>
+                            <p><b th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}" th:text="#{html.config.password.explainer.classListsOnly}"></b></p>
+
+                            <h4 th:text="#{html.config.passwordAdmin.tableheader}"></h4>
+                            <div class="table-responsive">
+                                <table id="passwordAdmins" class="table table-striped table-hover">
+                                    <thead>
+                                    <tr>
+                                        <th th:text="#{html.config.passwordAdmin.username}"></th>
+                                        <th th:text="#{html.config.passwordAdmin.institutions}"></th>
+                                        <th style="width: 100px;" th:text="#{html.control.operations}"></th>
+                                    </tr>
+                                    </thead>
+
+                                    <tbody>
+                                    <tr th:each="admin : ${passwordAdmins}">
+                                        <td th:text="${admin.username}" />
+                                        <td th:text="${admin.institutions}" />
+                                        <td>
+                                            <em class="fa fa-times deletePasswordAdminBtn" th:attr="data-id=${admin.id}"></em>
+                                        </td>
+                                    </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ibox" th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}">
                         <div class="ibox-title">
                             <h5><em class="fa fa-cogs"></em> &nbsp; <span th:text="#{html.config.password.header}"></span></h5>
                         </div>
@@ -227,7 +267,43 @@
         </div>
     </div>
     <!-- classroom admin modal end -->
+
+    <!-- password admin modal -->
+    <div class="modal fade" id="modal-passwordAdmin" role="dialog">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 th:text="#{html.config.passwordAdmin.modal.title}"></h4>
+                    <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">×</span><span class="sr-only" th:text="#{html.control.button.cancel}"></span></button>
+                </div>
+
+                <div class="modal-body">
+                    <div class="form-group row">
+                        <label class="col-lg-2 col-form-label" for="passwordAdminUsername" th:text="#{html.config.passwordAdmin.username}" />
+                        <div class="col-lg-8">
+                            <input id="passwordAdminUsername" class="form-control">
+                        </div>
+                    </div>
+                    <div class="form-group col-lg-12 row">
+                        <b th:text="#{html.config.passwordAdmin.modal.institution}"></b>
+                        <div class="col-lg-12" th:each="institution : ${institutions}">
+                            <input type="checkbox" class="i-checks passwordAdminInstitutionCheckbox" alt="checkbox" th:id="${institution.id}" th:value="${institution.id}">
+                            &nbsp;
+                            <label class="col-form-label" th:text="${institution.institutionName}" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" onclick="passwordAdminService.save();" th:text="#{html.control.button.create}"></button>
+                    <button type="button" class="btn btn-danger" data-dismiss="modal" th:text="#{html.control.button.cancel}"></button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- password admin modal end -->
 </div>
+
 
 <div th:replace="fragments/footer :: scripts (datatables = true, checkbox = true)" />
 <script th:inline="javascript">
@@ -239,11 +315,10 @@
             var successMessage = [[#{html.messages.saved}]];
             var errorMessage = [[#{html.messages.error}]];
             var passwordSettings = [[${passwordSettings}]];
-
 		+]*/
 
         var token = $("meta[name='_csrf']").attr("content");
-		var configService, passwordSettingsService, classroomService;
+		var configService, passwordSettingsService, classroomService, passwordAdminService;
 		var selectedCheckboxes = [];
 		$(document).ready(function(){
 			configService = new ConfigService();
@@ -254,6 +329,10 @@
 
 			classroomService = new ClassroomService();
 			classroomService.init();
+
+			passwordAdminService = new PasswordAdminService();
+			passwordAdminService.init();
+
 		});
 
 		function PasswordSettingsService() {
@@ -510,6 +589,74 @@
                     }
                 });
 			}
+        }
+
+        function PasswordAdminService() {
+            this.init = function() {
+		        $(".deletePasswordAdminBtn").on("click", function() {
+		            passwordAdminService.deleteAdmin($(this));
+		        });
+
+		        $("#createPasswordAdminBtn").on("click", passwordAdminService.openCreateModal);
+		    }
+
+		    this.openCreateModal = function() {
+		        $("#passwordAdminUsername").val("");
+		        $('.passwordAdminInstitutionCheckbox').prop('checked', false).iCheck('update');
+		        $("#modal-passwordAdmin").modal("show");
+		    }
+
+			this.deleteAdmin = function(elem) {
+                var id = elem.data("id");
+
+                $.ajax({
+                    contentType: 'application/json',
+                    url: "/rest/config/passwordadmin/" + id + "/delete",
+                    method : "DELETE",
+                    headers: {
+                        'X-CSRF-TOKEN': token
+                    },
+                    error: function(response) {
+                        toastr.error(response.responseText);
+                    },
+                    success: function(response) {
+                        window.location.reload();
+                    }
+                });
+			}
+
+			this.save = function(elem) {
+                const username = $("#passwordAdminUsername").val();
+                let institutionIds = passwordAdminService.getCheckedCheckboxes();
+
+                body = {
+                    "institutionIds": institutionIds,
+                    "username": username
+                };
+
+                $.ajax({
+                    contentType: 'application/json',
+                    url: "/rest/config/passwordadmin/save",
+                    method : "POST",
+                    headers: {
+                        'X-CSRF-TOKEN': token
+                    },
+                    data: JSON.stringify(body),
+                    error: function(response) {
+                        toastr.error(response.responseText);
+                    },
+                    success: function(response) {
+                        $("#modal-passwordAdmin").modal("hide");
+                        window.location.reload();
+                    }
+                });
+			}
+
+			this.getCheckedCheckboxes = function() {
+                return $('.passwordAdminInstitutionCheckbox:checked').map(function () {
+                    return this.value;
+                }).get();
+            }
         }
 
 		/*]]>*/

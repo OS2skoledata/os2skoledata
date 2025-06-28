@@ -2,6 +2,7 @@ package dk.digitalidentity.os2skoledata.service;
 
 import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
 import dk.digitalidentity.os2skoledata.api.model.enums.PersonRole;
+import dk.digitalidentity.os2skoledata.config.Constants;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.controller.mvc.enums.SchoolYear;
 import dk.digitalidentity.os2skoledata.dao.InstitutionPersonDao;
@@ -12,6 +13,7 @@ import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBRole;
 import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.PasswordAdmin;
 import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
@@ -93,20 +95,18 @@ public class InstitutionPersonService {
 	@Autowired
 	private CprPasswordMappingService cprPasswordMappingService;
 
+	@Autowired
+	private PasswordAdminService passwordAdminService;
+
 	public DBInstitutionPerson save(DBInstitutionPerson dbInstitutionPerson) {
+		dbInstitutionPerson.setLastModified(LocalDateTime.now());
 		return institutionPersonDao.save(dbInstitutionPerson);
 	}
 
-	// TODO: vil gerne at findAll() faktisk finder alle, men at man explicit kan bede om ikke at få slettede
 	public DBInstitutionPerson findByLocalPersonIdIncludingDeleted(String localPersonId, String institutionNumber) {
 		return institutionPersonDao.findByLocalPersonIdAndInstitutionInstitutionNumber(localPersonId, institutionNumber);
 	}
 	
-	// TODO: vil gerne at findAll() faktisk finder alle, men at man explicit kan bede om ikke at få slettede
-	public DBInstitutionPerson findByLocalPersonIdAndInstitutionNumber(String localPersonId, String institutionNumber) {
-		return institutionPersonDao.findByLocalPersonIdAndDeletedFalseAndInstitutionInstitutionNumber(localPersonId, institutionNumber);
-	}
-
 	public DBInstitutionPerson findByIdAndNotDeleted(long id) {
 		return institutionPersonDao.findByIdAndDeletedFalse(id);
 	}
@@ -115,12 +115,20 @@ public class InstitutionPersonService {
 		return institutionPersonDao.findByInstitution(institution);
 	}
 
+	public List<DBInstitutionPerson> findEmployeeOrExternalByInstitution(DBInstitution institution) {
+		return institutionPersonDao.findByInstitutionAndEmployeeNotNullOrExternNotNull(institution);
+	}
+
 	public List<DBInstitutionPerson> findStudentsByInstitution(DBInstitution institution) {
 		return institutionPersonDao.findByStudentNotNullAndDeletedFalseAndInstitution(institution);
 	}
 
 	public List<DBInstitutionPerson> findAllIncludingDeleted() {
 		return institutionPersonDao.findAll();
+	}
+
+	public List<DBInstitutionPerson> findAllEmployeesAndExternalsIncludingDeleted() {
+		return institutionPersonDao.findByEmployeeNotNullOrExternNotNull();
 	}
 
 	public List<DBInstitutionPerson> findAllNotDeleted() {
@@ -141,6 +149,10 @@ public class InstitutionPersonService {
 
 	public List<DBInstitutionPerson> findByPersonCivilRegistrationNumber(String civilRegistrationNumber) {
 		return institutionPersonDao.findByPersonCivilRegistrationNumber(civilRegistrationNumber);
+	}
+
+	public List<DBInstitutionPerson> findByPersonCivilRegistrationNumberAndInstitution(String civilRegistrationNumber, DBInstitution institution) {
+		return institutionPersonDao.findByPersonCivilRegistrationNumberAndInstitution(civilRegistrationNumber, institution);
 	}
 
 	public PersonRole findGlobalRole(DBInstitutionPerson person, List<DBInstitutionPerson> matchingPeople) {
@@ -245,129 +257,155 @@ public class InstitutionPersonService {
 	public List<StudentPasswordChangeDTO> getStudentsThatPasswordCanBeChangedOnByPerson() {
 		List<StudentPasswordChangeDTO> result = new ArrayList<>();
 		String username = SecurityUtil.getUserId();
-		List<DBInstitutionPerson> adultInstitutionPeople = findByUsernameAndDeletedFalse(username).stream()
-				.filter(p -> p.getEmployee() != null || p.getExtern() != null)
-				.collect(Collectors.toList());
-		List<StudentPasswordChangeConfiguration> configurations = studentPasswordChangeConfigurationService.findAll();
+		if (SecurityUtil.hasRole(Constants.PASSWORD_ADMIN)) {
+			PasswordAdmin passwordAdmin = passwordAdminService.getByUsername(username);
+			if (passwordAdmin != null) {
+				List<DBInstitutionPerson> students = institutionPersonDao.findByStudentNotNullAndDeletedFalseAndInstitutionIdIn(passwordAdmin.getInstitutions().stream().map(i -> i.getId()).collect(Collectors.toList()));
+				List<DBGroup> groups = groupService.findByInstitutionIdIn(passwordAdmin.getInstitutions().stream().map(DBInstitution::getId).collect(Collectors.toList()));
+				Set<String> handledStudentUsernames = new HashSet<>();
 
-		// no roles that allows changing password or affiliation to students - well, no go then
-		if (adultInstitutionPeople.isEmpty()) {
-			return result;
-		}
+				for (DBInstitutionPerson student : students) {
+					// a student can be in multiple institutions, but we only want to show the student in the list once
+					List<DBInstitutionPerson> studentsWithSameUsername = students.stream()
+							.filter(s -> Objects.equals(s.getUsername(), student.getUsername()))
+							.collect(Collectors.toList());
+					List<DBGroup> allStudentGroups = new ArrayList<>();
 
-		// find all groups from the same institutions that the teacher belongs to
-		List<DBGroup> groups = groupService.findByInstitutionIdIn(adultInstitutionPeople.stream()
-				.map(p -> p.getInstitution().getId())
-				.collect(Collectors.toList()));
-
-		// find all students from the same institutions that the teacher belongs to
-		List<DBInstitutionPerson> students = institutionPersonDao.findByStudentNotNullAndDeletedFalseAndInstitutionIdIn(adultInstitutionPeople.stream().map(p -> p.getInstitution().getId()).collect(Collectors.toList()));
-		Set<String> handledStudentUsernames = new HashSet<>();
-		for (DBInstitutionPerson student : students) {
-
-			// a student can be in multiple institutions, but we only want to show the student in the list once
-			List<DBInstitutionPerson> studentsWithSameUsername = students.stream()
-					.filter(s -> Objects.equals(s.getUsername(), student.getUsername()))
-					.collect(Collectors.toList());
-			List<DBGroup> allStudentGroups = new ArrayList<>();
-
-			// if username == null we have not handled the user in AD yet
-			if (!StringUtils.hasLength(student.getUsername()) || handledStudentUsernames.contains(student.getUsername())) {
-				continue;
-			}
-
-			// iterate over all roles that the employee has, to check if one allows access to this student
-			boolean canChangePassword = false;
-			boolean shouldBeAdded = false;
-			for (DBInstitutionPerson loggedInPersonInstitutionPerson : adultInstitutionPeople) {
-
-				// groups for adult institution person
-				List<String> groupIdsForEmployee = loggedInPersonInstitutionPerson.getEmployee() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList());
-				List<String> groupIdsForExternal = loggedInPersonInstitutionPerson.getExtern() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getExtern().getGroupIds().stream().map(DBExternGroupId::getGroupId).collect(Collectors.toList());
-				List<DBGroup> adultInstitutionPersonGroups = groups.stream()
-						.filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId())
-						.filter(g -> groupIdsForEmployee.contains(g.getGroupId()) || groupIdsForExternal.contains(g.getGroupId()))
-						.collect(Collectors.toList());
-				List<String> adultInstitutionPersonGroupIds = adultInstitutionPersonGroups.stream()
-						.map(g -> g.getGroupId())
-						.collect(Collectors.toList());
-
-				List<String> allRolesForPerson = findAdultRoles(loggedInPersonInstitutionPerson);
-				for (String role : allRolesForPerson) {
-
-					// find the setting for this role
-					StudentPasswordChangeConfiguration roleSetting = configurations.stream()
-							.filter(r -> Objects.equals(r.getRole(), StudentPasswordChangerSTILRoles.getFromInstitutionPersonRoleAsString(role)))
-							.findFirst()
-							.orElse(null);
-
-					if (roleSetting == null || (roleSetting != null && roleSetting.getType().equals(RoleSettingType.CANNOT_CHANGE_PASSWORD))) {
+					// if username == null we have not handled the user in AD yet
+					if (!StringUtils.hasLength(student.getUsername()) || handledStudentUsernames.contains(student.getUsername())) {
 						continue;
 					}
 
-					// the role allows changing password on students - now check if THIS student matches the criteria
 					for (DBInstitutionPerson institutionStudent : studentsWithSameUsername) {
+						List<DBGroup> studentGroups = findStudentGroups(institutionStudent, groups);
+						allStudentGroups.addAll(studentGroups);
+					}
 
-						// check for same institution, otherwise not relevant (cross-institution is not allowed unless student is in multiple institutions)
-						if (institutionStudent.getInstitution().getId() != loggedInPersonInstitutionPerson.getInstitution().getId()) {
+					addStudentPasswordChangeDTO(student, studentsWithSameUsername, allStudentGroups, result, true, handledStudentUsernames);
+				}
+			}
+		} else {
+			List<DBInstitutionPerson> adultInstitutionPeople = findByUsernameAndDeletedFalse(username).stream()
+					.filter(p -> p.getEmployee() != null || p.getExtern() != null)
+					.collect(Collectors.toList());
+			List<StudentPasswordChangeConfiguration> configurations = studentPasswordChangeConfigurationService.findAll();
+
+			// no roles that allows changing password or affiliation to students - well, no go then
+			if (adultInstitutionPeople.isEmpty()) {
+				return result;
+			}
+
+			// find all groups from the same institutions that the teacher belongs to
+			List<DBGroup> groups = groupService.findByInstitutionIdIn(adultInstitutionPeople.stream()
+					.map(p -> p.getInstitution().getId())
+					.collect(Collectors.toList()));
+
+			// find all students from the same institutions that the teacher belongs to
+			List<DBInstitutionPerson> students = institutionPersonDao.findByStudentNotNullAndDeletedFalseAndInstitutionIdIn(adultInstitutionPeople.stream().map(p -> p.getInstitution().getId()).collect(Collectors.toList()));
+			Set<String> handledStudentUsernames = new HashSet<>();
+			for (DBInstitutionPerson student : students) {
+
+				// a student can be in multiple institutions, but we only want to show the student in the list once
+				List<DBInstitutionPerson> studentsWithSameUsername = students.stream()
+						.filter(s -> Objects.equals(s.getUsername(), student.getUsername()))
+						.collect(Collectors.toList());
+				List<DBGroup> allStudentGroups = new ArrayList<>();
+
+				// if username == null we have not handled the user in AD yet
+				if (!StringUtils.hasLength(student.getUsername()) || handledStudentUsernames.contains(student.getUsername())) {
+					continue;
+				}
+
+				// iterate over all roles that the employee has, to check if one allows access to this student
+				boolean canChangePassword = false;
+				boolean shouldBeAdded = false;
+				for (DBInstitutionPerson loggedInPersonInstitutionPerson : adultInstitutionPeople) {
+
+					// groups for adult institution person
+					List<String> groupIdsForEmployee = loggedInPersonInstitutionPerson.getEmployee() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList());
+					List<String> groupIdsForExternal = loggedInPersonInstitutionPerson.getExtern() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getExtern().getGroupIds().stream().map(DBExternGroupId::getGroupId).collect(Collectors.toList());
+					List<DBGroup> adultInstitutionPersonGroups = groups.stream()
+							.filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId())
+							.filter(g -> groupIdsForEmployee.contains(g.getGroupId()) || groupIdsForExternal.contains(g.getGroupId()))
+							.collect(Collectors.toList());
+					List<String> adultInstitutionPersonGroupIds = adultInstitutionPersonGroups.stream()
+							.map(g -> g.getGroupId())
+							.collect(Collectors.toList());
+
+					List<String> allRolesForPerson = findAdultRoles(loggedInPersonInstitutionPerson);
+					for (String role : allRolesForPerson) {
+
+						// find the setting for this role
+						StudentPasswordChangeConfiguration roleSetting = configurations.stream()
+								.filter(r -> Objects.equals(r.getRole(), StudentPasswordChangerSTILRoles.getFromInstitutionPersonRoleAsString(role)))
+								.findFirst()
+								.orElse(null);
+
+						if (roleSetting == null || (roleSetting != null && roleSetting.getType().equals(RoleSettingType.CANNOT_CHANGE_PASSWORD))) {
 							continue;
 						}
 
-						List<String> groupIdsForStudent = institutionStudent.getStudent().getGroupIds().stream()
-								.map(DBStudentGroupId::getGroupId)
-								.collect(Collectors.toList());
-						groupIdsForStudent.add(institutionStudent.getStudent().getMainGroupId());
-						List<DBGroup> studentGroups = groups.stream()
-								.filter(g -> g.getInstitution().getId() == institutionStudent.getInstitution().getId())
-								.filter(g -> groupIdsForStudent.contains(g.getGroupId()))
-								.collect(Collectors.toList());
-						allStudentGroups.addAll(studentGroups);
+						// the role allows changing password on students - now check if THIS student matches the criteria
+						for (DBInstitutionPerson institutionStudent : studentsWithSameUsername) {
 
-						switch (roleSetting.getType()) {
-							case CAN_CHANGE_PASSWORD_ON_GROUP_MATCH:
-								List<String> filterClassTypes = Arrays.asList(roleSetting.getFilter().split(",")).stream()
-										.filter(t -> DBImportGroupType.fromPasswordFilter(t) != null)
-										.map(t -> DBImportGroupType.fromPasswordFilter(t).toString())
-										.collect(Collectors.toList());
-								List<String> loggedInPersonSchoolRoleSchoolClassIds = adultInstitutionPersonGroups.stream()
-										.filter(c -> filterClassTypes.contains(c.getGroupType().toString()))
-										.map(c -> c.getGroupId())
-										.collect(Collectors.toList());
+							// check for same institution, otherwise not relevant (cross-institution is not allowed unless student is in multiple institutions)
+							if (institutionStudent.getInstitution().getId() != loggedInPersonInstitutionPerson.getInstitution().getId()) {
+								continue;
+							}
 
-								for (DBGroup group : studentGroups) {
-									if (loggedInPersonSchoolRoleSchoolClassIds.contains(group.getGroupId())) {
-										canChangePassword = true;
-										shouldBeAdded = true;
-										break;
+							List<DBGroup> studentGroups = findStudentGroups(institutionStudent, groups);
+							allStudentGroups.addAll(studentGroups);
+
+							switch (roleSetting.getType()) {
+								case CAN_CHANGE_PASSWORD_ON_GROUP_MATCH:
+									List<String> filterClassTypes = Arrays.asList(roleSetting.getFilter().split(",")).stream()
+											.filter(t -> DBImportGroupType.fromPasswordFilter(t) != null)
+											.map(t -> DBImportGroupType.fromPasswordFilter(t).toString())
+											.collect(Collectors.toList());
+									List<String> loggedInPersonSchoolRoleSchoolClassIds = adultInstitutionPersonGroups.stream()
+											.filter(c -> filterClassTypes.contains(c.getGroupType().toString()))
+											.map(c -> c.getGroupId())
+											.collect(Collectors.toList());
+
+									for (DBGroup group : studentGroups) {
+										if (loggedInPersonSchoolRoleSchoolClassIds.contains(group.getGroupId())) {
+											canChangePassword = true;
+											shouldBeAdded = true;
+											break;
+										}
 									}
-								}
 
-								break;
-							case CAN_CHANGE_PASSWORD_ON_LEVEL_MATCH:
-								List<String> filterClassLevels = getLevelFiltersAsNumbers(roleSetting);
-								for (DBGroup group : studentGroups) {
+									break;
+								case CAN_CHANGE_PASSWORD_ON_LEVEL_MATCH:
+									List<String> filterClassLevels = getLevelFiltersAsNumbers(roleSetting);
+									for (DBGroup group : studentGroups) {
 
-									if (group.getGroupLevel() != null && filterClassLevels.contains(group.getGroupLevel())) {
-										canChangePassword = true;
-										shouldBeAdded = true;
-										break;
+										if (group.getGroupLevel() != null && filterClassLevels.contains(group.getGroupLevel())) {
+											canChangePassword = true;
+											shouldBeAdded = true;
+											break;
+										}
 									}
-								}
 
+									break;
+								case CANNOT_CHANGE_PASSWORD:
+									break;
+							}
+
+							if (canChangePassword) {
 								break;
-							case CANNOT_CHANGE_PASSWORD:
-								break;
+							}
+
+
+							for (DBGroup group : studentGroups) {
+								if (adultInstitutionPersonGroupIds.contains(group.getGroupId())) {
+									shouldBeAdded = true;
+								}
+							}
 						}
 
 						if (canChangePassword) {
 							break;
-						}
-
-
-						for (DBGroup group : studentGroups) {
-							if (adultInstitutionPersonGroupIds.contains(group.getGroupId())) {
-								shouldBeAdded = true;
-							}
 						}
 					}
 
@@ -376,29 +414,41 @@ public class InstitutionPersonService {
 					}
 				}
 
-				if (canChangePassword) {
-					break;
+				if (shouldBeAdded) {
+					addStudentPasswordChangeDTO(student, studentsWithSameUsername, allStudentGroups, result, canChangePassword, handledStudentUsernames);
 				}
+
 			}
-
-			if (shouldBeAdded) {
-				String firstname = student.getPerson().getAliasFirstName() != null ? student.getPerson().getAliasFirstName() : student.getPerson().getFirstName();
-				String surname = student.getPerson().getAliasFamilyName() != null ? student.getPerson().getAliasFamilyName() : student.getPerson().getFamilyName();
-				String uniLogin = student.getUniLogin() != null ? student.getUniLogin().getUserId() : "";
-				String institutions = studentsWithSameUsername.stream()
-						.map(s -> s.getInstitution().getInstitutionName())
-						.collect(Collectors.joining(", "));
-				String classes = allStudentGroups.stream()
-						.map(DBGroup::getGroupName)
-						.collect(Collectors.joining(", "));
-				result.add(new StudentPasswordChangeDTO(firstname + " " + surname, student.getUsername(), uniLogin, institutions, classes, canChangePassword, student.getPerson().getCivilRegistrationNumber()));
-
-				handledStudentUsernames.add(student.getUsername());
-			}
-
 		}
 
 		return result;
+	}
+
+	private void addStudentPasswordChangeDTO(DBInstitutionPerson student, List<DBInstitutionPerson> studentsWithSameUsername, List<DBGroup> allStudentGroups, List<StudentPasswordChangeDTO> result, boolean canChangePassword, Set<String> handledStudentUsernames) {
+		String firstname = student.getPerson().getAliasFirstName() != null ? student.getPerson().getAliasFirstName() : student.getPerson().getFirstName();
+		String surname = student.getPerson().getAliasFamilyName() != null ? student.getPerson().getAliasFamilyName() : student.getPerson().getFamilyName();
+		String uniLogin = student.getUniLogin() != null ? student.getUniLogin().getUserId() : "";
+		String institutions = studentsWithSameUsername.stream()
+				.map(s -> s.getInstitution().getInstitutionName())
+				.collect(Collectors.joining(", "));
+		String classes = allStudentGroups.stream()
+				.map(DBGroup::getGroupName)
+				.collect(Collectors.joining(", "));
+		result.add(new StudentPasswordChangeDTO(firstname + " " + surname, student.getUsername(), uniLogin, institutions, classes, canChangePassword, student.getPerson().getCivilRegistrationNumber()));
+
+		handledStudentUsernames.add(student.getUsername());
+	}
+
+	private List<DBGroup> findStudentGroups(DBInstitutionPerson institutionStudent, List<DBGroup> groups) {
+		List<String> groupIdsForStudent = institutionStudent.getStudent().getGroupIds().stream()
+				.map(DBStudentGroupId::getGroupId)
+				.collect(Collectors.toList());
+		groupIdsForStudent.add(institutionStudent.getStudent().getMainGroupId());
+		List<DBGroup> studentGroups = groups.stream()
+				.filter(g -> g.getInstitution().getId() == institutionStudent.getInstitution().getId())
+				.filter(g -> groupIdsForStudent.contains(g.getGroupId()))
+				.collect(Collectors.toList());
+		return studentGroups;
 	}
 
 	public Integer getLevel(String username) {
@@ -430,7 +480,7 @@ public class InstitutionPersonService {
 
 	public SetPasswordResponse.PasswordStatus changePassword(String username, String cpr, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
 		SetPasswordResponse.PasswordStatus adPasswordStatus = SetPasswordResponse.PasswordStatus.INSUFFICIENT_PERMISSION;
-		if (configuration.getStudentAdministration().isEnabled() && StringUtils.hasLength(username)) {
+		if (configuration.getStudentAdministration().isEnabled() && !configuration.getStudentAdministration().isClassListsOnly() && StringUtils.hasLength(username)) {
 			adPasswordStatus = passwordChangeQueueService.attemptPasswordChangeFromUI(username, cpr, newPassword);
 		}
 
@@ -592,14 +642,7 @@ public class InstitutionPersonService {
 	private List<DBGroup> findAllClasses(List<DBInstitutionPerson> people, List<DBGroup> allGroups) {
 		List<DBGroup> allStudentGroups = new ArrayList<>();
 		for (DBInstitutionPerson person : people) {
-			List<String> groupIdsForStudent = person.getStudent().getGroupIds().stream()
-					.map(DBStudentGroupId::getGroupId)
-					.collect(Collectors.toList());
-			groupIdsForStudent.add(person.getStudent().getMainGroupId());
-			List<DBGroup> studentGroups = allGroups.stream()
-					.filter(g -> g.getInstitution().getId() == person.getInstitution().getId())
-					.filter(g -> groupIdsForStudent.contains(g.getGroupId()))
-					.collect(Collectors.toList());
+			List<DBGroup> studentGroups = findStudentGroups(person, allGroups);
 			allStudentGroups.addAll(studentGroups);
 		}
 
@@ -720,5 +763,15 @@ public class InstitutionPersonService {
 			}
 		}
 		return result;
+	}
+
+	public void resetPrimary(String cpr) {
+		for (DBInstitutionPerson institutionPerson : findByPersonCivilRegistrationNumber(cpr)) {
+			if (institutionPerson.isPrimaryInstitution()) {
+				institutionPerson.setPrimaryInstitution(false);
+				institutionPersonDao.save(institutionPerson);
+			}
+		}
+
 	}
 }

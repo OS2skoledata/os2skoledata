@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.os2skoledata.api.model.InstitutionDTO;
 import dk.digitalidentity.os2skoledata.dao.InstitutionDao;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionGroupIdentifierMapping;
@@ -68,5 +69,9 @@ public class InstitutionService {
 
 		String[] years = setting.getValue().split("-");
 		return years[0].substring(2, 4) + "/" + years[1].substring(2, 4);
+	}
+
+	public InstitutionDTO getInstitutionDTO(DBInstitution institution) {
+		return new InstitutionDTO(institution.getId(), institution.getInstitutionName(), institution.getInstitutionNumber(), institution.getAbbreviation(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institution.getInstitutionNumber()), institution.getGoogleWorkspaceId(), institution.getAllDriveGoogleWorkspaceId(), institution.getStudentDriveGoogleWorkspaceId(), institution.getEmployeeDriveGoogleWorkspaceId(), institution.getInstitutionDriveGoogleWorkspaceId(), institution.getAllAzureSecurityGroupId(), institution.getStudentAzureSecurityGroupId(), institution.getEmployeeAzureSecurityGroupId(), institution.getEmployeeGroupGoogleWorkspaceEmail(), institution.getStudentInstitutionGoogleWorkspaceId(), institution.getEmployeeInstitutionGoogleWorkspaceId(), institution.getType(), generateEmailMap(institution, IntegrationType.GW), findCurrentSchoolYearForGWEmails(institution), institution.getEmployeeAzureTeamId(), institution.getAzureEmployeeTeamAdmin() != null ? institution.getAzureEmployeeTeamAdmin().getUsername() : null, generateEmailMap(institution, IntegrationType.AZURE));
 	}
 }

@@ -23,6 +23,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
         private readonly string domain;
         private readonly UsernameStandardType usernameStandard;
         private readonly HierarchyType hierarchyType;
+        private readonly DriveType driveType;
 
         public SyncService(IServiceProvider sp) : base(sp)
         {
@@ -33,6 +34,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             domain = settings.WorkspaceSettings.Domain;
             usernameStandard = settings.WorkspaceSettings.usernameSettings == null ? UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN : settings.WorkspaceSettings.usernameSettings.UsernameStandard;
             hierarchyType = settings.WorkspaceSettings.HierarchyType;
+            driveType = settings.WorkspaceSettings.DriveType;
         }
 
         public void SetFullSync()
@@ -92,6 +94,9 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 // make sure our custom OS2skoledata Schema is present
                 workspaceService.UpdateCustomOS2skoledataSchema();
 
+                // handle potential year change - this needs to be done before the normal sync
+                HandlePotentialYearChange();
+
                 // ous - institutions
                 List<Institution> institutions = oS2skoledataService.GetInstitutions();
                 List<string> lockedInstitutionNumbers = institutions.Where(i => i.Locked).Select(i => i.InstitutionNumber).ToList();
@@ -141,9 +146,21 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     institutionGroupMap.Add(institution.InstitutionNumber, classes);
                 }
 
+                logger.LogInformation($"Mainflow - fetching all OS2skoledata groups from GW");
+                List<Group> allOurGWGroups = workspaceService.ListOS2skoledataGroups();
+
+                if (allOurGWGroups == null)
+                {
+                    throw new Exception("Fetched groups in all of gw - result was null. Something is wrong");
+                }
+                else
+                {
+                    logger.LogInformation($"Mainflow - fetched all OS2skoledata groups from GW and found {allOurGWGroups.Count()} groups");
+                }
+
                 // delete groups and prefix drives that are no longer needed (we need to do it before creating/ updating to avoid naming issues)
                 logger.LogInformation("Mainflow - delete groups and prefix drives");
-                DeleteGroupsAndDrives(institutions, institutionGroupMap);
+                DeleteGroupsAndDrives(institutions, institutionGroupMap, allOurGWGroups);
 
                 logger.LogInformation($"Mainflow - fetching all users from GW");
                 List<DBUser> allUsers = new List<DBUser>();
@@ -156,18 +173,6 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                 } else
                 {
                     logger.LogInformation($"Mainflow - fetched all users from GW and found {allGWUsers.Count()} users");
-                }
-
-                logger.LogInformation($"Mainflow - fetching all groups from GW");
-                List<Group> allOurGWGroups = workspaceService.ListGroups(true);
-
-                if (allOurGWGroups == null)
-                {
-                    throw new Exception("Fetched groups in all of gw - result was null. Something is wrong");
-                }
-                else
-                {
-                    logger.LogInformation($"Mainflow - fetched all groups from GW and found {allOurGWGroups.Count()} groups");
                 }
 
                 HashSet<string> allClassLevels = new HashSet<string>();
@@ -219,7 +224,13 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                                 }
                                 else
                                 {
-                                    if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+                                    if (user.ReservedUsername != null && !workspaceService.AccountExists(user.ReservedUsername))
+                                    {
+                                        // we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+                                        username = user.ReservedUsername;
+                                        newlyCreatedUsername = true;
+                                    }
+                                    else if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                                     {
                                         bool exists = workspaceService.AccountExists(user.StilUsername);
                                         if (!exists)
@@ -304,8 +315,18 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     workspaceService.UpdateGroups(institution, users, classes, allOurGWGroups, allClassLevels);
 
                     logger.LogInformation("Mainflow - handling drives " + institution.InstitutionName);
+
                     // shared drives for institution
-                    workspaceService.UpdateSharedDrives(institution, users, classes);
+                    if (driveType.Equals(DriveType.DRIVE_PR_CLASS))
+                    {
+                        workspaceService.UpdateSharedDrives(institution, users, classes);
+                    } else if (driveType.Equals(DriveType.DRIVE_PR_SCHOOL_FOLDER_PR_CLASS))
+                    {
+                        if (institution.Type.Equals(InstitutionType.SCHOOL))
+                        {
+                            workspaceService.handleDrivesAndFolders(institution, users, classes, allOurGWGroups, lockedUsernames);
+                        }
+                    }
                 }
 
                 logger.LogInformation("Mainflow - handling global groups ");
@@ -346,10 +367,51 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             }
         }
 
-        private void DeleteGroupsAndDrives(List<Institution> institutions, Dictionary<string, List<DBGroup>> institutionGroupMap)
+        private void HandlePotentialYearChange()
+        {
+            if (!driveType.Equals(DriveType.DRIVE_PR_SCHOOL_FOLDER_PR_CLASS)) 
+            { 
+                return; 
+            }
+
+            bool performYearChange = oS2skoledataService.GetPerformYearChange();
+            if (!performYearChange)
+            {
+                return;
+            }
+
+            logger.LogInformation("Year change detected. Performing special year change logic");
+
+            // delete old groups and folders that are not needed anymore
+            List<FolderOrGroupDTO> foldersAndGroupsForDeletion = oS2skoledataService.GetYearChangeGroupsAndFoldersForDeletion();
+            foreach (FolderOrGroupDTO folderOrGroup in foldersAndGroupsForDeletion)
+            {
+                if (folderOrGroup.type.Equals(FolderOrGroup.FOLDER))
+                {
+                    workspaceService.DeleteFolder(folderOrGroup.GoogleWorkspaceId);
+                }
+                else if (folderOrGroup.type.Equals(FolderOrGroup.GROUP))
+                {
+                    workspaceService.SafeDeleteGroup(folderOrGroup.GoogleWorkspaceId);
+                }
+            }
+
+            // handle folders for previous years and make sure student group is readonly
+            List<FolderOrGroupDTO> folders = oS2skoledataService.GetAllYearlyClassFolders();
+            foreach (FolderOrGroupDTO folder in folders)
+            {
+                workspaceService.EnsureStudentsReadOnly(folder);
+            }
+
+            oS2skoledataService.SetPerformedYearChange();
+            logger.LogInformation("Finished handling year change");
+        }
+
+        private void DeleteGroupsAndDrives(List<Institution> institutions, Dictionary<string, List<DBGroup>> institutionGroupMap, List<Group> allOurGWGroups)
         {
             List<string> groupEmails = new List<string>();
             List<string> driveIds = new List<string>();
+            HashSet<string> allClassLevels = new HashSet<string>();
             foreach (Institution institution in institutions)
             {
                 // class groups and drives
@@ -382,6 +444,12 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     driveIds.Add(institution.EmployeeDriveGoogleWorkspaceId);
                 }
 
+                // institution drive
+                if (institution.InstitutionDriveGoogleWorkspaceId != null)
+                {
+                    driveIds.Add(institution.InstitutionDriveGoogleWorkspaceId);
+                }
+
                 // employee type groups
                 addEmployeeTypeGroups(groupEmails, institution);
 
@@ -395,22 +463,44 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                         groupEmails.Add(email.ToLower());
                     }
                 }
+
+                // groups for levels
+                List<string> classLevels = workspaceService.GetClassLevels(classes);
+                allClassLevels.UnionWith(classLevels);
+                foreach (string level in classLevels)
+                {
+                    string email = workspaceService.GetEmail(institution, "level_" + level);
+                    if (email != null)
+                    {
+                        groupEmails.Add(email.ToLower());
+                    }
+                }
             }
 
-            // global group
+            // global groups
             groupEmails.Add("alle-ansatte@" + domain.ToLower());
+
+            foreach (string level in allClassLevels)
+            {
+              groupEmails.Add(("alle" + level + "klasse@" + domain).ToLower());
+            }
+
+            // yearly groups
+            List<FolderOrGroupDTO> yearlyGroups = oS2skoledataService.GetAllYearlyClassGroups();
+            groupEmails.AddRange(yearlyGroups.Select(g => g.GoogleWorkspaceId.ToLower()));
 
             // fetch the groupEmails from locked institutions to make sure they are not deleted and delete groups that are not needed anymore
             List<string> lockedGroupEmails = oS2skoledataService.GetLockedGroupEmails();
             logger.LogInformation("Before delete groups call");
-            workspaceService.DeleteGroups(groupEmails, lockedGroupEmails);
+            workspaceService.DeleteGroups(groupEmails, lockedGroupEmails, allOurGWGroups);
             logger.LogInformation("after delete groups call");
 
             // fetch the drive ids from locked institutions to make sure they are not deleted and 'delete' drives that are not needed anymore
             logger.LogInformation("Before fetch locked drive ids");
             List<string> lockedDriveIds = oS2skoledataService.GetLockedDriveIds();
+            logger.LogInformation("After fetch locked drive ids. Before rename drives to delete");
             workspaceService.RenameDrivesToDelete(driveIds, lockedDriveIds);
-            logger.LogInformation("After fetch locked drive ids");
+            logger.LogInformation("After rename drives to delete");
         }
 
         private void addEmployeeTypeGroups(List<string> groupEmails, Institution institution)
@@ -615,7 +705,13 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                             username = cprUsernameMap[user.Cpr];
                         } else
                         {
-                            if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+                            if (user.ReservedUsername != null && !workspaceService.AccountExists(user.ReservedUsername))
+                            {
+                                // we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+                                username = user.ReservedUsername;
+                                newlyCreatedUsername = true;
+                            }
+                            else if (user.StilUsername != null && (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
                             {
                                 bool exists = workspaceService.AccountExists(user.StilUsername);
                                 if (!exists)
@@ -866,13 +962,14 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     try
                     {
                         bool success = false;
+                        string courseId = NormalizeCourseId(pendingChange.CourseId);
                         if (pendingChange.Action.Equals(ClassroomAction.TRANSFER))
                         {
-                            workspaceService.TransferClassroom(pendingChange.CourseId, pendingChange.Username);
+                            workspaceService.TransferClassroom(courseId, pendingChange.Username);
                             success = true;
                         } else if (pendingChange.Action.Equals(ClassroomAction.ARCHIVE))
                         {
-                            workspaceService.ArchiveClassroom(pendingChange.CourseId);
+                            workspaceService.ArchiveClassroom(courseId);
                             success = true;
                         }
 
@@ -884,6 +981,8 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
                     catch (Exception e)
                     {
                         oS2skoledataService.SetClassroomActionStatus(pendingChange.Id, ClassroomActionStatus.FAILED, e.Message);
+                        oS2skoledataService.ReportError(e.Message);
+                        logger.LogError(e, "Failed to execute SyncClassroomsJob");
                     }
                 }
             }
@@ -891,6 +990,34 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             {
                 oS2skoledataService.ReportError(e.Message);
                 logger.LogError(e, "Failed to execute SyncClassroomsJob");
+            }
+        }
+
+        // this method is used to support using both the courseId and the base64 encoded id 
+        private string NormalizeCourseId(string id)
+        {
+            // check if id is already numeric
+            if (long.TryParse(id, out _))
+            {
+                return id;
+            }
+
+            try
+            {
+                byte[] data = Convert.FromBase64String(id);
+                string decoded = System.Text.Encoding.UTF8.GetString(data);
+
+                // verify that the decoded string is numeric
+                if (long.TryParse(decoded, out _))
+                {
+                    return decoded;
+                }
+
+                throw new FormatException("Decoded string is not a valid course ID. ID: " + id);
+            }
+            catch (FormatException)
+            {
+                throw new ArgumentException("Invalid course ID format. ID: " + id);
             }
         }
     }

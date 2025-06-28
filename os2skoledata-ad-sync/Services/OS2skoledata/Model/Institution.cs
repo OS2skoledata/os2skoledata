@@ -10,6 +10,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
         public string InstitutionNumber { get; set; }
         [JsonProperty("name")]
         public string InstitutionName { get; set; }
+        public string Abbreviation { get; set; }
         public InstitutionType Type { get; set; }
         public bool Locked { get; set; }
     }
@@ -18,6 +19,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
     {
         SCHOOL,
         DAYCARE,
-        MUNICIPALITY
+        MUNICIPALITY,
+        FU
     }
 }

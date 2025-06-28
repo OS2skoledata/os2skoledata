@@ -96,20 +96,20 @@ namespace os2skoledata_sql_sync.Model
                 List<InstitutionPerson> existingPeople = this.InstitutionPersons;
                 List<InstitutionPersonDTO> apiPeople = other.institutionPersons;
 
-                if (existingPeople.Where(p1 => apiPeople.Any(p2 => p2.localPersonId.Equals(p1.LocalPersonId)) == false).Any())
+                if (existingPeople.Where(p1 => apiPeople.Any(p2 => p2.os2skoledataDatabaseId.Equals(p1.OS2skoledataDatabaseId)) == false).Any())
                 {
                     return false;
                 }
 
-                if (apiPeople.Where(p1 => existingPeople.Any(p2 => p2.LocalPersonId.Equals(p1.localPersonId)) == false).Any())
+                if (apiPeople.Where(p1 => existingPeople.Any(p2 => p2.OS2skoledataDatabaseId.Equals(p1.os2skoledataDatabaseId)) == false).Any())
                 {
                     return false;
                 }
 
-                // if all the groupIds match on both list we check if the group fields are different
+                // if all the personIds match on both list we check if the personIds are different
                 foreach (InstitutionPerson existingPerson in existingPeople)
                 {
-                    var stilPerson = apiPeople.Where(sp => sp.localPersonId.Equals(existingPerson.LocalPersonId)).FirstOrDefault();
+                    var stilPerson = apiPeople.Where(sp => sp.os2skoledataDatabaseId.Equals(existingPerson.OS2skoledataDatabaseId)).FirstOrDefault();
 
                     if (stilPerson != null && !existingPerson.ApiEquals(stilPerson))
                     {
@@ -196,13 +196,14 @@ namespace os2skoledata_sql_sync.Model
             }
 
             List<string> existingInstitutionPersonIds = this.InstitutionPersons.Select(g => g.LocalPersonId).ToList();
-            List<string> apiInstitutionPersonIds = new List<string> { };
+            List<int> existingInstitutionPersonDatabaseIds = this.InstitutionPersons.Select(g => g.OS2skoledataDatabaseId).ToList();
+            List<int> apiDatabaseIds = new List<int> { };
             List<InstitutionPersonDTO> toBeAdded = new List<InstitutionPersonDTO> { };
             List<InstitutionPersonDTO> toBeUpdated = new List<InstitutionPersonDTO> { };
 
             foreach (InstitutionPersonDTO person in other.institutionPersons)
             {
-                if (existingInstitutionPersonIds.Contains(person.localPersonId))
+                if (existingInstitutionPersonDatabaseIds.Contains(person.os2skoledataDatabaseId) || existingInstitutionPersonIds.Contains(person.localPersonId))
                 {
                     toBeUpdated.Add(person);
                 }
@@ -211,15 +212,18 @@ namespace os2skoledata_sql_sync.Model
                     toBeAdded.Add(person);
                 }
 
-                apiInstitutionPersonIds.Add(person.localPersonId);
+                apiDatabaseIds.Add(person.os2skoledataDatabaseId);
             }
 
-            List<InstitutionPerson> toBeDeleted = this.InstitutionPersons.Where(g => !apiInstitutionPersonIds.Contains(g.LocalPersonId)).ToList();
+            List<InstitutionPerson> toBeDeleted = this.InstitutionPersons.Where(g => g.OS2skoledataDatabaseId != 0 && !apiDatabaseIds.Contains(g.OS2skoledataDatabaseId)).ToList();
 
             // do update
             foreach (InstitutionPersonDTO person in toBeUpdated)
             {
-                var existingInstitutionPerson = this.InstitutionPersons.Where(g => g.LocalPersonId.Equals(person.localPersonId)).FirstOrDefault();
+                var existingInstitutionPerson = this.InstitutionPersons.Where(g => 
+                (g.OS2skoledataDatabaseId != 0 && g.OS2skoledataDatabaseId == person.os2skoledataDatabaseId) ||  
+                (g.LocalPersonId != null && g.LocalPersonId.Equals(person.localPersonId)))
+                .FirstOrDefault();
 
                 // existingInstitutionPerson should never be null at this point
                 existingInstitutionPerson?.CopyFields(person);

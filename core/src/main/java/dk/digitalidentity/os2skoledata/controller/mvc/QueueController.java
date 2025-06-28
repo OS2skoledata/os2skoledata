@@ -3,6 +3,7 @@ package dk.digitalidentity.os2skoledata.controller.mvc;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -31,7 +32,9 @@ public class QueueController {
 		List<GroupRecord> groups = groupService.findAll().stream().map(g -> new GroupRecord(g.getGroupId(), g.getGroupName())).collect(Collectors.toList());
 		model.addAttribute("groups", groups);
 
-		List<ClientRecord> clients = clientService.findAll().stream().map(c -> new ClientRecord(c.getId(), c.getName())).collect(Collectors.toList());
+		List<ClientRecord> clients = clientService.findAll().stream()
+				.filter(c -> !c.getAccessRole().equals(ClientAccessRole.IMPORT_ACCESS))
+				.map(c -> new ClientRecord(c.getId(), c.getName())).collect(Collectors.toList());
 		model.addAttribute("clients", clients);
 
 		return "queue/list";

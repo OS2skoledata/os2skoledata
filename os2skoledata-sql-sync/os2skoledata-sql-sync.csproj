@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <RootNamespace>os2skoledata_sql_sync</RootNamespace>
-    <FileVersion>1.0.1</FileVersion>
+    <FileVersion>1.1.1</FileVersion>
     <UserSecretsId>d630ee08-20fb-4cb7-9c85-281711313773</UserSecretsId>
     <OutputType>Exe</OutputType>
   </PropertyGroup>

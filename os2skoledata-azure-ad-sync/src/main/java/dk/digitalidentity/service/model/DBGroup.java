@@ -12,6 +12,7 @@ public class DBGroup {
 	private String groupLevel;
 	private String institutionNumber;
 	private String institutionName;
+	private String institutionAbbreviation;
 	private String azureSecurityGroupId;
 	private boolean institutionLocked;
 	private int startYear;

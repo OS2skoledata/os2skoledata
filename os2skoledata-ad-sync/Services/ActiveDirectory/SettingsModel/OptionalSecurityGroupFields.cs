@@ -7,6 +7,7 @@
         public bool SamAccountUseInstitutionType { get; set; } = false;
         public string MailField { get; set; }
         public string MailDomain { get; set; }
+        public bool OverwriteExistingMail { get; set; } = true;
         public string NormalMailNameStandard { get; set; }
         public string NoLineNameStandard { get; set; }
         public string NoLineNoYearNameStandard { get; set; }

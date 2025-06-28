@@ -1,10 +1,13 @@
 package dk.digitalidentity.os2skoledata.controller.rest;
 
+import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;
+import dk.digitalidentity.os2skoledata.service.ClientService;
+import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -35,6 +39,12 @@ public class InstitutionRestController {
 	@Autowired
 	private InstitutionPersonService institutionPersonService;
 
+	@Autowired
+	private ClientService clientService;
+
+	@Autowired
+	private GroupService groupService;
+
 	@PostMapping("/rest/institutions/unlock/{number}")
 	public ResponseEntity<?> unlockInstitution(@PathVariable String number) {
 		DBInstitution institution = institutionService.findByInstitutionNumber(number);
@@ -47,6 +57,25 @@ public class InstitutionRestController {
 		if (setting != null) {
 			setting.setValue("false");
 			settingService.save(setting);
+		}
+
+		// set perform year change for all clients and reset yearly ids on first unlock of the year
+		String yearSetting = settingService.getStringValueByKey(CustomerSetting.PERFORM_YEAR_CHANGE_YEAR.toString());
+		int year;
+		try {
+			year = Integer.parseInt(yearSetting);
+		} catch (Exception e) {
+			year = 0;
+		}
+
+		if (year != LocalDate.now().getYear()) {
+			for (Client client : clientService.findAll()) {
+				settingService.setValueForKey(CustomerSetting.PERFORM_YEAR_CHANGE_.toString() + client.getId(), true);
+			}
+
+			settingService.setValueForKey(CustomerSetting.PERFORM_YEAR_CHANGE_YEAR.toString(), LocalDate.now().getYear() + "");
+
+			groupService.resetAllYearlyIds();
 		}
 
 		return ResponseEntity.ok().build();

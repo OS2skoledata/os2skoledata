@@ -65,6 +65,9 @@ public class DBInstitution {
 	private String institutionNumber;
 
 	@Column
+	private String abbreviation;
+
+	@Column
 	private String googleWorkspaceId;
 
 	@Column
@@ -81,6 +84,9 @@ public class DBInstitution {
 
 	@Column
 	private String employeeDriveGoogleWorkspaceId;
+
+	@Column
+	private String institutionDriveGoogleWorkspaceId;
 
 	@Column
 	private String allAzureSecurityGroupId;

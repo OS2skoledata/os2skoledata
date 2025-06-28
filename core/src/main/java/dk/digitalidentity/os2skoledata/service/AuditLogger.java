@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 
 import javax.servlet.http.HttpServletRequest;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,9 @@ public class AuditLogger {
 
 	@Autowired
 	private AuditLogDao auditLogDao;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
 	
 	public void changePasswordFailed(String personUsername, String personName, String performerUsername, String performerName, String reason) {
 		AuditLog auditLog = new AuditLog();
@@ -87,7 +91,7 @@ public class AuditLogger {
 	@Transactional(rollbackFor = Exception.class)
 	public void cleanupLogs() {
 		LocalDateTime now = LocalDateTime.now();
-		LocalDateTime tts = now.plusMonths(-13);
+		LocalDateTime tts = now.minusMonths(configuration.getDeleteAuditLogsAfterMonths());
 	
 		auditLogDao.deleteByTtsBefore(tts);
 	}

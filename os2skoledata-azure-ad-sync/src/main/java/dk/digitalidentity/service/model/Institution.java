@@ -14,6 +14,7 @@ public class Institution {
 	private String institutionNumber;
 	@JsonProperty("name")
 	private String institutionName;
+	private String abbreviation;
 	private String allAzureSecurityGroupId;
 	private String studentAzureSecurityGroupId;
 	private String employeeAzureSecurityGroupId;

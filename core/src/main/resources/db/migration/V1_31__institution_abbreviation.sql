@@ -1,0 +1,1 @@
+ALTER TABLE institution ADD abbreviation VARCHAR(255) NULL UNIQUE;

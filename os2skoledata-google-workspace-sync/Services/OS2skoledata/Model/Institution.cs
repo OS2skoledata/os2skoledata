@@ -11,6 +11,8 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string InstitutionNumber { get; set; }
         [JsonProperty("name")]
         public string InstitutionName { get; set; }
+        [JsonProperty("abbreviation")]
+        public string Abbreviation { get; set; }
         public string GoogleWorkspaceId { get; set; }
         public string StudentInstitutionGoogleWorkspaceId { get; set; }
         public string EmployeeInstitutionGoogleWorkspaceId { get; set; }
@@ -18,6 +20,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public string StudentDriveGoogleWorkspaceId { get; set; }
         public string EmployeeDriveGoogleWorkspaceId { get; set; }
         public string EmployeeGroupGoogleWorkspaceEmail { get; set; }
+        public string InstitutionDriveGoogleWorkspaceId { get; set; }
         public InstitutionType Type { get; set; }
         public Dictionary<string, string> GoogleWorkspaceEmailMappings { get; set; }
         public bool Locked { get; set; }
@@ -28,6 +31,7 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
     {
         SCHOOL,
         DAYCARE,
-        MUNICIPALITY
+        MUNICIPALITY,
+        FU
     }
 }

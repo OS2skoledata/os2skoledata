@@ -73,6 +73,8 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 _context.SaveChanges();
 
+                oS2skoledataService.SetLastFullSync();
+
                 stopWatch.Stop();
                 logger.LogDebug($"Finsihed executing FullSyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds");
             }

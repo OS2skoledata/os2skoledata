@@ -1,0 +1,1 @@
+ALTER TABLE institution_aud ADD institution_drive_google_workspace_id VARCHAR(255) NULL;

@@ -2,6 +2,6 @@
 {
     public enum InstitutionType
     {
-        SCHOOL, DAYCARE, MUNICIPALITY
+        SCHOOL, DAYCARE, MUNICIPALITY, FU
     }
 }

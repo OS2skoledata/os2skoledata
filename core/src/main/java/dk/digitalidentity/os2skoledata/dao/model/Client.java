@@ -37,7 +37,11 @@ public class Client {
 
 	@Column
 	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
-	private LocalDateTime lastActive;
+	private LocalDateTime lastFullSync;
+
+	@Column
+	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
+	private LocalDateTime lastSeen;
 
 	@Column
 	private boolean paused;
@@ -45,6 +49,9 @@ public class Client {
 	@Column
 	@Enumerated(EnumType.STRING)
 	private ClientAccessRole accessRole;
+
+	@Column
+	private boolean monitor;
 
 	// Eager loading is important!
 	@OneToMany(mappedBy = "client", fetch = FetchType.EAGER, cascade = CascadeType.ALL, orphanRemoval = true)

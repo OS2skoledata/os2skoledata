@@ -119,7 +119,7 @@
 		<dependency>
 			<groupId>dk.digitalidentity.framework</groupId>
 			<artifactId>framework-activedirectory</artifactId>
-			<version>1.0.5</version>
+			<version>1.0.8</version>
 		</dependency>
 
 		<dependency>
@@ -136,6 +136,12 @@
 			<groupId>org.apache.poi</groupId>
 			<artifactId>poi-ooxml</artifactId>
 			<version>5.2.5</version>
+		</dependency>
+
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-ui</artifactId>
+			<version>1.6.15</version>
 		</dependency>
 	</dependencies>
 

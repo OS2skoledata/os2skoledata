@@ -69,6 +69,7 @@
 			var flashWarning = [[${flashWarning}]];
 			var flashError = [[${flashError}]];
 			var printClassUrl = [[@{/students/groups/}]];
+			var classListsOnly = [[${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}]];
 		+]*/
 
         var token = $("meta[name='_csrf']").attr("content");
@@ -141,7 +142,7 @@
 
 			this.printClass = function(classId, canPrintPassword, elem) {
 				let type = elem.dataset.type;
-				if (canPrintPassword) {
+				if (canPrintPassword && !classListsOnly) {
 					swal({
 						title: 'Print klasse',
 						text: 'Hvis muligt, ønsker du så også at printe elevernes kodeord?',

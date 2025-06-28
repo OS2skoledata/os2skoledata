@@ -10,7 +10,9 @@ public enum CustomerSetting {
 	GLOBAL_SCHOOL_YEAR(null),
 	REQUEST_LOG_("false"),
 	STIL_CHANGE_EMAIL(null),
-	AZURE_SCHEMA_ID(null);
+	AZURE_SCHEMA_ID(null),
+	PERFORM_YEAR_CHANGE_("false"),
+	PERFORM_YEAR_CHANGE_YEAR(null);
 
 	private String defaultValue;
 

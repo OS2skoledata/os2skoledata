@@ -1,6 +1,7 @@
 package dk.digitalidentity.os2skoledata.security;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 import javax.servlet.Filter;
@@ -50,6 +51,9 @@ public class ApiSecurityFilter implements Filter {
 				return;
 			}
 
+			//Set lastSeen for client to now
+			client.setLastSeen(LocalDateTime.now());
+
 			ArrayList<GrantedAuthority> authorities = new ArrayList<>();
 			switch (client.getAccessRole()) {
 				case SYNC_API_ACCESS:
@@ -59,6 +63,8 @@ public class ApiSecurityFilter implements Filter {
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.SYNC_API_ACCESS.toString()));
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.PASSWORD_ACCESS.toString()));
 					break;
+				case IMPORT_ACCESS:
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.IMPORT_ACCESS.toString()));
 			}
 
 			if (authorities.isEmpty()) {
@@ -67,6 +73,7 @@ public class ApiSecurityFilter implements Filter {
 
 			ClientToken token = new ClientToken(client.getName(), client.getApiKey(), authorities);
 			token.setClient(client);
+			clientService.save(client);
 
 			SecurityContextHolder.getContext().setAuthentication(token);
 			filterChain.doFilter(servletRequest, servletResponse);

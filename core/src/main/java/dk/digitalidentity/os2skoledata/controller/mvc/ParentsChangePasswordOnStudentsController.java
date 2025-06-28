@@ -68,7 +68,7 @@ public class ParentsChangePasswordOnStudentsController {
 
 	@GetMapping("/ui/students/parents")
 	public String index() {
-		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 		
@@ -77,7 +77,7 @@ public class ParentsChangePasswordOnStudentsController {
 
 	@GetMapping("/ui/students/parents/changepassword")
 	public String studentList(Model model, RedirectAttributes redirectAttributes) {
-		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 
@@ -97,7 +97,7 @@ public class ParentsChangePasswordOnStudentsController {
 
 	@GetMapping("/ui/students/parents/changepassword/{username}")
 	public String changePassword(Model model, RedirectAttributes redirectAttributes, @PathVariable("username") String username) {
-		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 
@@ -137,7 +137,7 @@ public class ParentsChangePasswordOnStudentsController {
 
 	@PostMapping("/ui/students/parents/changepassword")
 	public String changePassword(Model model, RedirectAttributes redirectAttributes, @Valid @ModelAttribute("passwordForm") PasswordChangeForm form, BindingResult bindingResult) {
-		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || !configuration.getStudentAdministration().isParentPasswordChangeEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 

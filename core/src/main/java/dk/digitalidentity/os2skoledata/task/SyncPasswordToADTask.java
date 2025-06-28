@@ -29,7 +29,7 @@ public class SyncPasswordToADTask {
 	// Every minute
 	@Scheduled(fixedRate = 1000 * 60)
 	public void processChanges() {
-		if (configuration.getScheduled().isEnabled() && configuration.getStudentAdministration().isEnabled()) {
+		if (configuration.getScheduled().isEnabled() && configuration.getStudentAdministration().isEnabled() && !configuration.getStudentAdministration().isClassListsOnly()) {
 			List<PasswordChangeQueue> changes = passwordChangeQueueService.getUnsynchronized();
 			if (!changes.isEmpty()) {
 				log.debug("Sync passwords to AD via Websockets");

@@ -146,7 +146,10 @@ public class SyncService {
 
 						// find available username and create
 						String username = null;
-						if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+						if (user.getReservedUsername() != null && allUsers.stream().noneMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getReservedUsername()))) {
+							// we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+							username = user.getReservedUsername();
+						} else if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
 						{
 							boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
 							if (!exists)
@@ -360,7 +363,10 @@ public class SyncService {
 
 				// find available username and create
 				String username = null;
-				if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
+				if (user.getReservedUsername() != null && allUsers.stream().noneMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getReservedUsername()))) {
+					// we can't add this username to the usernameMap as we do not know the form of it - the municipality create the reservedUsername
+					username = user.getReservedUsername();
+				} else if (user.getStilUsername() != null && (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)))
 				{
 					boolean exists = allUsers.stream().anyMatch(u -> u.mailNickname != null && u.mailNickname.equals(user.getStilUsername()));
 					if (!exists)

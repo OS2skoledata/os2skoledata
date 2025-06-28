@@ -3,6 +3,7 @@
     public class OptionalUserFields
     {
         public string InstitutionNameField { get; set; }
+        public string InstitutionAbbreviationField { get; set; }
         public string UNIIdField { get; set; }
         public string MailField { get; set; }
         public string STILRolesField { get; set; }

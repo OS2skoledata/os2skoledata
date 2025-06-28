@@ -66,7 +66,7 @@ public class DBStudent {
 	@OneToMany(mappedBy = "student", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<DBStudentGroupId> groupIds;
 
-	public boolean apiEquals(StudentFullMyndighed student) {
+	public boolean apiEquals(StudentFullMyndighed student, boolean requiredOnly) {
 		if (student == null) {
 			return false;
 		}
@@ -93,30 +93,6 @@ public class DBStudent {
 			return false;
 		}
 
-		if (this.contactPersons.size() != student.getContactPerson().size()) {
-			log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " different collection size.");
-			return false;
-		}
-		else {
-			// in this code we use firstName+familyName as a key
-			List<String> existingContactPersons = this.contactPersons.stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
-			List<String> stilContactPersons = student.getContactPerson().stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
-
-			for (String contactPerson : stilContactPersons) {
-				if (!existingContactPersons.contains(contactPerson)) {
-					log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " stil contactPerson not found in local.");
-					return false;
-				}
-			}
-
-			for (String contactPerson : existingContactPersons) {
-				if (!stilContactPersons.contains(contactPerson)) {
-					log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " local contactPerson not found in stil.");
-					return false;
-				}
-			}
-		}
-
 		if (this.groupIds.size() != student.getGroupId().size()) {
 			log.debug("DBStudent: Not equals on 'groupIds' for " + this.id + " different collection size.");
 			return false;
@@ -124,72 +100,48 @@ public class DBStudent {
 		else {
 			List<String> dbGroupIds = this.groupIds.stream().map(g -> g.getGroupId()).collect(Collectors.toList());
 			List<String> stilGroupIds = student.getGroupId();
-			
+
 			Collections.sort(dbGroupIds);
 			Collections.sort(stilGroupIds);
-			
+
 			if (!dbGroupIds.equals(stilGroupIds)) {
 				log.debug("DBStudent: Not equals on 'groupIds' for " + this.id + " different collection values.");
 				return false;
 			}
 		}
-		
+
+		if (!requiredOnly) {
+			if (this.contactPersons.size() != student.getContactPerson().size()) {
+				log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " different collection size.");
+				return false;
+			}
+			else {
+				// in this code we use firstName+familyName as a key
+				List<String> existingContactPersons = this.contactPersons.stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
+				List<String> stilContactPersons = student.getContactPerson().stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
+
+				for (String contactPerson : stilContactPersons) {
+					if (!existingContactPersons.contains(contactPerson)) {
+						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " stil contactPerson not found in local.");
+						return false;
+					}
+				}
+
+				for (String contactPerson : existingContactPersons) {
+					if (!stilContactPersons.contains(contactPerson)) {
+						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " local contactPerson not found in stil.");
+						return false;
+					}
+				}
+			}
+		}
+
 		return true;
 	}
 
-	public void copyFields(StudentFullMyndighed student) {
+	public void copyFields(StudentFullMyndighed student, boolean requiredOnly) {
 		if (student == null) {
 			return;
-		}
-		
-		// Contact persons
-		if (this.contactPersons == null && student.getContactPerson() != null) {
-			this.contactPersons = new ArrayList<>();
-			
-			for (ContactPersonFullMyndighed contactPerson : student.getContactPerson()) {
-				DBContactPerson dbContactPerson = new DBContactPerson();
-				dbContactPerson.setStudent(this);
-				dbContactPerson.copyFields(contactPerson);
-				this.contactPersons.add(dbContactPerson);
-			}
-		}
-		else if (this.contactPersons != null && student.getContactPerson() != null) {
-			// in this code we use firstName+familyName as a key
-			List<String> existingContactPersons = this.contactPersons.stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
-			List<String> stilContactPersons = student.getContactPerson().stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
-			
-			for (String contactPerson : stilContactPersons) {
-				if (!existingContactPersons.contains(contactPerson)) {
-					//Add new ContactPerson
-					DBContactPerson dbContactPerson = new DBContactPerson();
-					dbContactPerson.setStudent(this);
-					dbContactPerson.copyFields(student.getContactPerson().stream().filter(cp -> Objects.equals(contactPerson, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName())).findAny().get());
-					this.contactPersons.add(dbContactPerson);
-				}
-			}
-
-			for (String contactPerson : existingContactPersons) {
-				if (!stilContactPersons.contains(contactPerson)) {
-					//Delete ContactPerson
-					this.contactPersons.removeIf(cp -> Objects.equals(contactPerson, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()));
-				}
-			}
-
-			//Update ContactPerson
-			for (DBContactPerson dbContactPerson : this.contactPersons) {
-				ContactPersonFullMyndighed stilContactPerson = student.getContactPerson().stream()
-						.filter(cp -> Objects.equals(
-								dbContactPerson.getPerson().getFirstName() + dbContactPerson.getPerson().getFamilyName(),
-								cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()))
-						.findAny().orElse(null);
-				
-				if (stilContactPerson != null) {
-					dbContactPerson.copyFields(stilContactPerson);
-				}
-			}
-		}
-		else if (this.contactPersons != null && student.getContactPerson() == null) {
-			this.contactPersons.clear();
 		}
 
 		this.level = student.getLevel();
@@ -202,7 +154,7 @@ public class DBStudent {
 		else {
 			this.role = null;
 		}
-		
+
 		this.studentNumber = student.getStudentNumber();
 
 		// GroupIds
@@ -237,6 +189,59 @@ public class DBStudent {
 		}
 		else if (this.groupIds != null && student.getGroupId() == null) {
 			this.groupIds.clear();
+		}
+
+
+		if (!requiredOnly) {
+			// Contact persons
+			if (this.contactPersons == null && student.getContactPerson() != null) {
+				this.contactPersons = new ArrayList<>();
+
+				for (ContactPersonFullMyndighed contactPerson : student.getContactPerson()) {
+					DBContactPerson dbContactPerson = new DBContactPerson();
+					dbContactPerson.setStudent(this);
+					dbContactPerson.copyFields(contactPerson);
+					this.contactPersons.add(dbContactPerson);
+				}
+			}
+			else if (this.contactPersons != null && student.getContactPerson() != null) {
+				// in this code we use firstName+familyName as a key
+				List<String> existingContactPersons = this.contactPersons.stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
+				List<String> stilContactPersons = student.getContactPerson().stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
+
+				for (String contactPerson : stilContactPersons) {
+					if (!existingContactPersons.contains(contactPerson)) {
+						//Add new ContactPerson
+						DBContactPerson dbContactPerson = new DBContactPerson();
+						dbContactPerson.setStudent(this);
+						dbContactPerson.copyFields(student.getContactPerson().stream().filter(cp -> Objects.equals(contactPerson, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName())).findAny().get());
+						this.contactPersons.add(dbContactPerson);
+					}
+				}
+
+				for (String contactPerson : existingContactPersons) {
+					if (!stilContactPersons.contains(contactPerson)) {
+						//Delete ContactPerson
+						this.contactPersons.removeIf(cp -> Objects.equals(contactPerson, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()));
+					}
+				}
+
+				//Update ContactPerson
+				for (DBContactPerson dbContactPerson : this.contactPersons) {
+					ContactPersonFullMyndighed stilContactPerson = student.getContactPerson().stream()
+							.filter(cp -> Objects.equals(
+									dbContactPerson.getPerson().getFirstName() + dbContactPerson.getPerson().getFamilyName(),
+									cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()))
+							.findAny().orElse(null);
+
+					if (stilContactPerson != null) {
+						dbContactPerson.copyFields(stilContactPerson);
+					}
+				}
+			}
+			else if (this.contactPersons != null && student.getContactPerson() == null) {
+				this.contactPersons.clear();
+			}
 		}
 	}
 }

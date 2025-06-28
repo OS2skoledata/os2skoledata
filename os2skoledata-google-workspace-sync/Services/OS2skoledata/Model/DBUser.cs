@@ -22,10 +22,13 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata.Model
         public List<DBContactCard> ContactCards { get; set; }
         public bool SetPasswordOnCreate { get; set; }
         public string Password { get; set; }
+        public string ReservedUsername { get; set; }
+        public Institution PrimaryInstitution { get; set; }
 
         // empty for all other than students
         public List<string> StudentMainGroups { get; set; }
         public List<string> StudentMainGroupsGoogleWorkspaceIds { get; set; }
+        public List<MiniGroup> StudentMainGroupsAsObjects { get; set; }
         public StudentRole StudentRole { get; set; }
         public StudentRole GlobalStudentRole { get; set; }
         public long StudentMainGroupStartYearForInstitution { get; set; }

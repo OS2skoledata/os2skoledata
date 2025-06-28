@@ -14,13 +14,16 @@ import dk.digitalidentity.os2skoledata.api.model.InstitutionDTO;
 import dk.digitalidentity.os2skoledata.api.model.InstitutionPersonDTO;
 import dk.digitalidentity.os2skoledata.api.model.MiniGroupDTO;
 import dk.digitalidentity.os2skoledata.api.model.enums.Action;
+import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.Ghost;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.CprPasswordMappingService;
 import dk.digitalidentity.os2skoledata.service.GhostService;
+import dk.digitalidentity.os2skoledata.service.GoogleWorkspaceClassFolderOrGroupService;
 import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
 import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -84,31 +87,13 @@ public class ReadApiController {
 	@Autowired
 	private CprPasswordMappingService cprPasswordMappingService;
 
+	@Autowired
+	private GoogleWorkspaceClassFolderOrGroupService groupOrFolderService;
+
 	@GetMapping("/api/institutions")
 	public ResponseEntity<?> getInstitutions() {
 		List<InstitutionDTO> institutions = institutionService.findAll().stream()
-				.map(i -> new InstitutionDTO(
-						i.getId(),
-						i.getInstitutionName(),
-						i.getInstitutionNumber(),
-						settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + i.getInstitutionNumber()),
-						i.getGoogleWorkspaceId(),
-						i.getAllDriveGoogleWorkspaceId(),
-						i.getStudentDriveGoogleWorkspaceId(),
-						i.getEmployeeDriveGoogleWorkspaceId(),
-						i.getAllAzureSecurityGroupId(),
-						i.getStudentAzureSecurityGroupId(),
-						i.getEmployeeAzureSecurityGroupId(),
-						i.getEmployeeGroupGoogleWorkspaceEmail(),
-						i.getStudentInstitutionGoogleWorkspaceId(),
-						i.getEmployeeInstitutionGoogleWorkspaceId(),
-						i.getType(),
-						institutionService.generateEmailMap(i, IntegrationType.GW),
-						institutionService.findCurrentSchoolYearForGWEmails(i),
-						i.getEmployeeAzureTeamId(),
-						i.getAzureEmployeeTeamAdmin() != null ? i.getAzureEmployeeTeamAdmin().getUsername() : null,
-						institutionService.generateEmailMap(i, IntegrationType.AZURE)
-				)).toList();
+				.map(i -> institutionService.getInstitutionDTO(i)).toList();
 		return ResponseEntity.ok(institutions);
 	}
 	
@@ -158,11 +143,12 @@ public class ReadApiController {
 
 			List<DBInstitutionPerson> matchingPeople = matchingPeopleIncludingDeleted.stream().filter(m -> !m.isDeleted()).collect(Collectors.toList());
 			List<DBInstitutionPerson> matchingPeopleDeleted = matchingPeopleIncludingDeleted.stream().filter(m -> m.isDeleted()).collect(Collectors.toList());
-			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> new InstitutionDTO(p.getInstitution().getId(), p.getInstitution().getInstitutionName(), p.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + p.getInstitution().getInstitutionNumber()), p.getInstitution().getGoogleWorkspaceId(), p.getInstitution().getAllDriveGoogleWorkspaceId(), p.getInstitution().getStudentDriveGoogleWorkspaceId(), p.getInstitution().getEmployeeDriveGoogleWorkspaceId(), p.getInstitution().getAllAzureSecurityGroupId(), p.getInstitution().getStudentAzureSecurityGroupId(), p.getInstitution().getEmployeeAzureSecurityGroupId(), p.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), p.getInstitution().getStudentInstitutionGoogleWorkspaceId(), p.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), p.getInstitution().getType(), institutionService.generateEmailMap(p.getInstitution(), IntegrationType.GW), institutionService.findCurrentSchoolYearForGWEmails(p.getInstitution()), p.getInstitution().getEmployeeAzureTeamId(), p.getInstitution().getAzureEmployeeTeamAdmin() != null ? p.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null, institutionService.generateEmailMap(person.getInstitution(), IntegrationType.AZURE))).toList());
+			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
 			String stilUsername = null;
 			String uniId = null;
 			boolean setPasswordOnCreate = false;
 			String password = null;
+			DBInstitutionPerson primaryPerson = matchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
 
 			if (person.getEmployee() != null) {
 				role = PersonRole.EMPLOYEE;
@@ -216,7 +202,7 @@ public class ReadApiController {
 				continue;
 			}
 
-			groupService.sortAndAddStudentMainGroups(studentMainGroupGroups, studentMainGroup, studentMainGroupsWorkspace, studentMainGroupsAsObjects, currentYear);
+			groupService.sortAndAddStudentMainGroups(studentMainGroupGroups, studentMainGroup, studentMainGroupsWorkspace, studentMainGroupsAsObjects, currentYear, primaryPerson);
 
 			if (person.getUniLogin() != null) {
 				uniId = person.getUniLogin().getUserId();
@@ -270,7 +256,7 @@ public class ReadApiController {
 			if (SecurityUtil.hasRole("ROLE_API_" + ClientAccessRole.PASSWORD_ACCESS.toString())) {
 
 				setPasswordOnCreate = configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate() &&
-						institutionPersonService.getLevel(person) <= 3 &&
+						institutionPersonService.getLevel(person) != null && institutionPersonService.getLevel(person) <= 3 &&
 						cprPasswordMappingService.exists(cpr);
 				password = cprPasswordMappingService.getDecryptedPassword(cpr);
 			}
@@ -303,15 +289,16 @@ public class ReadApiController {
 					institutionPersonService.findGlobalEmployeeRoles(matchingPeople),
 					externalRole,
 					institutionPersonService.findGlobalExternalRole(matchingPeople),
-					new InstitutionDTO(person.getInstitution().getId(), person.getInstitution().getInstitutionName(), person.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + person.getInstitution().getInstitutionNumber()), person.getInstitution().getGoogleWorkspaceId(), person.getInstitution().getAllDriveGoogleWorkspaceId(), person.getInstitution().getStudentDriveGoogleWorkspaceId(), person.getInstitution().getEmployeeDriveGoogleWorkspaceId(), person.getInstitution().getAllAzureSecurityGroupId(), person.getInstitution().getStudentAzureSecurityGroupId(), person.getInstitution().getEmployeeAzureSecurityGroupId(), person.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), person.getInstitution().getStudentInstitutionGoogleWorkspaceId(), person.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), person.getInstitution().getType(), institutionService.generateEmailMap(person.getInstitution(), IntegrationType.GW),
-							institutionService.findCurrentSchoolYearForGWEmails(person.getInstitution()), person.getInstitution().getEmployeeAzureTeamId(), person.getInstitution().getAzureEmployeeTeamAdmin() != null ? person.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null, institutionService.generateEmailMap(person.getInstitution(), IntegrationType.AZURE)),
+					institutionService.getInstitutionDTO(person.getInstitution()),
 					studentMainGroupStartYearForInstitution,
 					studentMainGroupLevelForInstitution,
 					person.isDeleted(),
 					institutionPersonService.findTotalRoles(matchingPeople),
 					contactCardRecords,
 					setPasswordOnCreate,
-					password
+					password,
+					person.getReservedUsername(),
+					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution())
 			);
 
 			result.add(personRecord);
@@ -327,7 +314,7 @@ public class ReadApiController {
 			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " not found.");
 		}
 
-		int currentYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
+		int currentSchoolYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
 
 		List<DBGroup> dbGroups;
 		if (allTypes) {
@@ -361,6 +348,7 @@ public class ReadApiController {
 						g.getLine(),
 						g.getInstitution().getInstitutionNumber(),
 						g.getInstitution().getInstitutionName(),
+						g.getInstitution().getAbbreviation(),
 						settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + g.getInstitution().getInstitutionNumber()),
 						g.getInstitution().getGoogleWorkspaceId(),
 						g.getInstitution().getStudentInstitutionGoogleWorkspaceId(),
@@ -368,10 +356,12 @@ public class ReadApiController {
 						g.getGoogleWorkspaceId(),
 						g.getDriveGoogleWorkspaceId(),
 						g.getAzureSecurityGroupId(),
-						groupService.getStartYear(g.getGroupLevel(), currentYear, g.getId()),
+						groupService.getStartYear(g.getGroupLevel(), currentSchoolYear, g.getId()),
 						g.getGroupGoogleWorkspaceEmail(),
 						g.getGroupOnlyStudentsGoogleWorkspaceEmail(),
-						g.getAzureTeamId()
+						g.getAzureTeamId(),
+						g.getCurrentYearGWGroupIdentifier(),
+						g.getCurrentYearGWFolderIdentifier()
 						))
 				.collect(Collectors.toList());
 
@@ -440,6 +430,9 @@ public class ReadApiController {
 			else if (SetFieldType.INSTITUTION_EMPLOYEE_AZURE_TEAM_ID.equals(setFieldRecord.fieldType)) {
 				institution.setEmployeeAzureTeamId(setFieldRecord.value());
 			}
+			else if (SetFieldType.INSTITUTION_DRIVE_WORKSPACE_ID.equals(setFieldRecord.fieldType)) {
+				institution.setInstitutionDriveGoogleWorkspaceId(setFieldRecord.value());
+			}
 			else {
 				return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
 			}
@@ -471,6 +464,14 @@ public class ReadApiController {
 			}
 			else if (SetFieldType.GROUP_AZURE_TEAM_ID.equals(setFieldRecord.fieldType)) {
 				group.setAzureTeamId(setFieldRecord.value());
+			}
+			else if (SetFieldType.GROUP_YEAR_GROUP_WORKSPACE_EMAIL.equals(setFieldRecord.fieldType)) {
+				groupOrFolderService.create(FolderOrGroup.GROUP, group, setFieldRecord.value);
+				group.setCurrentYearGWGroupIdentifier(setFieldRecord.value);
+			}
+			else if (SetFieldType.GROUP_YEAR_FOLDER_WORKSPACE_ID.equals(setFieldRecord.fieldType)) {
+				groupOrFolderService.create(FolderOrGroup.FOLDER, group, setFieldRecord.value);
+				group.setCurrentYearGWFolderIdentifier(setFieldRecord.value);
 			}
 			else {
 				return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
@@ -603,6 +604,9 @@ public class ReadApiController {
 			if (institution.getStudentDriveGoogleWorkspaceId() != null) {
 				driveIds.add(institution.getStudentDriveGoogleWorkspaceId());
 			}
+			if (institution.getInstitutionDriveGoogleWorkspaceId() != null) {
+				driveIds.add(institution.getInstitutionDriveGoogleWorkspaceId());
+			}
 
 			driveIds.addAll(institution.getGroups().stream().filter(g -> g.getDriveGoogleWorkspaceId() != null).map(DBGroup::getDriveGoogleWorkspaceId).collect(Collectors.toSet()));
 		}
@@ -674,6 +678,61 @@ public class ReadApiController {
 		Set<String> keepAliveUsernames = ghostService.getAllActive().stream().map(Ghost::getUsername).collect(Collectors.toSet());
 
 		return ResponseEntity.ok(keepAliveUsernames);
+	}
+
+	@GetMapping("/api/yearchange")
+	public ResponseEntity<?> isYearChange() {
+		Client client = SecurityUtil.getClient();
+		if (client == null) {
+			return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+		}
+		boolean perfomSetting = settingService.getBooleanValueByKey(CustomerSetting.PERFORM_YEAR_CHANGE_.toString() + client.getId());
+		String yearSetting = settingService.getStringValueByKey(CustomerSetting.PERFORM_YEAR_CHANGE_YEAR.toString());
+		int year;
+		try {
+			year = Integer.parseInt(yearSetting);
+		} catch (Exception e) {
+			year = 0;
+		}
+		if (perfomSetting && LocalDate.now().getYear() == year) {
+			return ResponseEntity.ok(true);
+		}
+		return ResponseEntity.ok(false);
+	}
+
+	@PostMapping("/api/yearchange")
+	public ResponseEntity<?> setYearChangePerformed(@RequestParam(name = "deletedfoldersandgroups", required = false) boolean deletedFoldersAndGroups) {
+		Client client = SecurityUtil.getClient();
+		if (client == null) {
+			return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+		}
+		settingService.setValueForKey(CustomerSetting.PERFORM_YEAR_CHANGE_.toString() + client.getId(), false);
+		if (deletedFoldersAndGroups) {
+			groupOrFolderService.deleteGWClassFoldersAndGroupsPendingDeletion();
+		}
+		return ResponseEntity.ok().build();
+	}
+	record FolderOrGroupDTO(String googleWorkspaceId, FolderOrGroup type) {}
+	@GetMapping("/api/yearchange/foldersandgroups/delete")
+	public ResponseEntity<List<FolderOrGroupDTO>> getGroupsAndFoldersForDeletion() {
+		return ResponseEntity.ok(groupOrFolderService.getGWClassFoldersAndGroupsForDeletion().stream()
+				.map(g -> new FolderOrGroupDTO(g.getGoogleWorkspaceId(), g.getType()))
+				.collect(Collectors.toList()));
+	}
+	@GetMapping("/api/yearchange/foldersandgroups/folders")
+	public ResponseEntity<List<FolderOrGroupDTO>> getAllFolders() {
+		return ResponseEntity.ok(groupOrFolderService.getAll().stream()
+				.filter(g -> g.getType().equals(FolderOrGroup.FOLDER))
+				.map(g -> new FolderOrGroupDTO(g.getGoogleWorkspaceId(), g.getType()))
+				.collect(Collectors.toList()));
+	}
+
+	@GetMapping("/api/yearchange/foldersandgroups/groups")
+	public ResponseEntity<List<FolderOrGroupDTO>> getAllGroup() {
+		return ResponseEntity.ok(groupOrFolderService.getAll().stream()
+				.filter(g -> g.getType().equals(FolderOrGroup.GROUP))
+				.map(g -> new FolderOrGroupDTO(g.getGoogleWorkspaceId(), g.getType()))
+				.collect(Collectors.toList()));
 	}
 
 	private List<DBInstitution> getLockedIntitutions() {

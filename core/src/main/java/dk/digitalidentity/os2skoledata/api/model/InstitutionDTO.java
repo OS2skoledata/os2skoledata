@@ -14,11 +14,13 @@ public class InstitutionDTO {
 	private long databaseId;
 	private String name;
 	private String number;
+	private String abbreviation;
 	private boolean locked;
 	private String googleWorkspaceId;
 	private String allDriveGoogleWorkspaceId;
 	private String studentDriveGoogleWorkspaceId;
 	private String employeeDriveGoogleWorkspaceId;
+	private String institutionDriveGoogleWorkspaceId;
 	private String allAzureSecurityGroupId;
 	private String studentAzureSecurityGroupId;
 	private String employeeAzureSecurityGroupId;
@@ -31,4 +33,5 @@ public class InstitutionDTO {
 	private String employeeAzureTeamId;
 	private String teamAdminUsername;
 	private Map<String, String> azureIdentifierMappings;
+
 }

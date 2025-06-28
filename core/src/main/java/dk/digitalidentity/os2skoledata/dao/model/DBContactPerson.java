@@ -106,7 +106,7 @@ public class DBContactPerson {
 		}
 
 		if ((this.person == null && contactPerson.getPerson() != null) ||
-			(this.person != null && !this.person.apiEquals(contactPerson.getPerson()))) {
+			(this.person != null && !this.person.apiEquals(contactPerson.getPerson(), false))) {
 
 			log.debug("DBContactPerson: Not equals on 'person' for " + this.id);
 			return false;
@@ -144,7 +144,7 @@ public class DBContactPerson {
 		}
 		
 		if (this.person != null) {
-			this.person.copyFields(contactPerson.getPerson());
+			this.person.copyFields(contactPerson.getPerson(), false);
 		}
 
 		if (this.uniLogin == null && contactPerson.getUNILogin() != null) {

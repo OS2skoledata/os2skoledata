@@ -6,4 +6,5 @@ public class Constants {
 	public static final String PARENT = "ROLE_PARENT";
 	public static final String CPR_ATTRIBUTE_KEY = "https://data.gov.dk/model/core/eid/cprNumber";
 	public static final String GOOGLE_CLASSROOM_ADMIN = "ROLE_GOOGLE_CLASSROOM_ADMIN";
+	public static final String PASSWORD_ADMIN = "ROLE_PASSWORD_ADMIN";
 }

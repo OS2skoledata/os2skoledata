@@ -33,11 +33,11 @@
 						<a role="button" th:href="@{/ui/config}"><span th:text="#{html.navbar.config}"></span></a>
 					</li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}" sec:authorize="hasRole('ROLE_SCHOOL_EMPLOYEE')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'students')} ? 'active' : ''">
+					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}" sec:authorize="hasRole('ROLE_SCHOOL_EMPLOYEE') || hasRole('ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'students')} ? 'active' : ''">
 						<a role="button" th:href="@{/ui/students}"><span th:text="#{html.navbar.students}"></span></a>
 					</li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND @{__${@OS2SkoleDataConfiguration.studentAdministration.parentPasswordChangeEnabled}__}" sec:authorize="hasRole('ROLE_PARENT')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'student.parents')} ? 'active' : ''">
+					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__} AND @{__${@OS2SkoleDataConfiguration.studentAdministration.parentPasswordChangeEnabled}__}" sec:authorize="hasRole('ROLE_PARENT')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'student.parents')} ? 'active' : ''">
 						<a role="button" th:href="@{/ui/students/parents/changepassword}"><span th:text="#{html.navbar.students}"></span></a>
 					</li>
 

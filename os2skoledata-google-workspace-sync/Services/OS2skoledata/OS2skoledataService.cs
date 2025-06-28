@@ -365,6 +365,78 @@ namespace os2skoledata_google_workspace_sync.Services.OS2skoledata
             response.Result.EnsureSuccessStatusCode();
         }
 
+        public bool GetPerformYearChange()
+        {
+            logger.LogInformation("Fetching perform year change from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/yearchange"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var perform = JsonConvert.DeserializeObject<bool>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation("finished fetching perform year change from OS2skoledata");
+            return perform;
+        }
+
+        public void SetPerformedYearChange()
+        {
+            using var httpClient = GetHttpClient();
+            var response = httpClient.PostAsync(new Uri(baseUri + "api/yearchange?deletedfoldersandgroups=true"), null);
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+        }
+
+        public List<FolderOrGroupDTO> GetYearChangeGroupsAndFoldersForDeletion()
+        {
+            logger.LogInformation($"Fetching all groups and folders for deletion from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/yearchange/foldersandgroups/delete"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var changesArray = JsonConvert.DeserializeObject<FolderOrGroupDTO[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation("finished fetching all groups and folders for deletion from OS2skoledata");
+            return new List<FolderOrGroupDTO>(changesArray);
+        }
+
+        public List<FolderOrGroupDTO> GetAllYearlyClassFolders()
+        {
+            logger.LogInformation($"Fetching all yearly class folders from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/yearchange/foldersandgroups/folders"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var changesArray = JsonConvert.DeserializeObject<FolderOrGroupDTO[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation("finished fetching all yearly class folders from OS2skoledata");
+            return new List<FolderOrGroupDTO>(changesArray);
+        }
+
+        public List<FolderOrGroupDTO> GetAllYearlyClassGroups()
+        {
+            logger.LogInformation($"Fetching all yearly class groups from OS2skoledata");
+            using var httpClient = GetHttpClient();
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/yearchange/foldersandgroups/groups"));
+            response.Wait();
+            response.Result.EnsureSuccessStatusCode();
+            var responseString = response.Result.Content.ReadAsStringAsync();
+            responseString.Wait();
+
+            var changesArray = JsonConvert.DeserializeObject<FolderOrGroupDTO[]>(responseString.Result, jsonSerializerSettings);
+
+            logger.LogInformation("finished fetching all yearly class groups from OS2skoledata");
+            return new List<FolderOrGroupDTO>(changesArray);
+        }
+
         private HttpClient GetHttpClient()
         {
             var handler = new HttpClientHandler();

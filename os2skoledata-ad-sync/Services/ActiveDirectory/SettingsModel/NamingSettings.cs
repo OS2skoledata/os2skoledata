@@ -13,6 +13,7 @@
         public string GlobalEmployeeSecurityGroupName { get; set; }
         public string GlobalSecurityGroupForEmployeeTypeSchoolNameStandard { get; set; }
         public string GlobalSecurityGroupForEmployeeTypeDaycareNameStandard { get; set; }
+        public string GlobalSecurityGroupForEmployeeTypeFUNameStandard { get; set; }
         public string AllInInstitutionSecurityGroupNameStandard { get; set; }
         public string AllStudentsInInstitutionSecurityGroupNameStandard { get; set; }
         public string AllEmployeesInInstitutionSecurityGroupNameStandard { get; set; }
@@ -23,6 +24,7 @@
         public string SecurityGroupForLevelNameStandard { get; set; }
         public string SchoolOUName { get; set; }
         public string DaycareOUName { get; set; }
+        public string FUOUName { get; set; }
         public string GlobalSecurityGroupForLevelNameStandard { get; set; }
     }
 }

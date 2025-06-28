@@ -19,6 +19,7 @@ namespace os2skoledata_sql_sync.Services.OS2skoledata
 
     public class InstitutionPersonDTO
     {
+        public int os2skoledataDatabaseId { get; set; }
         [JsonConverter(typeof(CustomDateTimeConverter), "yyyy-MM-dd HH:mm:ss")]
         public DateTime lastModified { get; set; }
         public bool deleted { get; set; }
@@ -30,6 +31,8 @@ namespace os2skoledata_sql_sync.Services.OS2skoledata
         public StudentDTO student { get; set; }
         public PersonDTO person { get; set; }
         public UniLoginDTO uniLogin { get; set; }
+        public bool primaryInstitution { get; set; }
+        public string reservedUsername  { get; set; }
         public DateTime StilCreated { get; set; }
         public DateTime StilDeleted { get; set; }
         public DateTime AdCreated { get; set; }

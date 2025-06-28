@@ -28,6 +28,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         public bool GWTraceLog { get; set; } = false;
         public bool SetContactCard { get; set; } = false;
         public string AddEmployeesToClassroomGroup { get; set; }
+        public DriveType DriveType { get; set; } = DriveType.DRIVE_PR_CLASS;
         public ClassroomSettings ClassroomSettings { get; set; } = new ClassroomSettings();
     }
 
@@ -35,5 +36,11 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
     {
         INSTITUTION_FIRST,
         INSTITUTION_LAST
+    }
+
+    public enum DriveType
+    {
+        DRIVE_PR_CLASS,
+        DRIVE_PR_SCHOOL_FOLDER_PR_CLASS
     }
 }

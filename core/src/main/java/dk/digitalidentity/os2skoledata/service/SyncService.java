@@ -2,12 +2,19 @@ package dk.digitalidentity.os2skoledata.service;
 
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
+import dk.digitalidentity.os2skoledata.config.modules.SyncField;
+import dk.digitalidentity.os2skoledata.config.modules.SyncFrom;
+import dk.digitalidentity.os2skoledata.dao.model.DBEmployeeGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.DBUniLogin;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
 import dk.digitalidentity.os2skoledata.service.stil.StilService;
 import https.unilogin_dk.data.Group;
+import https.unilogin_dk.data.transitional.UniLoginFull;
 import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
 import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionPersonFullMyndighed;
 import lombok.extern.slf4j.Slf4j;
@@ -53,6 +60,7 @@ public class SyncService {
 
 	@Autowired
 	private CprPasswordMappingService cprPasswordMappingService;
+
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void sync(InstitutionDTO institutionDTO) {
@@ -135,6 +143,7 @@ public class SyncService {
 			dbInstitution = new DBInstitution();
 			dbInstitution.copyFields(stilInstitution);
 			dbInstitution.setType(institutionDTO.getType());
+			dbInstitution.setAbbreviation(institutionDTO.getAbbreviation());
 
 			log.info("Creating new institution: " + stilInstitution.getInstitutionName() + " / " + stilInstitution.getInstitutionNumber());
 			institutionService.save(dbInstitution);
@@ -164,6 +173,11 @@ public class SyncService {
 				changes = true;
 			}
 
+			if (!Objects.equals(dbInstitution.getAbbreviation(), institutionDTO.getAbbreviation())) {
+				dbInstitution.setAbbreviation(institutionDTO.getAbbreviation());
+				changes = true;
+			}
+
 			if (changes) {
 				log.info("Updating core data on institution: " + stilInstitution.getInstitutionName() + " / " + stilInstitution.getInstitutionNumber());
 				institutionService.save(dbInstitution);
@@ -172,49 +186,78 @@ public class SyncService {
 
 		if (stilInstitution.getInstitutionPerson() != null && !stilInstitution.getInstitutionPerson().isEmpty()) {
 			for (InstitutionPersonFullMyndighed stilInstitutionPerson : stilInstitution.getInstitutionPerson()) {
-				DBInstitutionPerson dbInstitutionPerson = institutionPersonService.findByLocalPersonIdIncludingDeleted(stilInstitutionPerson.getLocalPersonId(), institutionDTO.getInstitutionNumber());
+				DBInstitutionPerson dbInstitutionPerson = null;
+				if (configuration.getSyncSettings().getSyncFrom().equals(SyncFrom.API_AND_STIL)) {
+					dbInstitutionPerson = institutionPersonService.findByPersonCivilRegistrationNumberAndInstitution(stilInstitutionPerson.getPerson().getCivilRegistrationNumber(), dbInstitution)
+							.stream().filter(p -> !p.isDeleted()).findFirst().orElse(null);
+				} else {
+					dbInstitutionPerson = institutionPersonService.findByLocalPersonIdIncludingDeleted(stilInstitutionPerson.getLocalPersonId(), institutionDTO.getInstitutionNumber());
+				}
 
 				if (dbInstitutionPerson == null) {
-					log.info("Creating institutionPerson: " + stilInstitutionPerson.getLocalPersonId());
-
-					dbInstitutionPerson = new DBInstitutionPerson();
-					dbInstitutionPerson.copyFields(stilInstitutionPerson);
-					dbInstitutionPerson.setInstitution(dbInstitution);
-					dbInstitutionPerson.setStilCreated(LocalDateTime.now());
-
-					// check if we should generate password
-					if (configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate() && dbInstitutionPerson.getStudent() != null) {
-
-						// make sure the password has not been sat for this cpr before
-						if (!cprPasswordMappingService.exists(dbInstitutionPerson.getPerson().getCivilRegistrationNumber())) {
-							Integer level = institutionPersonService.getLevel(dbInstitutionPerson);
-							if (level != null && level <= 3) {
-								cprPasswordMappingService.setPassword(dbInstitutionPerson.getPerson().getCivilRegistrationNumber(), passwordSettingService.generateEncryptedPasswordForIndskolingStudent());
-							}
+					// if syncFrom is API_AND_STIL we only create students. Creation of employees and externals is managed by the API and not STIL
+					// unless transitionMode
+					boolean create = true;
+					if (!configuration.getSyncSettings().isTransitionMode() && configuration.getSyncSettings().getSyncFrom().equals(SyncFrom.API_AND_STIL)) {
+						if (stilInstitutionPerson.getEmployee() != null || stilInstitutionPerson.getExtern() != null) {
+							create = false;
 						}
 					}
 
-					institutionPersonService.save(dbInstitutionPerson);
+					if (create) {
+						log.info("Creating institutionPerson: " + stilInstitutionPerson.getLocalPersonId());
+
+						dbInstitutionPerson = new DBInstitutionPerson();
+						dbInstitutionPerson.copyFields(stilInstitutionPerson, configuration.getSyncSettings().isOnlySaveNeededPropertiesFromSTIL());
+						dbInstitutionPerson.setInstitution(dbInstitution);
+						dbInstitutionPerson.setStilCreated(LocalDateTime.now());
+
+						// check if we should generate password
+						if (configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate() && dbInstitutionPerson.getStudent() != null) {
+
+							// make sure the password has not been sat for this cpr before
+							if (!cprPasswordMappingService.exists(dbInstitutionPerson.getPerson().getCivilRegistrationNumber())) {
+								Integer level = institutionPersonService.getLevel(dbInstitutionPerson);
+								if (level != null && level <= 3) {
+									cprPasswordMappingService.setPassword(dbInstitutionPerson.getPerson().getCivilRegistrationNumber(), passwordSettingService.generateEncryptedPasswordForIndskolingStudent());
+								}
+							}
+						}
+
+						institutionPersonService.save(dbInstitutionPerson);
+					}
 				}
 				else {
 					boolean changes = false;
-
-					if (dbInstitutionPerson.isDeleted()) {
-						log.info("Undeleting institutionPerson: " + dbInstitutionPerson.getId() + " " + dbInstitutionPerson.getLocalPersonId());
-						dbInstitutionPerson.setDeleted(false);
-						dbInstitutionPerson.setStilDeleted(null);
-						dbInstitutionPerson.setStilCreated(LocalDateTime.now());
-						changes = true;
+					boolean normalUpdate = true;
+					if (configuration.getSyncSettings().getSyncFrom().equals(SyncFrom.API_AND_STIL)) {
+						if (stilInstitutionPerson.getEmployee() != null || stilInstitutionPerson.getExtern() != null) {
+							normalUpdate = false;
+						}
 					}
 
-					if (!dbInstitutionPerson.getInstitution().getInstitutionNumber().equals(dbInstitution.getInstitutionNumber())) {
-						log.info("Moving institution for person with id: " + dbInstitutionPerson.getId() + ". From " + dbInstitutionPerson.getInstitution().getInstitutionName() + "(" + dbInstitutionPerson.getInstitution().getInstitutionNumber() + ") to " + dbInstitution.getInstitutionName() + "(" + dbInstitution.getInstitutionNumber() + ")");
-						dbInstitutionPerson.setInstitution(dbInstitution);
-						changes = true;
-					}
+					if (normalUpdate) {
+						if (dbInstitutionPerson.isDeleted()) {
+							log.info("Undeleting institutionPerson: " + dbInstitutionPerson.getId() + " " + dbInstitutionPerson.getLocalPersonId());
+							dbInstitutionPerson.setDeleted(false);
+							dbInstitutionPerson.setStilDeleted(null);
+							dbInstitutionPerson.setStilCreated(LocalDateTime.now());
+							changes = true;
+						}
 
-					if (!dbInstitutionPerson.apiEquals(stilInstitutionPerson)) {
-						dbInstitutionPerson.copyFields(stilInstitutionPerson);
+						if (!dbInstitutionPerson.getInstitution().getInstitutionNumber().equals(dbInstitution.getInstitutionNumber())) {
+							log.info("Moving institution for person with id: " + dbInstitutionPerson.getId() + ". From " + dbInstitutionPerson.getInstitution().getInstitutionName() + "(" + dbInstitutionPerson.getInstitution().getInstitutionNumber() + ") to " + dbInstitution.getInstitutionName() + "(" + dbInstitution.getInstitutionNumber() + ")");
+							dbInstitutionPerson.setInstitution(dbInstitution);
+							changes = true;
+						}
+
+						if (!dbInstitutionPerson.apiEquals(stilInstitutionPerson, configuration.getSyncSettings().isOnlySaveNeededPropertiesFromSTIL())) {
+							dbInstitutionPerson.copyFields(stilInstitutionPerson, configuration.getSyncSettings().isOnlySaveNeededPropertiesFromSTIL());
+							changes = true;
+						}
+
+					} else {
+						changes = apiAndStilSpecialUpdate(stilInstitutionPerson, dbInstitutionPerson, changes);
 					}
 
 					if (changes) {
@@ -232,6 +275,16 @@ public class SyncService {
 						.noneMatch(stilInstitutionPerson -> Objects.equals(stilInstitutionPerson.getLocalPersonId(), dbInstitutionPerson.getLocalPersonId())))
 				.collect(Collectors.toList());
 
+		// if syncFrom is API_AND_STIL we only delete students. Deletion of employees and externals is managed by the API and not STIL
+		// if transitionMode we allow deletion of everyone unless people with local source
+		if (configuration.getSyncSettings().getSyncFrom().equals(SyncFrom.API_AND_STIL)) {
+			if (configuration.getSyncSettings().isTransitionMode()) {
+				toBeDeleted = toBeDeleted.stream().filter(p -> !Objects.equals(p.getSource(), configuration.getSyncSettings().getLocalSource())).collect(Collectors.toList());
+			} else {
+				toBeDeleted = toBeDeleted.stream().filter(p -> p.getStudent() != null).collect(Collectors.toList());
+			}
+		}
+
 		toBeDeleted.forEach(person -> {
 			log.info("Deleting institutionPerson: " + person.getId() + " " + person.getLocalPersonId());
 			person.setDeleted(true);
@@ -241,6 +294,161 @@ public class SyncService {
 		if (toBeDeleted.size() > 0) {
 			institutionPersonService.saveAll(toBeDeleted);
 		}
+	}
+
+	private boolean apiAndStilSpecialUpdate(InstitutionPersonFullMyndighed stilInstitutionPerson, DBInstitutionPerson dbInstitutionPerson, boolean changes) {
+
+		if (!Objects.equals(dbInstitutionPerson.getLocalPersonId(), stilInstitutionPerson.getLocalPersonId())) {
+			dbInstitutionPerson.setLocalPersonId(stilInstitutionPerson.getLocalPersonId());
+			changes = true;
+		}
+
+		for (SyncField syncField : configuration.getSyncSettings().getFieldsMaintainedBySTIL()) {
+			switch (syncField) {
+				case UNI_LOGIN -> {
+					changes = checkForUniLoginChanges(stilInstitutionPerson, dbInstitutionPerson, changes);
+				}
+				case GROUP_IDS -> {
+					if (dbInstitutionPerson.getEmployee() != null && stilInstitutionPerson.getEmployee() != null) {
+						changes = checkForEmployeeGroupsChanges(stilInstitutionPerson, dbInstitutionPerson, changes);
+					} else if (dbInstitutionPerson.getExtern() != null && stilInstitutionPerson.getExtern() != null) {
+						changes = checkForExternalGroupsChanges(stilInstitutionPerson, dbInstitutionPerson, changes);
+					}
+				}
+				case NAME_PROTECTED -> {
+					if (!Objects.equals(dbInstitutionPerson.getPerson().isProtected(), stilInstitutionPerson.getPerson().isProtected())) {
+						dbInstitutionPerson.getPerson().setProtected(stilInstitutionPerson.getPerson().isProtected());
+						changes = true;
+					}
+				}
+				case ALIAS_FIRST_NAME -> {
+					if (!Objects.equals(dbInstitutionPerson.getPerson().getAliasFirstName(), stilInstitutionPerson.getPerson().getAliasFirstName())) {
+						dbInstitutionPerson.getPerson().setAliasFirstName(stilInstitutionPerson.getPerson().getAliasFirstName());
+						changes = true;
+					}
+				}
+				case ALIAS_FAMILY_NAME -> {
+					if (!Objects.equals(dbInstitutionPerson.getPerson().getAliasFamilyName(), stilInstitutionPerson.getPerson().getAliasFamilyName())) {
+						dbInstitutionPerson.getPerson().setAliasFamilyName(stilInstitutionPerson.getPerson().getAliasFamilyName());
+						changes = true;
+					}
+				}
+			}
+		}
+		return changes;
+	}
+
+	private static boolean checkForExternalGroupsChanges(InstitutionPersonFullMyndighed stilInstitutionPerson, DBInstitutionPerson dbInstitutionPerson, boolean changes) {
+		if (dbInstitutionPerson.getExtern().getGroupIds() == null && stilInstitutionPerson.getExtern().getGroupId()!= null) {
+			dbInstitutionPerson.getExtern().setGroupIds(new ArrayList<>());
+
+			for (String groupId : stilInstitutionPerson.getExtern().getGroupId()) {
+				DBExternGroupId dbExternGroupId = new DBExternGroupId();
+				dbExternGroupId.setGroupId(groupId);
+				dbExternGroupId.setExtern(dbInstitutionPerson.getExtern());
+				dbInstitutionPerson.getExtern().getGroupIds().add(dbExternGroupId);
+			}
+			changes = true;
+		}
+		else if (dbInstitutionPerson.getExtern().getGroupIds() != null && stilInstitutionPerson.getExtern().getGroupId() != null) {
+			List<String> existingGroupIds = dbInstitutionPerson.getExtern().getGroupIds().stream().map(g -> g.getGroupId()).collect(Collectors.toList());
+			List<String> stilGroupIds = stilInstitutionPerson.getExtern().getGroupId();
+
+			for (String groupId : stilGroupIds) {
+				if (!existingGroupIds.contains(groupId)) {
+					DBExternGroupId newGroupIdMapping = new DBExternGroupId();
+					newGroupIdMapping.setExtern(dbInstitutionPerson.getExtern());
+					newGroupIdMapping.setGroupId(groupId);
+					dbInstitutionPerson.getExtern().getGroupIds().add(newGroupIdMapping);
+					changes = true;
+				}
+			}
+
+			for (String groupId : existingGroupIds) {
+				if (!stilGroupIds.contains(groupId)) {
+					dbInstitutionPerson.getExtern().getGroupIds().removeIf(r -> r.getGroupId().equals(groupId));
+					changes = true;
+				}
+			}
+		}
+		else if (dbInstitutionPerson.getExtern().getGroupIds() != null && stilInstitutionPerson.getExtern().getGroupId() == null) {
+			dbInstitutionPerson.getExtern().getGroupIds().clear();
+			changes = true;
+		}
+		return changes;
+	}
+
+	private static boolean checkForEmployeeGroupsChanges(InstitutionPersonFullMyndighed stilInstitutionPerson, DBInstitutionPerson dbInstitutionPerson, boolean changes) {
+		if (dbInstitutionPerson.getEmployee().getGroupIds() == null && stilInstitutionPerson.getEmployee().getGroupId() != null) {
+			dbInstitutionPerson.getEmployee().setGroupIds(new ArrayList<>());
+
+			for (String groupId : stilInstitutionPerson.getEmployee().getGroupId()) {
+				DBEmployeeGroupId dbEmployeeGroupId = new DBEmployeeGroupId();
+				dbEmployeeGroupId.setGroupId(groupId);
+				dbEmployeeGroupId.setEmployee(dbInstitutionPerson.getEmployee());
+				dbInstitutionPerson.getEmployee().getGroupIds().add(dbEmployeeGroupId);
+			}
+
+			changes = true;
+		}
+		else if (dbInstitutionPerson.getEmployee().getGroupIds() != null && stilInstitutionPerson.getEmployee().getGroupId() != null) {
+			List<String> existingGroupIds = dbInstitutionPerson.getEmployee().getGroupIds().stream().map(g -> g.getGroupId()).collect(Collectors.toList());
+			List<String> stilGroupIds = stilInstitutionPerson.getEmployee().getGroupId();
+
+			for (String groupId : stilGroupIds) {
+				if (!existingGroupIds.contains(groupId)) {
+					DBEmployeeGroupId newGroupIdMapping = new DBEmployeeGroupId();
+					newGroupIdMapping.setEmployee(dbInstitutionPerson.getEmployee());
+					newGroupIdMapping.setGroupId(groupId);
+					dbInstitutionPerson.getEmployee().getGroupIds().add(newGroupIdMapping);
+					changes = true;
+				}
+			}
+
+			for (String groupId : existingGroupIds) {
+				if (!stilGroupIds.contains(groupId)) {
+					dbInstitutionPerson.getEmployee().getGroupIds().removeIf(r -> r.getGroupId().equals(groupId));
+					changes = true;
+				}
+			}
+		}
+		else if (dbInstitutionPerson.getEmployee().getGroupIds() != null && stilInstitutionPerson.getEmployee().getGroupId() == null) {
+			dbInstitutionPerson.getEmployee().getGroupIds().clear();
+			changes = true;
+		}
+		return changes;
+	}
+
+	private static boolean checkForUniLoginChanges(InstitutionPersonFullMyndighed stilInstitutionPerson, DBInstitutionPerson dbInstitutionPerson, boolean changes) {
+		UniLoginFull stilUNILogin = stilInstitutionPerson.getUNILogin();
+		if (stilUNILogin != null) {
+			if (dbInstitutionPerson.getUniLogin() == null) {
+				dbInstitutionPerson.setUniLogin(new DBUniLogin());
+				changes = true;
+			}
+
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getUserId(), stilUNILogin.getUserId())) {
+				dbInstitutionPerson.getUniLogin().setUserId(stilUNILogin.getUserId());
+				changes = true;
+			}
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getCivilRegistrationNumber(), stilUNILogin.getCivilRegistrationNumber())) {
+				dbInstitutionPerson.getUniLogin().setCivilRegistrationNumber(stilUNILogin.getCivilRegistrationNumber());
+				changes = true;
+			}
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getInitialPassword(), stilUNILogin.getInitialPassword())) {
+				dbInstitutionPerson.getUniLogin().setInitialPassword(stilUNILogin.getInitialPassword());
+				changes = true;
+			}
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getPasswordState().name(), stilUNILogin.getPasswordState().name())) {
+				dbInstitutionPerson.getUniLogin().setPasswordState(DBPasswordState.from(stilUNILogin.getPasswordState()));
+				changes = true;
+			}
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getName(), stilUNILogin.getName())) {
+				dbInstitutionPerson.getUniLogin().setName(stilUNILogin.getName());
+				changes = true;
+			}
+		}
+		return changes;
 	}
 
 	private void handleGroupsOnYearChange(DBInstitution dbInstitution, InstitutionFullMyndighed stilInstitution) {
@@ -421,5 +629,27 @@ public class SyncService {
 			level = -1;
 		}
 		return level;
+	}
+
+	@Transactional
+	public void deleteInstitutions(List<InstitutionDTO> institutionDTOList) {
+		for (DBInstitution dbInstitution : institutionService.findAll()) {
+			if (!dbInstitution.isDeleted() && institutionDTOList.stream().noneMatch(i -> i.getInstitutionNumber().equals(dbInstitution.getInstitutionNumber()))) {
+				dbInstitution.setDeleted(true);
+				for (DBGroup group : dbInstitution.getGroups()) {
+					if (!group.isDeleted()) {
+						group.setDeleted(true);
+					}
+				}
+				for (DBInstitutionPerson institutionPerson : dbInstitution.getInstitutionPersons()) {
+					if (!institutionPerson.isDeleted()) {
+						institutionPerson.setStilDeleted(LocalDateTime.now());
+						institutionPerson.setDeleted(true);
+					}
+				}
+
+				institutionService.save(dbInstitution);
+			}
+		}
 	}
 }

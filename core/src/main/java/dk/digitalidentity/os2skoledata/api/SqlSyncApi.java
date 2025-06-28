@@ -5,10 +5,17 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+import dk.digitalidentity.os2skoledata.dao.model.Client;
+import dk.digitalidentity.os2skoledata.security.SecurityUtil;
+import dk.digitalidentity.os2skoledata.service.ClientService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -34,6 +41,7 @@ import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
 
+@Slf4j
 @RestController
 public class SqlSyncApi {
 
@@ -50,7 +58,8 @@ public class SqlSyncApi {
 			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime stilCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime stilDeleted,
 			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime adCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime adDeactivated,
 			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime gwCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime gwDeactivated,
-			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureDeactivated) { }
+			@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureCreated, @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime azureDeactivated,
+			String reservedUsername, boolean primaryInstitution) { }
 
 	record GroupFullRecord(@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") LocalDateTime lastModified, boolean deleted,
 			@JsonFormat(pattern = "yyyy-MM-dd") LocalDate fromDate,
@@ -85,7 +94,7 @@ public class SqlSyncApi {
 		}
 	}
 
-	record PersonFullRecord(String aliasFamilyName, String aliasFirstName, @JsonFormat(pattern = "yyyy-MM-dd") LocalDate birthDate,
+	record PersonFullRecord(long os2skoledataDatabaseId, String aliasFamilyName, String aliasFirstName, @JsonFormat(pattern = "yyyy-MM-dd") LocalDate birthDate,
 			String civilRegistrationNumber, String emailAddress, String familyName, String firstName, DBGender gender,
 			String photoId, int verificationLevel, @JsonProperty("protected") boolean _protected, AddressFullRecord address,
 			PhoneNumberFullRecord homePhoneNumber, PhoneNumberFullRecord mobilePhoneNumber,
@@ -112,6 +121,7 @@ public class SqlSyncApi {
 			}
 
 			PersonFullRecord personRecord = new PersonFullRecord(
+					institutionPerson.getId(),
 					institutionPerson.getPerson().getAliasFamilyName(),
 					institutionPerson.getPerson().getAliasFirstName(),
 					institutionPerson.getPerson().getBirthDate(),
@@ -140,6 +150,7 @@ public class SqlSyncApi {
 							contactPerson.getUniLogin().getPasswordState(), contactPerson.getUniLogin().getUserId());
 
 					PersonFullRecord pRecord = new PersonFullRecord(
+							institutionPerson.getId(),
 							contactPerson.getPerson().getAliasFamilyName(),
 							contactPerson.getPerson().getAliasFirstName(),
 							contactPerson.getPerson().getBirthDate(),
@@ -190,7 +201,9 @@ public class SqlSyncApi {
 					institutionPerson.getGwCreated(),
 					institutionPerson.getGwDeactivated(),
 					institutionPerson.getAzureCreated(),
-					institutionPerson.getAzureDeactivated()
+					institutionPerson.getAzureDeactivated(),
+					institutionPerson.getReservedUsername(),
+					institutionPerson.isPrimaryInstitution()
 					);
 			
 			institutionPersons.add(institutionPersonRecord);
@@ -207,5 +220,24 @@ public class SqlSyncApi {
 				institution.getInstitutionNumber(), institution.getType(), institutionPersons, groups);
 		
 		return ResponseEntity.ok(result);
+	}
+
+	/**
+	 * Sets the provided date for the last sync for the calling client
+	 * @param lastSynced The date and time for the last full sync
+	 * @return A ResponseEntity parotting the lastSynced date
+	 */
+	@PostMapping("/api/lastsynced")
+	public ResponseEntity<?> lastFullSync(@RequestBody LocalDateTime lastSynced) {
+
+		Client client = SecurityUtil.getClient();
+		if (client == null) {
+			log.error("Could not extract client from request!");
+			return new ResponseEntity<>("Unknown client", HttpStatus.FORBIDDEN);
+		}
+
+		client.setLastFullSync(	lastSynced);
+
+		return ResponseEntity.ok(lastSynced);
 	}
 }

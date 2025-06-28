@@ -103,7 +103,7 @@ public class DBPerson {
 	@OneToMany(mappedBy = "person", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<Affiliation> affiliations;
 
-	public boolean apiEquals(PersonFullMyndighed person) {
+	public boolean apiEquals(PersonFullMyndighed person, boolean requiredOnly) {
 		if (person == null) {
 			return false;
 		}
@@ -138,11 +138,6 @@ public class DBPerson {
 			return false;
 		}
 		
-		if (!Objects.equals(this.photoId, person.getPhotoId())) {
-			log.debug("DBPerson: Not equals on 'photoId' for " + this.id);
-			return false;
-		}
-
 		if (!Objects.equals(this.birthDate, DateUtils.fromXMLGregorianCalendar(person.getBirthDate()))) {
 			log.debug("DBPerson: Not equals on 'birthDate' for " + this.id);
 			return false;
@@ -158,46 +153,53 @@ public class DBPerson {
 			return false;
 		}
 
-		if ((this.gender == null && person.getGender() != null) ||
-			(this.gender != null && person.getGender() == null) ||
-			(this.gender != null && person.getGender() != null && !Objects.equals(this.gender.name(), person.getGender().name()))) {
+		if (!requiredOnly) {
+			if (!Objects.equals(this.photoId, person.getPhotoId())) {
+				log.debug("DBPerson: Not equals on 'photoId' for " + this.id);
+				return false;
+			}
 
-			log.debug("DBPerson: Not equals on 'gender' for " + this.id);
-			return false;
-		}
+			if ((this.gender == null && person.getGender() != null) ||
+					(this.gender != null && person.getGender() == null) ||
+					(this.gender != null && person.getGender() != null && !Objects.equals(this.gender.name(), person.getGender().name()))) {
 
-		if ((this.address == null && person.getAddress() != null) ||
-			(this.address != null && !this.address.apiEquals(person.getAddress()))) {
-			
-			log.debug("DBPerson: Not equals on 'address' for " + this.id);
-			return false;
-		}
+				log.debug("DBPerson: Not equals on 'gender' for " + this.id);
+				return false;
+			}
 
-		if ((this.homePhoneNumber == null && person.getHomePhoneNumber()!= null) ||
-			(this.homePhoneNumber != null && !this.homePhoneNumber.apiEquals(person.getHomePhoneNumber()))) {
-			
-			log.debug("DBPerson: Not equals on 'homePhoneNumber' for " + this.id);
-			return false;
-		}
+			if ((this.address == null && person.getAddress() != null) ||
+					(this.address != null && !this.address.apiEquals(person.getAddress()))) {
 
-		if ((this.mobilePhoneNumber == null && person.getMobilePhoneNumber() != null) ||
-			(this.mobilePhoneNumber != null && !this.mobilePhoneNumber.apiEquals(person.getMobilePhoneNumber()))) {
-			
-			log.debug("DBPerson: Not equals on 'mobilePhoneNumber' for " + this.id);
-			return false;
-		}
+				log.debug("DBPerson: Not equals on 'address' for " + this.id);
+				return false;
+			}
 
-		if ((this.workPhoneNumber == null && person.getWorkPhoneNumber() != null) ||
-			(this.workPhoneNumber != null && !this.workPhoneNumber.apiEquals(person.getWorkPhoneNumber()))) {
-			
-			log.debug("DBPerson: Not equals on 'workPhoneNumber' for " + this.id);
-			return false;
+			if ((this.homePhoneNumber == null && person.getHomePhoneNumber()!= null) ||
+					(this.homePhoneNumber != null && !this.homePhoneNumber.apiEquals(person.getHomePhoneNumber()))) {
+
+				log.debug("DBPerson: Not equals on 'homePhoneNumber' for " + this.id);
+				return false;
+			}
+
+			if ((this.mobilePhoneNumber == null && person.getMobilePhoneNumber() != null) ||
+					(this.mobilePhoneNumber != null && !this.mobilePhoneNumber.apiEquals(person.getMobilePhoneNumber()))) {
+
+				log.debug("DBPerson: Not equals on 'mobilePhoneNumber' for " + this.id);
+				return false;
+			}
+
+			if ((this.workPhoneNumber == null && person.getWorkPhoneNumber() != null) ||
+					(this.workPhoneNumber != null && !this.workPhoneNumber.apiEquals(person.getWorkPhoneNumber()))) {
+
+				log.debug("DBPerson: Not equals on 'workPhoneNumber' for " + this.id);
+				return false;
+			}
 		}
 
 		return true;
 	}
 
-	public void copyFields(PersonFullMyndighed person) {
+	public void copyFields(PersonFullMyndighed person, boolean requiredOnly) {
 		if (person == null) {
 			return;
 		}
@@ -209,48 +211,50 @@ public class DBPerson {
 		this.emailAddress = person.getEmailAddress();
 		this.familyName = person.getFamilyName();
 		this.firstName = person.getFirstName();
-
-		if (person.getGender() != null) {
-			this.gender = DBGender.from(person.getGender());
-		}
-		else {
-			this.gender = null;
-		}
-		
 		this._protected = person.isProtected();
-		this.photoId = person.getPhotoId();
 		this.verificationLevel = person.getVerificationLevel();
-		
-		if (this.address == null && person.getAddress() != null) {
-			this.address = new DBAddress();
-		}
 
-		if (this.address != null) {
-			this.address.copyFields(person.getAddress());
-		}
+		if (!requiredOnly) {
+			if (person.getGender() != null) {
+				this.gender = DBGender.from(person.getGender());
+			}
+			else {
+				this.gender = null;
+			}
 
-		if (this.homePhoneNumber == null && person.getHomePhoneNumber() != null) {
-			this.homePhoneNumber = new DBPhoneNumber();
-		}
-		
-		if (this.homePhoneNumber != null) {
-			this.homePhoneNumber.copyFields(person.getHomePhoneNumber());
-		}
+			this.photoId = person.getPhotoId();
 
-		if (this.mobilePhoneNumber == null && person.getMobilePhoneNumber() != null) {
-			this.mobilePhoneNumber = new DBPhoneNumber();
-		}
-		
-		if (this.mobilePhoneNumber != null) {
-			this.mobilePhoneNumber.copyFields(person.getMobilePhoneNumber());
-		}
+			if (this.address == null && person.getAddress() != null) {
+				this.address = new DBAddress();
+			}
 
-		if (this.workPhoneNumber == null && person.getWorkPhoneNumber() != null) {
-			this.workPhoneNumber = new DBPhoneNumber();
-		}
-		
-		if (this.workPhoneNumber != null) {
-			this.workPhoneNumber.copyFields(person.getWorkPhoneNumber());
+			if (this.address != null) {
+				this.address.copyFields(person.getAddress());
+			}
+
+			if (this.homePhoneNumber == null && person.getHomePhoneNumber() != null) {
+				this.homePhoneNumber = new DBPhoneNumber();
+			}
+
+			if (this.homePhoneNumber != null) {
+				this.homePhoneNumber.copyFields(person.getHomePhoneNumber());
+			}
+
+			if (this.mobilePhoneNumber == null && person.getMobilePhoneNumber() != null) {
+				this.mobilePhoneNumber = new DBPhoneNumber();
+			}
+
+			if (this.mobilePhoneNumber != null) {
+				this.mobilePhoneNumber.copyFields(person.getMobilePhoneNumber());
+			}
+
+			if (this.workPhoneNumber == null && person.getWorkPhoneNumber() != null) {
+				this.workPhoneNumber = new DBPhoneNumber();
+			}
+
+			if (this.workPhoneNumber != null) {
+				this.workPhoneNumber.copyFields(person.getWorkPhoneNumber());
+			}
 		}
 	}
 

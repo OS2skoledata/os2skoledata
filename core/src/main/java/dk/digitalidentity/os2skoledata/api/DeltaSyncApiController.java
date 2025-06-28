@@ -21,6 +21,7 @@ import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.ClientService;
@@ -50,7 +51,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
-public class SyncApiController {
+public class DeltaSyncApiController {
 
 	@Autowired
 	private InstitutionService institutionService;
@@ -125,7 +126,7 @@ public class SyncApiController {
 			match.setModificationHistoryOffset(body.head());
 		}
 
-		client.setLastActive(LocalDateTime.now());
+		client.setLastFullSync(LocalDateTime.now());
 		clientService.save(client);
 
 		return ResponseEntity.ok().build();
@@ -168,7 +169,7 @@ public class SyncApiController {
 		}
 
 		List<InstitutionDTO> institutions = institutionService.findByIdIn(body.ids).stream()
-				.map(i -> new InstitutionDTO(i.getId(), i.getInstitutionName(), i.getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + i.getInstitutionNumber()), i.getGoogleWorkspaceId(), i.getAllDriveGoogleWorkspaceId(), i.getStudentDriveGoogleWorkspaceId(), i.getEmployeeDriveGoogleWorkspaceId(), i.getAllAzureSecurityGroupId(), i.getStudentAzureSecurityGroupId(), i.getEmployeeAzureSecurityGroupId(), i.getEmployeeGroupGoogleWorkspaceEmail(), i.getStudentInstitutionGoogleWorkspaceId(), i.getEmployeeInstitutionGoogleWorkspaceId(), i.getType(), institutionService.generateEmailMap(i, IntegrationType.GW), institutionService.findCurrentSchoolYearForGWEmails(i), i.getEmployeeAzureTeamId(), i.getAzureEmployeeTeamAdmin() != null ? i.getAzureEmployeeTeamAdmin().getUsername() : null, institutionService.generateEmailMap(i, IntegrationType.AZURE)))
+				.map(i -> institutionService.getInstitutionDTO(i))
 				.collect(Collectors.toList());
 
 		return ResponseEntity.ok(institutions);
@@ -205,11 +206,12 @@ public class SyncApiController {
 			List<DBInstitutionPerson> matchingPeopleIncludingDeleted = institutionPersonService.findByPersonCivilRegistrationNumber(cpr);
 			List<DBInstitutionPerson> matchingPeople = matchingPeopleIncludingDeleted.stream().filter(m -> !m.isDeleted()).collect(Collectors.toList());
 			List<DBInstitutionPerson> matchingPeopleDeleted = matchingPeopleIncludingDeleted.stream().filter(m -> m.isDeleted()).collect(Collectors.toList());
-			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> new InstitutionDTO(p.getInstitution().getId(), p.getInstitution().getInstitutionName(), p.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + p.getInstitution().getInstitutionNumber()), p.getInstitution().getGoogleWorkspaceId(), p.getInstitution().getAllDriveGoogleWorkspaceId(), p.getInstitution().getStudentDriveGoogleWorkspaceId(), p.getInstitution().getEmployeeDriveGoogleWorkspaceId(), p.getInstitution().getAllAzureSecurityGroupId(), p.getInstitution().getStudentAzureSecurityGroupId(), p.getInstitution().getEmployeeAzureSecurityGroupId(), p.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), p.getInstitution().getStudentInstitutionGoogleWorkspaceId(), p.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), p.getInstitution().getType(), institutionService.generateEmailMap(p.getInstitution(), IntegrationType.GW), institutionService.findCurrentSchoolYearForGWEmails(person.getInstitution()), person.getInstitution().getEmployeeAzureTeamId(), person.getInstitution().getAzureEmployeeTeamAdmin() != null ? person.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null, institutionService.generateEmailMap(person.getInstitution(), IntegrationType.AZURE))).toList());
+			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
 			String stilUsername = null;
 			String uniId = null;
 			boolean setPasswordOnCreate = false;
 			String password = null;
+			DBInstitutionPerson primaryPerson = matchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
 
 			if (person.getEmployee() != null) {
 				stilGroupsCurrentInstitution.addAll(person.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList()));
@@ -264,7 +266,7 @@ public class SyncApiController {
 			}
 
 			int currentYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + person.getInstitution());
-			groupService.sortAndAddStudentMainGroups(studentMainGroupGroups, studentMainGroup, studentMainGroupsWorkspace, studentMainGroupsAsObjects, currentYear);
+			groupService.sortAndAddStudentMainGroups(studentMainGroupGroups, studentMainGroup, studentMainGroupsWorkspace, studentMainGroupsAsObjects, currentYear, primaryPerson);
 
 			if (person.getUniLogin() != null) {
 				uniId = person.getUniLogin().getUserId();
@@ -317,7 +319,7 @@ public class SyncApiController {
 			if (SecurityUtil.hasRole("ROLE_API_" + ClientAccessRole.PASSWORD_ACCESS.toString())) {
 
 				setPasswordOnCreate = configuration.getStudentAdministration().isSetIndskolingPasswordOnCreate() &&
-						institutionPersonService.getLevel(person) <= 3 &&
+						institutionPersonService.getLevel(person) != null && institutionPersonService.getLevel(person) <= 3 &&
 						cprPasswordMappingService.exists(cpr);
 				password = cprPasswordMappingService.getDecryptedPassword(cpr);
 			}
@@ -350,14 +352,16 @@ public class SyncApiController {
 					institutionPersonService.findGlobalEmployeeRoles(matchingPeople),
 					externalRole,
 					institutionPersonService.findGlobalExternalRole(matchingPeople),
-					new InstitutionDTO(person.getInstitution().getId(), person.getInstitution().getInstitutionName(), person.getInstitution().getInstitutionNumber(), settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + person.getInstitution().getInstitutionNumber()), person.getInstitution().getGoogleWorkspaceId(), person.getInstitution().getAllDriveGoogleWorkspaceId(), person.getInstitution().getStudentDriveGoogleWorkspaceId(), person.getInstitution().getEmployeeDriveGoogleWorkspaceId(), person.getInstitution().getAllAzureSecurityGroupId(), person.getInstitution().getStudentAzureSecurityGroupId(), person.getInstitution().getEmployeeAzureSecurityGroupId(), person.getInstitution().getEmployeeGroupGoogleWorkspaceEmail(), person.getInstitution().getStudentInstitutionGoogleWorkspaceId(), person.getInstitution().getEmployeeInstitutionGoogleWorkspaceId(), person.getInstitution().getType(), institutionService.generateEmailMap(person.getInstitution(), IntegrationType.GW), institutionService.findCurrentSchoolYearForGWEmails(person.getInstitution()), person.getInstitution().getEmployeeAzureTeamId(), person.getInstitution().getAzureEmployeeTeamAdmin() != null ? person.getInstitution().getAzureEmployeeTeamAdmin().getUsername() : null, institutionService.generateEmailMap(person.getInstitution(), IntegrationType.AZURE)),
+					institutionService.getInstitutionDTO(person.getInstitution()),
 					studentMainGroupStartYearForInstitution,
 					studentMainGroupLevelForInstitution,
 					person.isDeleted(),
 					institutionPersonService.findTotalRoles(matchingPeople),
 					contactCardRecords,
 					setPasswordOnCreate,
-					password
+					password,
+					person.getReservedUsername(),
+					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution())
 			);
 
 			result.add(personRecord);
@@ -398,6 +402,7 @@ public class SyncApiController {
 						g.getLine(),
 						g.getInstitution().getInstitutionNumber(),
 						g.getInstitution().getInstitutionName(),
+						g.getInstitution().getAbbreviation(),
 						settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + g.getInstitution().getInstitutionNumber()),
 						g.getInstitution().getGoogleWorkspaceId(),
 						g.getInstitution().getStudentInstitutionGoogleWorkspaceId(),
@@ -408,7 +413,9 @@ public class SyncApiController {
 						groupService.getStartYear(g.getGroupLevel(), settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + g.getInstitution().getInstitutionNumber()), g.getId()),
 						g.getGroupGoogleWorkspaceEmail(),
 						g.getGroupOnlyStudentsGoogleWorkspaceEmail(),
-						g.getAzureTeamId()
+						g.getAzureTeamId(),
+						g.getCurrentYearGWGroupIdentifier(),
+						g.getCurrentYearGWFolderIdentifier()
 						))
 				.collect(Collectors.toList());
 

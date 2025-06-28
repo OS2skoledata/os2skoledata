@@ -7,8 +7,10 @@ import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.GoogleWorkspaceClassFolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
@@ -19,6 +21,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -84,11 +87,26 @@ public class GroupService {
 		return currentYear - level;
 	}
 
-	public void sortAndAddStudentMainGroups(List<DBGroup> studentMainGroupGroups, List<Long> studentMainGroup, List<String> studentMainGroupsWorkspace, List<MiniGroupDTO> studentMainGroupsAsObjects, int currentYear) {
+	public void sortAndAddStudentMainGroups(List<DBGroup> studentMainGroupGroups, List<Long> studentMainGroup, List<String> studentMainGroupsWorkspace, List<MiniGroupDTO> studentMainGroupsAsObjects, int currentYear, DBInstitutionPerson primaryPerson) {
 		sortByLevel(studentMainGroupGroups);
 		studentMainGroup.addAll(studentMainGroupGroups.stream().map(DBGroup::getId).toList());
-		studentMainGroupsAsObjects.addAll(studentMainGroupGroups.stream().map(g -> new MiniGroupDTO(g.getId(), getStartYear(g.getGroupLevel(), currentYear, g.getId()), g.getInstitution().getInstitutionName())).toList());
+		studentMainGroupsAsObjects.addAll(studentMainGroupGroups.stream().map(g ->
+				new MiniGroupDTO(g.getId(), getStartYear(g.getGroupLevel(), currentYear, g.getId()),
+						         g.getInstitution().getInstitutionName(), g.getInstitution().getType(),
+						         g.getGoogleWorkspaceId(), isPrimary(g, primaryPerson))).toList());
 		studentMainGroupsWorkspace.addAll(studentMainGroupGroups.stream().map(DBGroup::getGoogleWorkspaceId).toList());
+	}
+
+	private boolean isPrimary(DBGroup group, DBInstitutionPerson primaryPerson) {
+		if (primaryPerson == null) {
+			return false;
+		}
+
+		if (primaryPerson.getInstitution().getId() == group.getInstitution().getId()) {
+			return true;
+		}
+
+		return false;
 	}
 
 	private void sortByLevel(List<DBGroup> studentMainGroupGroups) {
@@ -209,5 +227,15 @@ public class GroupService {
 		}
 
 		return level <= 3;
+	}
+
+	public void resetAllYearlyIds() {
+		List<DBGroup> toSave = new ArrayList<>();
+		for (DBGroup dbGroup : findAll()) {
+			dbGroup.setCurrentYearGWFolderIdentifier(null);
+			dbGroup.setCurrentYearGWGroupIdentifier(null);
+			toSave.add(dbGroup);
+		}
+		groupDao.saveAll(toSave);
 	}
 }

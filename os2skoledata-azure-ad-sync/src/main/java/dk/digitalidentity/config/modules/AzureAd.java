@@ -8,6 +8,8 @@ import lombok.Setter;
 public class AzureAd {
 	private String clientID;
 	private String clientSecret;
+	private boolean usingPEMCertificate;
+	private String certificatePath;
 	private String tenantID;
 	private boolean userDryRun;
 	private boolean teamsAndGroupsOnly = false;

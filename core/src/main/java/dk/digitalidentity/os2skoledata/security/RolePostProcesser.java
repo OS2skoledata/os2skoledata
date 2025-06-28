@@ -3,9 +3,11 @@ package dk.digitalidentity.os2skoledata.security;
 import dk.digitalidentity.os2skoledata.config.Constants;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.dao.model.PasswordAdmin;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
 import dk.digitalidentity.os2skoledata.service.ClassroomAdminService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
+import dk.digitalidentity.os2skoledata.service.PasswordAdminService;
 import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
 import dk.digitalidentity.samlmodule.model.SamlLoginPostProcessor;
 import dk.digitalidentity.samlmodule.model.TokenUser;
@@ -33,15 +35,23 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 	@Autowired
 	private ClassroomAdminService classroomAdminService;
 
+	@Autowired
+	private PasswordAdminService passwordAdminService;
+
 	@Override
 	public void process(TokenUser tokenUser) {
 		Set<SamlGrantedAuthority> newAuthorities = new HashSet<>();
 
+		boolean passwordAdminPossible = false;
 		for (Iterator<SamlGrantedAuthority> iterator = tokenUser.getAuthorities().iterator(); iterator.hasNext();) {
 			SamlGrantedAuthority grantedAuthority = iterator.next();
 
 			if ("ROLE_admin".equals(grantedAuthority.getAuthority())) {
 				newAuthorities.add(new SamlGrantedAuthority(Constants.ADMIN));
+			}
+
+			if ("ROLE_password_admin".equals(grantedAuthority.getAuthority())) {
+				passwordAdminPossible = true;
 			}
 		}
 
@@ -50,11 +60,19 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 		List<DBInstitutionPerson> people = institutionPersonService.findByUsernameAndDeletedFalse(username);
 		if (people.stream().anyMatch(p -> p.getEmployee() != null || p.getExtern() != null)) {
 			newAuthorities.add(new SamlGrantedAuthority(Constants.SCHOOL_EMPLOYEE));
+			passwordAdminPossible = true;
 		}
 
 		// check if the user is a Google Classroom admin
 		if (classroomAdminService.isClassroomAdmin(username)) {
 			newAuthorities.add(new SamlGrantedAuthority(Constants.GOOGLE_CLASSROOM_ADMIN));
+		}
+
+		// check if the user is a password admin
+		if (passwordAdminPossible) {
+			if (passwordAdminService.getByUsername(username) != null) {
+				newAuthorities.add(new SamlGrantedAuthority(Constants.PASSWORD_ADMIN));
+			}
 		}
 
 		// if none of the above roles, check if user is parent

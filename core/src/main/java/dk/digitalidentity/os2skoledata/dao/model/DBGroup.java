@@ -2,8 +2,10 @@ package dk.digitalidentity.os2skoledata.dao.model;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 
+import javax.persistence.CascadeType;
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.EnumType;
@@ -14,9 +16,12 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
+import javax.persistence.OneToMany;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 import org.springframework.data.annotation.LastModifiedDate;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -88,13 +93,23 @@ public class DBGroup {
 	@Column
 	private String groupGoogleWorkspaceEmail;
 
-	// TODO
 	@Column
 	private String groupOnlyStudentsGoogleWorkspaceEmail;
+
+	@Column(name = "current_year_gw_group_identifier")
+	private String currentYearGWGroupIdentifier;
+
+	@Column(name = "current_year_gw_folder_identifier")
+	private String currentYearGWFolderIdentifier;
 
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "institution_id")
 	private DBInstitution institution;
+
+	@NotAudited
+	@BatchSize(size = 100)
+	@OneToMany(mappedBy = "group", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+	private List<GoogleWorkspaceClassFolderOrGroup> googleWorkspaceClassFoldersAndGroups;
 
 	public boolean apiEquals(Group group) {
 		if (group == null) {

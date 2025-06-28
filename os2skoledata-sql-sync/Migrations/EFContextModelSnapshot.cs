@@ -373,9 +373,21 @@ namespace os2skoledata_sql_sync.Migrations
                         .HasColumnType("varchar(255)")
                         .HasColumnName("local_person_id");
 
+                    b.Property<int>("OS2skoledataDatabaseId")
+                        .HasColumnType("int")
+                        .HasColumnName("os2skoledata_database_id");
+
                     b.Property<int?>("PersonId")
                         .HasColumnType("int")
                         .HasColumnName("person_id");
+
+                    b.Property<bool>("PrimaryInstitution")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("primary_institution");
+
+                    b.Property<string>("ReservedUsername")
+                        .HasColumnType("longtext")
+                        .HasColumnName("reserved_username");
 
                     b.Property<string>("Source")
                         .HasMaxLength(255)

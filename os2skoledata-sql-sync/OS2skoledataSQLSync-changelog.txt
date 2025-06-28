@@ -1,0 +1,5 @@
+2024.10.30 - 1.0.0 - Første version
+2025.01.30 - 1.0.0 - Fejlrettelse der korrekt håndterer opdateringer
+2025.05.13 - 1.1.0 - Tilføjede reservedUsername og Primary til institutionPerson Tabellen 
+2025.05.13 - 1.1.1 - Bug fix + tilføj OS2skoledata ID
+

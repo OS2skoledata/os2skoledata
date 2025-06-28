@@ -8,6 +8,7 @@ import dk.digitalidentity.os2skoledata.controller.mvc.xlsview.StudentListXlsxVie
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
+import dk.digitalidentity.os2skoledata.security.RequireSchoolEmployeeOrPasswordAdminRole;
 import dk.digitalidentity.os2skoledata.security.RequireSchoolEmployeeRole;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.ADPasswordService;
@@ -50,7 +51,7 @@ import java.util.Map;
 import java.util.Objects;
 
 @Slf4j
-@RequireSchoolEmployeeRole
+@RequireSchoolEmployeeOrPasswordAdminRole
 @Controller
 public class StudentController {
 
@@ -82,7 +83,7 @@ public class StudentController {
 
 	@GetMapping("/ui/students")
 	public String list(Model model) {
-		if (!configuration.getStudentAdministration().isEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 
@@ -91,6 +92,7 @@ public class StudentController {
 		return "students/list";
 	}
 
+	@RequireSchoolEmployeeRole
 	@GetMapping("/ui/students/groups")
 	public String listGroups(Model model) {
 		if (!configuration.getStudentAdministration().isEnabled()) {
@@ -104,7 +106,7 @@ public class StudentController {
 
 	@GetMapping("/ui/students/{username}/changepassword")
 	public String changePassword(Model model, RedirectAttributes redirectAttributes, @PathVariable("username") String username) {
-		if (!configuration.getStudentAdministration().isEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 
@@ -135,7 +137,7 @@ public class StudentController {
 
 	@PostMapping("/students/changepassword")
 	public String changePassword(Model model, RedirectAttributes redirectAttributes, @Valid @ModelAttribute("passwordForm") PasswordChangeForm form, BindingResult bindingResult) {
-		if (!configuration.getStudentAdministration().isEnabled()) {
+		if (!configuration.getStudentAdministration().isEnabled() || configuration.getStudentAdministration().isClassListsOnly()) {
 			return "redirect:/error";
 		}
 
@@ -184,6 +186,7 @@ public class StudentController {
 		return "redirect:/ui/students";
 	}
 
+	@RequireSchoolEmployeeRole
 	@GetMapping("/students/groups/{id}/print")
 	public String getClassStudentPrint(Model model, RedirectAttributes redirectAttributes, @PathVariable("id") long id, @RequestParam("withPassword") boolean withPassword) {
 		if (!configuration.getStudentAdministration().isEnabled()) {
@@ -206,6 +209,10 @@ public class StudentController {
 			withPassword = false;
 		}
 
+		if (configuration.getStudentAdministration().isClassListsOnly()) {
+			withPassword = false;
+		}
+
 		model.addAttribute("withPassword", withPassword);
 		model.addAttribute("students", institutionPersonService.getStudentsInClassForPrint(group, withPassword));
 		model.addAttribute("className", printGroupDTO.getGroupName());
@@ -213,6 +220,7 @@ public class StudentController {
 		return "students/groups/print_classes_students";
 	}
 
+	@RequireSchoolEmployeeRole
 	@GetMapping("/students/groups/{id}/csv")
 	public ModelAndView getClassStudentCsv(final HttpServletResponse response, Locale loc, @PathVariable("id") long id, @RequestParam("withPassword") boolean withPassword) {
 		if (!configuration.getStudentAdministration().isEnabled()) {
@@ -230,6 +238,10 @@ public class StudentController {
 		}
 
 		if (withPassword && !printGroupDTO.isCanPrintPassword()) {
+			withPassword = false;
+		}
+
+		if (configuration.getStudentAdministration().isClassListsOnly()) {
 			withPassword = false;
 		}
 

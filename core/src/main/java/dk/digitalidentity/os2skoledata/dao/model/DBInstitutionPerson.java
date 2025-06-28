@@ -16,7 +16,6 @@ import javax.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
-import org.springframework.data.annotation.LastModifiedDate;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
@@ -41,7 +40,6 @@ public class DBInstitutionPerson {
 
 	@Column
 	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
-	@LastModifiedDate
 	private LocalDateTime lastModified;
 
 	@Column
@@ -56,6 +54,12 @@ public class DBInstitutionPerson {
 	// from the Active Directory integration
 	@Column
 	private String username;
+
+	@Column
+	private String reservedUsername;
+
+	@Column(name = "primary_institution")
+	private boolean primaryInstitution;
 
 	//Person can be one of the 3 types Employee, Extern, Student
 	
@@ -122,7 +126,7 @@ public class DBInstitutionPerson {
 	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
 	private LocalDateTime azureDeactivated;
 
-	public boolean apiEquals(InstitutionPersonFullMyndighed other) {
+	public boolean apiEquals(InstitutionPersonFullMyndighed other, boolean requiredOnly) {
 		if (other == null) {
 			return false;
 		}
@@ -152,14 +156,14 @@ public class DBInstitutionPerson {
 		}
 
 		if ((this.person == null && other.getPerson() != null) ||
-			(this.person != null && !this.person.apiEquals(other.getPerson()))) {
+			(this.person != null && !this.person.apiEquals(other.getPerson(), requiredOnly))) {
 			
 			log.debug("DBInstitutionPerson: Not equals on 'person' for " + this.id);
 			return false;
 		}
 
 		if ((this.student == null && other.getStudent() != null) ||
-			(this.student != null && !this.student.apiEquals(other.getStudent()))) {
+			(this.student != null && !this.student.apiEquals(other.getStudent(), requiredOnly))) {
 			
 			log.debug("DBInstitutionPerson: Not equals on 'student' for " + this.id);
 			return false;
@@ -175,7 +179,7 @@ public class DBInstitutionPerson {
 		return true;
 	}
 
-	public void copyFields(InstitutionPersonFullMyndighed institutionPerson) {
+	public void copyFields(InstitutionPersonFullMyndighed institutionPerson, boolean requiredOnly) {
 		if (institutionPerson == null) {
 			return;
 		}
@@ -204,7 +208,7 @@ public class DBInstitutionPerson {
 		}
 		
 		if (this.person != null) {
-			this.person.copyFields(institutionPerson.getPerson());
+			this.person.copyFields(institutionPerson.getPerson(), requiredOnly);
 		}
 
 		if (this.student == null && institutionPerson.getStudent() != null) {
@@ -212,7 +216,7 @@ public class DBInstitutionPerson {
 		}
 		
 		if (this.student != null) {
-			this.student.copyFields(institutionPerson.getStudent());
+			this.student.copyFields(institutionPerson.getStudent(), requiredOnly);
 		}
 
 		if (this.uniLogin == null && institutionPerson.getUNILogin() != null) {

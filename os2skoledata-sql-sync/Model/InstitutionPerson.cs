@@ -10,6 +10,7 @@ namespace os2skoledata_sql_sync.Model
     {
         [Key]
         public int Id { get; set; }
+        public int OS2skoledataDatabaseId { get; set; }
         public DateTime LastModified { get; set; }
         public bool Deleted { get; set; }
         [MaxLength(255)]
@@ -23,6 +24,8 @@ namespace os2skoledata_sql_sync.Model
         public  Student Student { get; set; }
         public  Person Person { get; set; }
         public  UniLogin UniLogin { get; set; }
+        public bool PrimaryInstitution { get; set; }
+        public string ReservedUsername { get; set; }
 
         // back reference to Institution
         [ForeignKey("Institution")]
@@ -42,6 +45,11 @@ namespace os2skoledata_sql_sync.Model
         public bool ApiEquals(InstitutionPersonDTO other)
         {
             if (other == null)
+            {
+                return false;
+            }
+
+            if (this.OS2skoledataDatabaseId != other.os2skoledataDatabaseId)
             {
                 return false;
             }
@@ -101,6 +109,16 @@ namespace os2skoledata_sql_sync.Model
                 return false;
             }
 
+            if (this.PrimaryInstitution != other.primaryInstitution)
+            {
+                return false;
+            }
+
+            if (this.ReservedUsername != other.reservedUsername)
+            {
+                return false;
+            }
+
             if (this.StilCreated != other.StilCreated)
             {
                 return false;
@@ -151,11 +169,14 @@ namespace os2skoledata_sql_sync.Model
                 return;
             }
 
+            this.OS2skoledataDatabaseId = institutionPerson.os2skoledataDatabaseId;
             this.LastModified = institutionPerson.lastModified;
             this.Deleted = institutionPerson.deleted;
             this.LocalPersonId = institutionPerson.localPersonId;
             this.Source = institutionPerson.source;
             this.Username = institutionPerson.username;
+            this.PrimaryInstitution = institutionPerson.primaryInstitution;
+            this.ReservedUsername = institutionPerson.reservedUsername;
 
             this.StilCreated = institutionPerson.StilCreated;
             this.StilDeleted = institutionPerson.StilDeleted;

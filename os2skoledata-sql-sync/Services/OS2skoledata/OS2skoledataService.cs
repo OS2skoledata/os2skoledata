@@ -24,7 +24,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
         public List<InstitutionDTO> GetEverything()
         {
             List<InstitutionReadDTO> institutions = GetInstitutions();
-            
+
             logger.LogDebug("Fetching everyting from OS2skoledata");
 
             using var httpClient = GetHttpClient();
@@ -37,7 +37,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 response.Result.EnsureSuccessStatusCode();
                 var responseString = response.Result.Content.ReadAsStringAsync();
                 responseString.Wait();
-                
+
                 var institution = JsonConvert.DeserializeObject<InstitutionDTO>(responseString.Result, jsonSerializerSettings);
 
                 result.Add(institution);
@@ -107,6 +107,21 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                     NamingStrategy = new CamelCaseNamingStrategy()
                 }
             };
+        }
+
+
+        /// <summary>
+        /// Calls os2skoledata api to set the date for the last full sync
+        /// </summary>
+        public async void SetLastFullSync()
+        {
+            using var httpClient = GetHttpClient();
+
+            var timestamp = DateTime.Now;
+            var content = new StringContent(JsonConvert.SerializeObject(timestamp, getSerializerSettings()), Encoding.UTF8, "application/json");
+            var response = await httpClient.PostAsync(new Uri(baseUri, "api/lastsynced"), content);
+            response.EnsureSuccessStatusCode();
+
         }
     }  
 }

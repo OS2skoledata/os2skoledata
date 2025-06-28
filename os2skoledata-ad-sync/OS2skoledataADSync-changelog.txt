@@ -50,3 +50,9 @@
 2025.03.07 - 1.22.1 - Bugfix til navne på enheder
 2025.03.20 - 1.24.0 - Mulighed for fuld sletning af brugere og bugfixes
 2025.03.26 - 1.25.0 - Mulighed for at sætte password på indskolingselever ved oprettelse til et kodeord genereret af OS2skoledata (kontakt Digital Identity for at tage dette i brug)
+2025.05.12 - 1.26.0 - Gjort klar til indlæsning af data fra lokal kilde i stedet for STIL. Derudover er der tilføjet en ny institutionstype. Mulighed for at anvende institutionsforkortelser i navnestandarder (kontakt Digital Identity for at tage dette i brug)
+2025.05.13 - 1.26.1 - Fejlrettelse nullpointer i navnestandard
+2025.05.28 - 1.26.2 - Tilføj OverwriteExistingMail til mails på grupper
+2025.05.29 - 1.26.3 - Mindre bugfixes til bestemmelse af placering på brugere
+2025.06.16 - 1.26.4 - Mindre bugfix til GlobalRoleField
+2025.06.18 - 1.26.5 - Mindre bugfix til at fjerne værdien i DisabledDateField ved reaktivering af bruger

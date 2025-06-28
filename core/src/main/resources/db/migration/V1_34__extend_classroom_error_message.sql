@@ -1,0 +1,1 @@
+ALTER TABLE classroom_action_queue MODIFY error_message TEXT;
