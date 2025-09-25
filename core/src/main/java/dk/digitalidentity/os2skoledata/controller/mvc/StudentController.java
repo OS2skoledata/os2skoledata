@@ -92,7 +92,6 @@ public class StudentController {
 		return "students/list";
 	}
 
-	@RequireSchoolEmployeeRole
 	@GetMapping("/ui/students/groups")
 	public String listGroups(Model model) {
 		if (!configuration.getStudentAdministration().isEnabled()) {
@@ -186,7 +185,6 @@ public class StudentController {
 		return "redirect:/ui/students";
 	}
 
-	@RequireSchoolEmployeeRole
 	@GetMapping("/students/groups/{id}/print")
 	public String getClassStudentPrint(Model model, RedirectAttributes redirectAttributes, @PathVariable("id") long id, @RequestParam("withPassword") boolean withPassword) {
 		if (!configuration.getStudentAdministration().isEnabled()) {
@@ -220,7 +218,6 @@ public class StudentController {
 		return "students/groups/print_classes_students";
 	}
 
-	@RequireSchoolEmployeeRole
 	@GetMapping("/students/groups/{id}/csv")
 	public ModelAndView getClassStudentCsv(final HttpServletResponse response, Locale loc, @PathVariable("id") long id, @RequestParam("withPassword") boolean withPassword) {
 		if (!configuration.getStudentAdministration().isEnabled()) {

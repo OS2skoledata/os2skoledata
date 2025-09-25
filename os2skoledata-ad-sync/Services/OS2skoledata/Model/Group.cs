@@ -1,6 +1,4 @@
-﻿using System;
-
-namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
+﻿namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
 {
     public class Group
     {
@@ -14,5 +12,18 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
         public string InstitutionAbbreviation { get; set; }
         public bool InstitutionLocked { get; set; }
         public int StartYear { get; set; }
+        public DBGroupType GroupType {get; set; }
+    }
+
+    public enum DBGroupType
+    {
+        HOVEDGRUPPE, 
+        ÅRGANG, 
+        RETNING, 
+        HOLD, 
+        SFO, 
+        TEAM, 
+        ANDET, 
+        UNKNOWN
     }
 }

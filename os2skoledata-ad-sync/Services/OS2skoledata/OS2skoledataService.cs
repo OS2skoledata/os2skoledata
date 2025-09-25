@@ -30,20 +30,6 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             this.httpClient = httpClient;
         }
 
-        private string GetApiKeyFromSettings(IServiceProvider sp)
-        {
-           var pamEnabled = settings.PAMSettings == null ? false : settings.PAMSettings.Enabled;
-            if (pamEnabled) 
-            {
-                PAMService pamService = sp.GetService<PAMService>();
-                return pamService.GetApiKey();
-            }
-            else
-            {
-                return settings.OS2skoledataSettings.ApiKey;
-            }
-        }
-
         public List<Institution> GetInstitutions()
         {
             logger.LogInformation("Fetching institutions from OS2skoledata");
@@ -80,10 +66,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             return whitelistedInstitutions;
         }
 
-        public List<Group> GetClassesForInstitution(Institution institution)
+        public List<Group> GetGroupsForInstitution(Institution institution)
         {
             logger.LogInformation($"Fetching groups from {institution.InstitutionName} in OS2skoledata");
-            var response = SendWithRetry(() => httpClient.GetAsync(new Uri(baseUri, $"api/groups?institutionNumber={institution.InstitutionNumber}")).Result);
+            var response = SendWithRetry(() => httpClient.GetAsync(new Uri(baseUri, $"api/groups?alltypes=true&institutionNumber={institution.InstitutionNumber}")).Result);
             
             response.EnsureSuccessStatusCode();
             var responseString = response.Content.ReadAsStringAsync().Result;

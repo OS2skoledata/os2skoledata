@@ -97,7 +97,7 @@ public class AzureADService {
 			clientCredential = new ClientCertificateCredentialBuilder()
 					.clientId(config.getAzureAd().getClientID())
 					.tenantId(config.getAzureAd().getTenantID())
-					.pemCertificate(config.getAzureAd().getCertificatePath())
+					.pfxCertificate(config.getAzureAd().getCertificatePath(), config.getAzureAd().getCertificatePassword())
 					.build();
 		} else if (clientCredential == null) {
 			// Using secret for credentials
@@ -195,15 +195,15 @@ public class AzureADService {
 		allUsernames.addAll(allOS2skoledataUsernames);
 		for (String username : allUsernames) {
 			String key = "";
-			if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM)) {
+			if (config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.RANDOM)) {
 				try {
 					UsernameSettings usernameSettings = config.getSyncSettings().getUsernameSettings();
-					int wantedTotalLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? usernameSettings.getRandomStandardLetterCount() + usernameSettings.getRandomStandardNumberCount() : 8;
+					int wantedTotalLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.RANDOM) ? usernameSettings.getRandomStandardLetterCount() + usernameSettings.getRandomStandardNumberCount() : 8;
 					if (username.length() != wantedTotalLength) {
 						continue;
 					}
 
-					int wantedLetterLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? usernameSettings.getRandomStandardLetterCount() : 4;
+					int wantedLetterLength = usernameSettings.getUsernameStandard().equals(UsernameStandard.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || config.getSyncSettings().getUsernameSettings().getUsernameStandard().equals(UsernameStandard.RANDOM) ? usernameSettings.getRandomStandardLetterCount() : 4;
 					if (username.length() >= wantedLetterLength)
 					{
 						key = username.substring(0, wantedLetterLength);
@@ -450,11 +450,32 @@ public class AzureADService {
 	}
 
 	public Group getGroup(String id, boolean retry) {
-		if (!retry) {
-			return appClient.groups(id).buildRequest().get();
-		} else {
-			return appClientWithoutLogging.groups(id).buildRequest().get();
+		int maxRetries = retry ? 10 : 1;
+		int attempt = 0;
+
+		while (attempt < maxRetries) {
+			try {
+				if (!retry) {
+					return appClient.groups(id).buildRequest().get();
+				} else {
+					return appClientWithoutLogging.groups(id).buildRequest().get();
+				}
+			} catch (Exception e) {
+				attempt++;
+				if (attempt >= maxRetries) {
+					throw new RuntimeException("Failed to fetch group with id " + id + " after " + maxRetries + " tries", e);
+				}
+
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException ie) {
+					Thread.currentThread().interrupt();
+					throw new RuntimeException("Thread was interrupted during wait", ie);
+				}
+			}
 		}
+
+		throw new IllegalStateException("Unexpected error in getGroup");
 	}
 
 	public EducationClass getEducationClass(String id) {
@@ -748,7 +769,7 @@ public class AzureADService {
 		return schemaDTO;
 	}
 
-	public void updateSecurityGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<String> securityGroupIds, List<String> securityGroupIdsForRenamedGroups, Set<String> allClassLevels) throws Exception {
+	public void updateSecurityGroups(Institution institution, List<DBUser> users, List<DBGroup> classes, List<String> securityGroupIds, List<String> securityGroupIdsForRenamedGroups) throws Exception {
 		log.info("Handling security groups for institution " + institution.getInstitutionName());
 		Group institutionEmployeeGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_EMPLOYEE_AZURE_SECURITY_GROUP_ID, institution.getEmployeeAzureSecurityGroupId(), getInstitutionGroupName("EMPLOYEES", institution), null, null);
 		Group institutionStudentGroup = handleGroupUpdate(institution, null, SetFieldType.INSTITUTION_STUDENT_AZURE_SECURITY_GROUP_ID, institution.getStudentAzureSecurityGroupId(), getInstitutionGroupName("STUDENTS", institution), null, null);
@@ -786,7 +807,6 @@ public class AzureADService {
 		}
 
 		List<String> classLevels = getClassLevels(classes);
-		allClassLevels.addAll(classLevels);
 		for (String level : classLevels) {
 			Group levelSecurityGroup = handleGroupUpdate(institution, null, null, getGroupIdentifier(institution, "level_" + level), getLevelSecurityGroupName(level, institution, config.getSyncSettings().getNameStandards().getLevelSecurityGroupNameStandard(), false), null, "level_" + level);
 			if (levelSecurityGroup != null) {
@@ -879,7 +899,7 @@ public class AzureADService {
 		}
 	}
 
-	public void updateGlobalSecurityGroups(List<DBUser> allUsers, List<String> securityGroupIds, List<String> lockedUsernames, Set<String> allClassLevels) throws Exception {
+	public void updateGlobalSecurityGroups(List<DBUser> allUsers, List<String> securityGroupIds, List<String> lockedUsernames) throws Exception {
 		log.info("Handling global security groups");
 		Group globalEmployeeSecurityGroup = updateGlobalSecurityGroup(config.getSyncSettings().getNameStandards().getGlobalEmployeeSecurityGroupName());
 		Group globalStudentSecurityGroup = updateGlobalSecurityGroup(config.getSyncSettings().getNameStandards().getGlobalStudentSecurityGroupName());
@@ -898,7 +918,8 @@ public class AzureADService {
 			securityGroupIds.add(globalStudentSecurityGroup.id);
 		}
 
-		for (String level : allClassLevels) {
+		// levels
+		for (String level : getAllClassLevels()) {
 			Group globalLevelGroup = updateGlobalSecurityGroup(getLevelSecurityGroupName(level, null, config.getSyncSettings().getNameStandards().getGlobalLevelSecurityGroupNameStandard(), true));
 			if (globalLevelGroup != null) {
 				List<DBUser> usersInLevel = allUsers.stream().filter(u -> u.getRole().equals(Role.STUDENT) && u.getStudentMainGroupLevelForInstitution() != null && u.getStudentMainGroupLevelForInstitution().equals(level)).toList();
@@ -908,6 +929,26 @@ public class AzureADService {
 		}
 
 		log.info("Finished handling global security groups");
+	}
+
+	private Set<String> getAllClassLevels() {
+		// all levels from STIL: https://viden.stil.dk/spaces/INFRA2/pages/2360658/Unilogin+SkoleGrunddata+BPI-webservices#UniloginSkoleGrunddataBPIwebservices-gruppetrin
+		Set<String> result = new HashSet<>();
+		result.add("DT");
+		result.add("Andet");
+		result.add("0");
+		result.add("1");
+		result.add("2");
+		result.add("3");
+		result.add("4");
+		result.add("5");
+		result.add("6");
+		result.add("7");
+		result.add("8");
+		result.add("9");
+		result.add("10");
+
+		return result;
 	}
 
 	private Group updateGlobalSecurityGroup(String name) throws Exception {
@@ -950,25 +991,26 @@ public class AzureADService {
 	private void handleTeamGroupMembers(String groupId, String groupName, List<DBUser> members, List<DBUser> owners) {
 		log.info("Handling members for team group with name" + groupName);
 		List<User> membersFromAzure = getUserMembersOfGroup(groupId);
-		List<User> ownersFromAzure = getUserOwnersOfGroup(groupId);
 		List<String> memberAzureIds = membersFromAzure.stream().filter(m -> m.id != null).map(m -> m.id).collect(Collectors.toList());
-		List<String> ownerAzureIds = ownersFromAzure.stream().filter(m -> m.id != null).map(m -> m.id).collect(Collectors.toList());
 		List<String> memberUsernames = members.stream().map(DBUser::getUsername).toList();
-		List<String> ownerUsernames = owners.stream().map(DBUser::getUsername).toList();
 
 		// delete member permissions
 		handleDeleteMemberships(groupId, groupName, null, membersFromAzure, memberUsernames, "member");
-
-		// delete owner permissions
-		handleDeleteMemberships(groupId, groupName, null, ownersFromAzure, ownerUsernames, "owner");
 
 		// create member permissions
 		Set<DBUser> toAssign = members.stream().filter(u -> u.getAzureId() != null).collect(Collectors.toSet());
 		handleCreateMemberships(groupId, groupName, toAssign, memberAzureIds, "member");
 
 		// create owner permissions
+		List<User> ownersFromAzure = getUserOwnersOfGroup(groupId);
+		List<String> ownerAzureIds = ownersFromAzure.stream().filter(m -> m.id != null).map(m -> m.id).collect(Collectors.toList());
 		Set<DBUser> toAssignOwner = owners.stream().filter(u -> u.getAzureId() != null).collect(Collectors.toSet());
 		handleCreateMemberships(groupId, groupName, toAssignOwner, ownerAzureIds, "owner");
+
+		// delete owner permissions
+		ownersFromAzure = getUserOwnersOfGroup(groupId);
+		List<String> ownerUsernames = owners.stream().map(DBUser::getUsername).toList();
+		handleDeleteMemberships(groupId, groupName, null, ownersFromAzure, ownerUsernames, "owner");
 	}
 
 	private void handleDeleteMemberships(String groupId, String groupName, List<String> lockedUsernames, List<User> membersFromAzure, List<String> usernames, String type) {
@@ -1148,7 +1190,8 @@ public class AzureADService {
 						.replace("{CLASS_ID}", currentClass.getGroupId())
 						.replace("{CLASS_LEVEL}", currentClass.getGroupLevel())
 						.replace("{CLASS_YEAR}", String.valueOf(currentClass.getStartYear()))
-						.replace("{CLASS_LINE}", currentClass.getLine());
+						.replace("{CLASS_LINE}", currentClass.getLine())
+						.replace("{CLASS_DATABASE_ID}", currentClass.getDatabaseId() + "");
 			} else {
 				String nameStandard = null;
 				if (noClassYearStandard == null || noClassYearStandard.isEmpty()) {
@@ -1163,7 +1206,8 @@ public class AzureADService {
 						.replace("{INSTITUTION_ABBREVIATION}", institution.getAbbreviation() != null ? institution.getAbbreviation() : "")
 						.replace("{CLASS_NAME}", currentClass.getGroupName())
 						.replace("{CLASS_ID}", currentClass.getGroupId())
-						.replace("{CLASS_LEVEL}", currentClass.getGroupLevel());
+						.replace("{CLASS_LEVEL}", currentClass.getGroupLevel())
+						.replace("{CLASS_DATABASE_ID}", currentClass.getDatabaseId() + "");
 			}
 		}
 
@@ -1301,7 +1345,7 @@ public class AzureADService {
 				}
 
 				callUpdateTeam(name, matchTeam);
-				log.info("Updated team with name " + name + " and id " + teamId);
+				log.info("Updated team with name " + name + " and id " + teamId + " and mailnickname " + mailNickmame);
 			}
 
 			boolean changes = false;
@@ -1314,12 +1358,13 @@ public class AzureADService {
 			}
 
 			if (!matchGroup.mailNickname.toLowerCase().equals(mailNickmame.toLowerCase())) {
+				log.info("Changing mailnickname from " + matchGroup.mailNickname + " to " + mailNickmame);
 				changes = true;
 			}
 
 			if (changes) {
 				callUpdateGroup(name, matchGroup, mailNickmame);
-				log.info("Updated team with name " + name + " and id " + teamId);
+				log.info("Updated team with name " + name + " and id " + teamId + " and mailnickname " + mailNickmame);
 			}
 
 			id = teamId;
@@ -1758,7 +1803,6 @@ public class AzureADService {
 	// this is not needed in AAD, but we do it in AD, so to make sure groups has the same names do it here as well
 	private String escapeCharacters(String name) {
 		name = name.replace("+", "\\+");
-		name = name.replace(",", "\\,");
 		name = name.replace("\"", "\\\"");
 		name = name.replace("<", "\\<");
 		name = name.replace(">", "\\>");

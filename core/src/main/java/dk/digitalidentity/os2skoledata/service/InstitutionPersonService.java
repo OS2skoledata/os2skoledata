@@ -136,6 +136,9 @@ public class InstitutionPersonService {
 	}
 
 	public void saveAll(List<DBInstitutionPerson> entities) {
+		for (DBInstitutionPerson entity : entities) {
+			entity.setLastModified(LocalDateTime.now());
+		}
 		institutionPersonDao.saveAll(entities);
 	}
 
@@ -540,10 +543,17 @@ public class InstitutionPersonService {
 	}
 
 
+
 	public NameDTO calculateName(List<DBInstitutionPerson> matchingPeople) {
 		boolean ignoreProtection = configuration.isIgnoreNameProtection();
+		boolean ignoreNameProtectionEmployeesOnly = configuration.isIgnoreNameProtectionEmployeesOnly();
 		DBInstitutionPerson personFromSchool = matchingPeople.stream().filter(p -> p.getInstitution().getType().equals(InstitutionType.SCHOOL)).findFirst().orElse(null);
 		if (personFromSchool != null) {
+			// Check if we should ignore protection for this specific person
+			if (ignoreNameProtectionEmployeesOnly && (personFromSchool.getEmployee() != null || personFromSchool.getExtern() != null)) {
+				ignoreProtection = true;
+			}
+
 			String firstname = personFromSchool.getPerson().getFirstName();
 			String surname = personFromSchool.getPerson().getFamilyName();
 			if (!ignoreProtection) {
@@ -554,6 +564,12 @@ public class InstitutionPersonService {
 		}
 
 		DBInstitutionPerson person = matchingPeople.get(0);
+
+		// Check if we should ignore protection for this specific person
+		if (ignoreNameProtectionEmployeesOnly && (person.getEmployee() != null || person.getExtern() != null)) {
+			ignoreProtection = true;
+		}
+
 		String firstname = person.getPerson().getFirstName();
 		String surname = person.getPerson().getFamilyName();
 		if (!ignoreProtection) {
@@ -769,9 +785,13 @@ public class InstitutionPersonService {
 		for (DBInstitutionPerson institutionPerson : findByPersonCivilRegistrationNumber(cpr)) {
 			if (institutionPerson.isPrimaryInstitution()) {
 				institutionPerson.setPrimaryInstitution(false);
-				institutionPersonDao.save(institutionPerson);
+				save(institutionPerson);
 			}
 		}
 
+	}
+
+	public Set<String> findAllUsernames() {
+		return institutionPersonDao.findAllUsernames();
 	}
 }

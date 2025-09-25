@@ -1,18 +1,28 @@
 package dk.digitalidentity.os2skoledata.service;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import dk.digitalidentity.os2skoledata.dao.SettingDao;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 
+@EnableScheduling
 @Service
+@EnableCaching
 public class SettingService {
 
 	@Autowired
 	private SettingDao settingDao;
 
+	@Autowired
+	private SettingService self;
+	
 	public Long getLongValueByKey(CustomerSetting customerSetting) {
 		Long value;
 
@@ -33,7 +43,7 @@ public class SettingService {
 	}
 
 	public int getIntegerValueByKey(String customerSetting) {
-		Setting setting = getByKey(customerSetting);
+		Setting setting = self.getByKey(customerSetting);
 		if (setting != null) {
 			return Integer.parseInt(setting.getValue());
 		}
@@ -42,7 +52,7 @@ public class SettingService {
 	}
 
 	public boolean getBooleanValueByKey(String customerSetting) {
-		Setting setting = getByKey(customerSetting);
+		Setting setting = self.getByKey(customerSetting);
 		if (setting != null) {
 			if (setting.getValue().equalsIgnoreCase("true")) {
 				return true;
@@ -61,7 +71,7 @@ public class SettingService {
 	}
 
 	public String getStringValueByKey(String customerSetting, String defaultValue) {
-		Setting setting = getByKey(customerSetting);
+		Setting setting = self.getByKey(customerSetting);
 		if (setting != null) {
 			return setting.getValue();
 		}
@@ -70,19 +80,25 @@ public class SettingService {
 	}
 
 	public Setting getByKey(CustomerSetting key) {
-		return getByKey(key.toString());
+		return self.getByKey(key.toString());
 	}
 
+	@Cacheable("settings")
 	public Setting getByKey(String key) {
 		return settingDao.findByKey(key);
 	}
-	
 
+	@CacheEvict(value = "settings", allEntries = true)
 	public void save(Setting setting) {
 		settingDao.save(setting);
 	}
 
-	
+	@Scheduled(fixedRate = 5 * 60 * 1000)
+	@CacheEvict(value = "settings", allEntries = true)
+	public void clearGetSettingCache() {
+		// Clear cache
+	}
+
 	public void setValueForKey(String key, boolean enabled) {
 		Setting setting = settingDao.findByKey(key);
 		if (setting == null) {
@@ -91,7 +107,7 @@ public class SettingService {
 		}
 
 		setting.setValue(Boolean.toString(enabled));
-		settingDao.save(setting);
+		self.save(setting);
 	}
 
 	public void setValueForKey(String key, String value) {
@@ -102,6 +118,6 @@ public class SettingService {
 		}
 
 		setting.setValue(value);
-		settingDao.save(setting);
+		self.save(setting);
 	}
 }

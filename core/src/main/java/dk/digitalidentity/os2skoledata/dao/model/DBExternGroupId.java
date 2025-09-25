@@ -27,7 +27,6 @@ public class DBExternGroupId {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private long id;
 
-	@BatchSize(size = 100)
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "extern_id")
 	private DBExtern extern;

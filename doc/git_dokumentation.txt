@@ -1,0 +1,12 @@
+Git dokumentation
+
+Side: https://os2skoledata.github.io/OS2skoledata-docs/
+
+Repo: https://github.com/OS2skoledata/OS2skoledata-docs
+
+Lokalt:
+ - hent ned fra github
+ - åben i Visual Studio Code
+ - åben terminal
+ - skriv "bundle install"
+ - skriv "bundle exec jekyll serve"

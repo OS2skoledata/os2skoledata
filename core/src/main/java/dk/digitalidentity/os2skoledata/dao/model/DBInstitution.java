@@ -24,6 +24,7 @@ import javax.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 import org.springframework.data.annotation.LastModifiedDate;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -43,6 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @NoArgsConstructor
 @Slf4j
+@BatchSize(size = 100)
 public class DBInstitution {
 	
 	@Id
@@ -114,12 +116,11 @@ public class DBInstitution {
 	private boolean bypassTooFewPeople;
 
 	@Column
-	private String tooFewPeopleErrorMessage;
-
-	@Column
 	private long tooFewPeopleErrorCount;
 
-	@BatchSize(size = 100)
+	@Column(name = "non_stil_institution")
+	private boolean nonSTILInstitution;
+
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "azure_employee_team_admin_id")
 	private DBInstitutionPerson azureEmployeeTeamAdmin;
@@ -135,6 +136,10 @@ public class DBInstitution {
 	@BatchSize(size = 100)
 	@OneToMany(mappedBy = "institution", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	private List<InstitutionGroupIdentifierMapping> integrationGroupIdentifierMappings;
+
+	@NotAudited
+	@OneToOne(mappedBy = "institution", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
+	private InstitutionChangeProposal changeProposal;
 
 	public boolean apiEquals(InstitutionFullMyndighed other) {
 		if (other == null) {

@@ -1,8 +1,8 @@
 package dk.digitalidentity.os2skoledata.service.api;
 
 import dk.digitalidentity.os2skoledata.api.ImportApiController;
-import dk.digitalidentity.os2skoledata.api.model.EmployeeDTO;
-import dk.digitalidentity.os2skoledata.api.model.EmployeeImportDTO;
+import dk.digitalidentity.os2skoledata.api.model.SchoolPersonDTO;
+import dk.digitalidentity.os2skoledata.api.model.SchoolPersonImportDTO;
 import dk.digitalidentity.os2skoledata.api.model.enums.PossibleImportRole;
 import dk.digitalidentity.os2skoledata.api.model.enums.PossibleImportSubrole;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
@@ -14,10 +14,12 @@ import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBRole;
+import dk.digitalidentity.os2skoledata.dao.model.DBStudent;
 import dk.digitalidentity.os2skoledata.dao.model.DBUniLogin;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,7 +41,7 @@ public class ImportApiService {
 	@Autowired
 	private OS2SkoleDataConfiguration configuration;
 
-	public EmployeeDTO handleCreate(EmployeeImportDTO importDTO, DBInstitution institution, ImportApiController importApiController) {
+	public SchoolPersonDTO handleCreate(SchoolPersonImportDTO importDTO, DBInstitution institution, ImportApiController importApiController) {
 		DBInstitutionPerson newPerson = new DBInstitutionPerson();
 
 		DBPerson dbPerson = new DBPerson();
@@ -54,7 +57,9 @@ public class ImportApiService {
 		dbUniLogin.setCivilRegistrationNumber(importDTO.getCpr());
 		dbUniLogin.setName(importDTO.getFirstName() + " " + importDTO.getFamilyName());
 		dbUniLogin.setPasswordState(DBPasswordState.UNKNOWN);
-		dbUniLogin.setUserId(importDTO.getUniID() == null || importDTO.getUniID().isEmpty() ? configuration.getSyncSettings().getUniIDPlaceholder() : importDTO.getUniID());
+
+		// if no unilogin user id generate uuid to make sure its unique
+		dbUniLogin.setUserId(importDTO.getUniID() == null || importDTO.getUniID().isEmpty() ? UUID.randomUUID().toString() : importDTO.getUniID());
 
 		if (importDTO.getMainRole().equals(PossibleImportRole.ANSAT)) {
 			DBEmployee employee = new DBEmployee();
@@ -93,14 +98,20 @@ public class ImportApiService {
 			}
 
 			newPerson.setExtern(extern);
+		} else if (importDTO.getMainRole().equals(PossibleImportRole.ELEV)) {
+			DBStudent student = new DBStudent();
+			student.setRole(DBStudentRole.from(importDTO.getRoles().get(0)));
+			newPerson.setStudent(student);
 		}
 
 		newPerson.setPerson(dbPerson);
 		newPerson.setUniLogin(dbUniLogin);
 		newPerson.setInstitution(institution);
+		newPerson.setReservedUsername(importDTO.getReservedUsername());
 
 		newPerson.setStilCreated(LocalDateTime.now());
 		newPerson.setSource(importDTO.getSource());
+		newPerson.setApiOnly(importDTO.getApiOnly() == null ? false : importDTO.getApiOnly());
 
 		if (Boolean.TRUE.equals(importDTO.getPrimary())) {
 			institutionPersonService.resetPrimary(importDTO.getCpr());
@@ -112,7 +123,7 @@ public class ImportApiService {
 		return toDto(newPerson);
 	}
 
-	public EmployeeDTO handlePatchUpdate(DBInstitutionPerson existingPerson, EmployeeImportDTO importDTO) {
+	public SchoolPersonDTO handlePatchUpdate(DBInstitutionPerson existingPerson, SchoolPersonImportDTO importDTO) {
 		// hibernate handles checking for changes and saving
 		DBPerson dbPerson = existingPerson.getPerson();
 		if (importDTO.getNameProtected() != null) {
@@ -149,6 +160,7 @@ public class ImportApiService {
 					employee.setRoles(new ArrayList<>());
 					existingPerson.setEmployee(employee);
 					existingPerson.setExtern(null);
+					existingPerson.setStudent(null);
 				}
 			} else if (importDTO.getMainRole().equals(PossibleImportRole.EKSTERN)) {
 				DBExtern extern = existingPerson.getExtern();
@@ -157,6 +169,15 @@ public class ImportApiService {
 					extern.setGroupIds(new ArrayList<>());
 					existingPerson.setExtern(extern);
 					existingPerson.setEmployee(null);
+					existingPerson.setStudent(null);
+				}
+			} else if (importDTO.getMainRole().equals(PossibleImportRole.ELEV)) {
+				DBStudent student = existingPerson.getStudent();
+				if (student == null) {
+					student = new DBStudent();
+					existingPerson.setExtern(null);
+					existingPerson.setEmployee(null);
+					existingPerson.setStudent(student);
 				}
 			}
 		}
@@ -172,6 +193,10 @@ public class ImportApiService {
 			existingPerson.setPrimaryInstitution(true);
 		}
 
+		if (importDTO.getApiOnly() != null) {
+			existingPerson.setApiOnly(importDTO.getApiOnly());
+		}
+
 		existingPerson.setDeleted(false);
 		existingPerson.setStilDeleted(null);
 
@@ -180,7 +205,7 @@ public class ImportApiService {
 		return toDto(existingPerson);
 	}
 
-	private static void handleGroupsAndRoles(DBInstitutionPerson existingPerson, EmployeeImportDTO importDTO) {
+	private static void handleGroupsAndRoles(DBInstitutionPerson existingPerson, SchoolPersonImportDTO importDTO) {
 		if (existingPerson.getEmployee() != null) {
 			if (importDTO.getRoles() != null) {
 				Set<DBEmployeeRole> existingRoles = existingPerson.getEmployee().getRoles().stream()
@@ -253,11 +278,20 @@ public class ImportApiService {
 					}
 				}
 			}
+		} else if (existingPerson.getStudent() != null) {
+			if (importDTO.getRoles() != null && !importDTO.getRoles().isEmpty()) {
+				DBStudentRole newRole = DBStudentRole.from(importDTO.getRoles().get(0));
+				if (!newRole.equals(existingPerson.getStudent().getRole())) {
+					existingPerson.getStudent().setRole(newRole);
+				}
+			}
+
+			// for now students from api can not be associated with groups
 		}
 	}
 
-	public EmployeeDTO toDto(DBInstitutionPerson p) {
-		return new EmployeeDTO(
+	public SchoolPersonDTO toDto(DBInstitutionPerson p) {
+		return new SchoolPersonDTO(
 				p.getId(),
 				p.getPerson().getFirstName(),
 				p.getPerson().getFamilyName(),
@@ -276,6 +310,7 @@ public class ImportApiService {
 				p.getPerson().getAliasFirstName(),
 				p.getPerson().getAliasFamilyName(),
 				p.isDeleted(),
+				p.isApiOnly(),
 				p.getStilCreated(),
 				p.getStilDeleted(),
 				p.getAdCreated(),

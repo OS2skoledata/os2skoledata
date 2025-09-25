@@ -56,14 +56,12 @@
 														style="color:black;">
 													<em th:title="#{html.entity.institution.unlock.title}" class="fa fa-fw fa-unlock"></em>
 												</a>
-												<a
-														th:if="${institution.hasTooFewPeople}"
-														href="#"
-														onclick="institutionService.approveSTILChanges(this);"
-														th:attr="data-institutionnumber=${institution.number}, data-change=${institution.tooFewPeopleErrorMessage}"
-														style="color: black;">
-													<em class="fa fa-forward" th:title="#{html.entity.institution.tooFewPeople}"></em>
-												</a>
+                                                <a
+                                                        th:if="${institution.hasTooFewPeople}"
+                                                        th:href="@{/ui/institutions/{institutionNumber}/changes(institutionNumber=${institution.number})}"
+                                                        style="color: black;">
+                                                    <em class="fa fa-eye" th:title="#{html.entity.institution.changes.view}"></em>
+                                                </a>
 											</td>
 										</tr>
 										</tbody>

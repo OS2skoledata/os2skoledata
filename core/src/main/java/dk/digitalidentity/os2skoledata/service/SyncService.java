@@ -10,8 +10,11 @@ import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBUniLogin;
+import dk.digitalidentity.os2skoledata.dao.model.InstitutionChangeProposal;
+import dk.digitalidentity.os2skoledata.dao.model.ProposedPersonChange;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
+import dk.digitalidentity.os2skoledata.dao.model.enums.PersonChangeType;
 import dk.digitalidentity.os2skoledata.service.stil.StilService;
 import https.unilogin_dk.data.Group;
 import https.unilogin_dk.data.transitional.UniLoginFull;
@@ -61,6 +64,9 @@ public class SyncService {
 	@Autowired
 	private CprPasswordMappingService cprPasswordMappingService;
 
+	@Autowired
+	private YearChangeNotificationService yearChangeNotificationService;
+
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public void sync(InstitutionDTO institutionDTO) {
@@ -90,7 +96,7 @@ public class SyncService {
 		if (dbInstitution != null && dbInstitution.isBypassTooFewPeople()) {
 			dbInstitution.setBypassTooFewPeople(false);
 			dbInstitution.setTooFewPeopleErrorCount(0);
-			dbInstitution.setTooFewPeopleErrorMessage(null);
+			dbInstitution.setChangeProposal(null);
 			institutionService.save(dbInstitution);
 		} else {
 			// sanity check: too few people?
@@ -100,14 +106,15 @@ public class SyncService {
 					return;
 				}
 
-				long dbCount = dbInstitution.getInstitutionPersons().stream().filter(p -> !p.isDeleted()).count();
+				long dbCount = dbInstitution.getInstitutionPersons().stream().filter(p -> !p.isDeleted() && !p.isApiOnly()).count();
 				int stilCount = stilInstitution.getInstitutionPerson().size();
 
-				if (stilCount <= dbCount/2) {
-					String tooFewChangeText = "Institutionen har i databasen " + dbCount + " brugere, men i STIL har institutionen kun " + stilCount + " brugere.";
+				if (stilCount <= dbCount * configuration.getSyncSettings().getThresholdPercentage()) {
+					InstitutionChangeProposal changeProposal = createChangeProposal(dbInstitution, stilInstitution, dbCount, stilCount);
+					dbInstitution.setChangeProposal(changeProposal);
 					dbInstitution.setTooFewPeopleErrorCount(dbInstitution.getTooFewPeopleErrorCount() + 1);
-					dbInstitution.setTooFewPeopleErrorMessage(tooFewChangeText);
 					institutionService.save(dbInstitution);
+
 					if (dbInstitution.getTooFewPeopleErrorCount() >= 5) {
 						log.error("Error for " + dbInstitution.getTooFewPeopleErrorCount() + " in a row: Institution in db has " + dbCount + " people, but institution in STIL has " + stilCount + " people. Might be an error - skipping sync of: " + institutionDTO.getInstitutionNumber());
 					}
@@ -115,9 +122,9 @@ public class SyncService {
 					String emails = settingService.getStringValueByKey(CustomerSetting.STIL_CHANGE_EMAIL);
 					if (StringUtils.hasLength(emails)) {
 						String message = "Der er sket en stor ændring i antallet af brugere i STIL for institutionen " + dbInstitution.getInstitutionName() + ".\n"
-								+ tooFewChangeText
+								+ changeProposal.getTooFewPeopleErrorMessage()
 								+ "\nDu skal tjekke om ændringen er meningen, eller om der er tale om en fejl i STIL."
-								+ "\nHvis det er meningen, skal du logge ind i OS2skoledata brugergrænsefladen og gå til siden \"Institutioner\", hvor du har mulighed for at godkende ændringen."
+								+ "\nDu kan logge ind i OS2skoledata brugergrænsefladen og gå til siden \"Institutioner\", hvor du har mulighed for at se de specifikke ændringer og godkende."
 								+ "\nData for denne institution vil ikke blive opdateret inden ændringen er rettet i STIL eller godkendt.";
 
 						emails = emails.replace(" ", "");
@@ -131,7 +138,7 @@ public class SyncService {
 				} else {
 					if (dbInstitution.getTooFewPeopleErrorCount() != 0) {
 						dbInstitution.setTooFewPeopleErrorCount(0);
-						dbInstitution.setTooFewPeopleErrorMessage(null);
+						dbInstitution.setChangeProposal(null);
 						institutionService.save(dbInstitution);
 					}
 				}
@@ -236,7 +243,9 @@ public class SyncService {
 						}
 					}
 
-					if (normalUpdate) {
+					if (dbInstitutionPerson.isApiOnly()) {
+						// do nothing everything is handled by API
+					} else if (normalUpdate) {
 						if (dbInstitutionPerson.isDeleted()) {
 							log.info("Undeleting institutionPerson: " + dbInstitutionPerson.getId() + " " + dbInstitutionPerson.getLocalPersonId());
 							dbInstitutionPerson.setDeleted(false);
@@ -270,7 +279,7 @@ public class SyncService {
 
 		// find institution persons to be deleted (from within the same institution)
 		List<DBInstitutionPerson> toBeDeleted = institutionPersonService.findByInstitution(dbInstitution).stream()
-				.filter(dbInstitutionPerson -> !dbInstitutionPerson.isDeleted())
+				.filter(dbInstitutionPerson -> !dbInstitutionPerson.isDeleted() && !dbInstitutionPerson.isApiOnly())
 				.filter(dbInstitutionPerson -> stilInstitution.getInstitutionPerson().stream()
 						.noneMatch(stilInstitutionPerson -> Objects.equals(stilInstitutionPerson.getLocalPersonId(), dbInstitutionPerson.getLocalPersonId())))
 				.collect(Collectors.toList());
@@ -293,6 +302,13 @@ public class SyncService {
 
 		if (toBeDeleted.size() > 0) {
 			institutionPersonService.saveAll(toBeDeleted);
+		}
+
+		// Check if institution was unlocked (resolved) after being locked due to year change
+		boolean isCurrentlyLocked = settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + institutionDTO.getInstitutionNumber());
+		if (!yearChange && !isCurrentlyLocked) {
+			// Institution is not locked, so mark any pending year change notifications as resolved
+			yearChangeNotificationService.markInstitutionAsResolved(institutionDTO.getInstitutionNumber());
 		}
 	}
 
@@ -631,9 +647,117 @@ public class SyncService {
 		return level;
 	}
 
+	private InstitutionChangeProposal createChangeProposal(DBInstitution dbInstitution,
+			InstitutionFullMyndighed stilInstitution,
+			long dbCount, long stilCount) {
+
+		InstitutionChangeProposal changeProposal = new InstitutionChangeProposal();
+		changeProposal.setInstitution(dbInstitution);
+		changeProposal.setCreatedDate(LocalDateTime.now());
+
+		String errorMessage = "Institutionen har " + dbCount + " brugere i databasen, men i STIL har institutionen kun " + stilCount + " brugere.";
+		changeProposal.setTooFewPeopleErrorMessage(errorMessage);
+
+		List<ProposedPersonChange> proposedChanges = new ArrayList<>();
+
+		List<DBInstitutionPerson> dbPersons = dbInstitution.getInstitutionPersons().stream()
+				.filter(p -> !p.isDeleted())
+				.collect(Collectors.toList());
+
+		List<InstitutionPersonFullMyndighed> stilPersons = stilInstitution.getInstitutionPerson() != null ?
+				stilInstitution.getInstitutionPerson() : new ArrayList<>();
+
+		// Find deletions (in DB but not in STIL)
+		for (DBInstitutionPerson dbPerson : dbPersons) {
+			if (dbPerson.isApiOnly()) {
+				continue;
+			}
+
+			String dbCpr = dbPerson.getPerson().getCivilRegistrationNumber();
+
+			boolean foundInStil = stilPersons.stream()
+					.anyMatch(stilPerson -> Objects.equals(stilPerson.getPerson().getCivilRegistrationNumber(), dbCpr));
+
+			if (!foundInStil) {
+				ProposedPersonChange personChange = createProposedPersonChange(
+						changeProposal,
+						PersonChangeType.DELETE,
+						dbPerson.getPerson().isProtected() ? dbPerson.getPerson().getAliasFirstName() : dbPerson.getPerson().getFirstName(),
+						dbPerson.getPerson().isProtected() ? dbPerson.getPerson().getAliasFamilyName() : dbPerson.getPerson().getFamilyName(),
+						dbPerson.getUniLogin().getUserId(),
+						getPersonType(dbPerson)
+				);
+				proposedChanges.add(personChange);
+			}
+		}
+
+		// Find additions (in STIL but not in DB)
+		for (InstitutionPersonFullMyndighed stilPerson : stilPersons) {
+			String stilCpr = stilPerson.getPerson().getCivilRegistrationNumber();
+
+			boolean foundInDb = dbPersons.stream()
+					.anyMatch(dbPerson -> Objects.equals(dbPerson.getPerson().getCivilRegistrationNumber(), stilCpr));
+
+			if (!foundInDb) {
+				ProposedPersonChange personChange = createProposedPersonChange(
+						changeProposal,
+						PersonChangeType.CREATE,
+						stilPerson.getPerson().isProtected() ? stilPerson.getPerson().getAliasFirstName() : stilPerson.getPerson().getFirstName(),
+						stilPerson.getPerson().isProtected() ? stilPerson.getPerson().getAliasFamilyName() : stilPerson.getPerson().getFamilyName(),
+						stilPerson.getUNILogin().getUserId(),
+						getPersonType(stilPerson)
+				);
+				proposedChanges.add(personChange);
+			}
+		}
+
+		changeProposal.setProposedPersonChanges(proposedChanges);
+
+		return changeProposal;
+	}
+
+	private ProposedPersonChange createProposedPersonChange(InstitutionChangeProposal changeProposal,
+			PersonChangeType changeType, String firstName, String surname, String uniLogin, String personType) {
+		ProposedPersonChange personChange = new ProposedPersonChange();
+		personChange.setChangeProposal(changeProposal);
+		personChange.setChangeType(changeType);
+		personChange.setFirstName(firstName);
+		personChange.setFamilyName(surname);
+		personChange.setUniLoginUserId(uniLogin);
+		personChange.setPersonType(personType);
+
+		return personChange;
+	}
+
+	private String getPersonType(DBInstitutionPerson dbPerson) {
+		if (dbPerson.getEmployee() != null) {
+			return "Medarbejder";
+		} else if (dbPerson.getStudent() != null) {
+			return "Elev";
+		} else if (dbPerson.getExtern() != null) {
+			return "Ekstern";
+		}
+		return "UNKNOWN";
+	}
+
+	private String getPersonType(InstitutionPersonFullMyndighed stilPerson) {
+		if (stilPerson.getEmployee() != null) {
+			return "Medarbejder";
+		} else if (stilPerson.getStudent() != null) {
+			return "Elev";
+		} else if (stilPerson.getExtern() != null) {
+			return "Ekstern";
+		}
+		return "UNKNOWN";
+	}
+
 	@Transactional
 	public void deleteInstitutions(List<InstitutionDTO> institutionDTOList) {
 		for (DBInstitution dbInstitution : institutionService.findAll()) {
+			if (dbInstitution.isNonSTILInstitution()) {
+				continue;
+			}
+
 			if (!dbInstitution.isDeleted() && institutionDTOList.stream().noneMatch(i -> i.getInstitutionNumber().equals(dbInstitution.getInstitutionNumber()))) {
 				dbInstitution.setDeleted(true);
 				for (DBGroup group : dbInstitution.getGroups()) {

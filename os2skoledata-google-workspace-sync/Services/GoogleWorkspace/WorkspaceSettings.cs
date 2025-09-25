@@ -30,6 +30,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         public string AddEmployeesToClassroomGroup { get; set; }
         public DriveType DriveType { get; set; } = DriveType.DRIVE_PR_CLASS;
         public ClassroomSettings ClassroomSettings { get; set; } = new ClassroomSettings();
+        public bool HandlePermissionsForGroups { get; set; } = false;
     }
 
     public enum HierarchyType

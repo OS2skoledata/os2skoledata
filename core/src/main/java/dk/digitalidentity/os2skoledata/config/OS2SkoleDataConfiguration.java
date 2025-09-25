@@ -8,6 +8,7 @@ import java.util.Set;
 import dk.digitalidentity.os2skoledata.config.modules.ClassroomAdministration;
 import dk.digitalidentity.os2skoledata.config.modules.CprConfiguration;
 import dk.digitalidentity.os2skoledata.config.modules.Email;
+import dk.digitalidentity.os2skoledata.config.modules.NonSTILInstitutions;
 import dk.digitalidentity.os2skoledata.config.modules.GhostAdministration;
 import dk.digitalidentity.os2skoledata.config.modules.Idp;
 import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
@@ -37,16 +38,20 @@ public class OS2SkoleDataConfiguration {
 	private Idp idp = new Idp();
 	private TeamAdminAdministration teamAdminAdministration = new TeamAdminAdministration();
 	private boolean ignoreNameProtection = false;
+	private boolean ignoreNameProtectionEmployeesOnly = false;
 	private GhostAdministration ghostAdministration = new GhostAdministration();
 	private Email email = new Email();
 	private int deleteInstitutionPersonAfterMonths = 13;
 	private int deleteAuditLogsAfterMonths = 13;
-	private boolean filterOutGroupsWithFutureFromDate = false;
 	private int createGroupsXDaysBeforeFromDate = 60;
 	private ClassroomAdministration classroomAdministration = new ClassroomAdministration();
 	private SyncSettings syncSettings = new SyncSettings();
+	private NonSTILInstitutions nonSTILInstitutions = new NonSTILInstitutions();
 
 	private Scheduled scheduled = new Scheduled();
+
+	// only level 0 groups or it will give problems when year change. 0* groups are filtered out
+	private boolean filterOutGroupsWithFutureFromDate = false;
 
 	@PostConstruct
 	public void validateUniqueAbbreviations() {

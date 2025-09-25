@@ -36,6 +36,7 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @NoArgsConstructor
 @Slf4j
+@BatchSize(size = 100)
 public class DBStudent {
 
 	@Id

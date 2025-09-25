@@ -12,4 +12,10 @@ public interface InstitutionDao extends JpaRepository<DBInstitution, Long> {
 
 	List<DBInstitution> findAll();
 	List<DBInstitution> findByIdIn(List<Long> ids);
+
+	List<DBInstitution> findAllByDeletedFalse();
+
+	List<DBInstitution> findByNonSTILInstitutionTrueAndDeletedFalse();
+
+	DBInstitution findByAbbreviation(String abbreviation);
 }

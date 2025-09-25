@@ -11,5 +11,13 @@
         public string NormalMailNameStandard { get; set; }
         public string NoLineNameStandard { get; set; }
         public string NoLineNoYearNameStandard { get; set; }
+        public string SecurityGroupForEmployeeTypeMailStandard { get; set; }
+        public string SecurityGroupForEmployeesMailStandard { get; set; }
+        public string OtherGroupsÅrgangSecurityGroupMailStandard { get; set; }
+        public string OtherGroupsRetningSecurityGroupMailStandard { get; set; }
+        public string OtherGroupsHoldSecurityGroupMailStandard { get; set; }
+        public string OtherGroupsSFOSecurityGroupMailStandard { get; set; }
+        public string OtherGroupsTeamSecurityGroupMailStandard { get; set; }
+        public string OtherGroupsAndetSecurityGroupMailStandard { get; set; }
     }
 }

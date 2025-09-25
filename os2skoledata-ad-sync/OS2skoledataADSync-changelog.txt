@@ -56,3 +56,8 @@
 2025.05.29 - 1.26.3 - Mindre bugfixes til bestemmelse af placering på brugere
 2025.06.16 - 1.26.4 - Mindre bugfix til GlobalRoleField
 2025.06.18 - 1.26.5 - Mindre bugfix til at fjerne værdien i DisabledDateField ved reaktivering af bruger
+2025.08.07 - 1.27.0 - 2 nye klassegrupper. klasse-alle-medarbejdere og klasse-alle-elever. Derudover StudentAndClassGroupsSchoolsOnly, der gør det muligt kun at oprette grupper til klasser og alle elever for skoler.
+2025.09.01 - 1.28.0 - Mulighed for sikkerhedsgrupper til andre STIL gruppetyper end hovedgrupper. Ny helt random brugernavnestandard.
+2025.09.04 - 1.29.0 - Bugfix. Håndtering af flytning efter en institution skifter type
+2025.09.04 - 1.30.0 - Tilføj apiOnly flag, så den kan bruges i powershell, hvis UserAsJSON = true. Derudover håndteres skiftende UNIID ved brug af import API
+2025.09.04 - 1.31.0 - MailEnable institution employees group

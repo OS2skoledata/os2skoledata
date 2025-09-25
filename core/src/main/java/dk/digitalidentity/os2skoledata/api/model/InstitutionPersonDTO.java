@@ -59,4 +59,5 @@ public class InstitutionPersonDTO {
 	private String password;
 	private String reservedUsername;
 	private InstitutionDTO primaryInstitution;
+	private boolean apiOnly;
 }

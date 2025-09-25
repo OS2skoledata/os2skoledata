@@ -47,6 +47,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -242,7 +243,7 @@ public class DeltaSyncApiController {
 					// check if student is in main group with a future date. If so, skip user
 					if (configuration.isFilterOutGroupsWithFutureFromDate()) {
 						LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
-						if (mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
+						if (Objects.equals(mainGroupForInstitution.getGroupLevel(), "0") && mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
 							continue;
 						}
 					}
@@ -361,7 +362,8 @@ public class DeltaSyncApiController {
 					setPasswordOnCreate,
 					password,
 					person.getReservedUsername(),
-					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution())
+					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution()),
+					person.isApiOnly()
 			);
 
 			result.add(personRecord);
@@ -383,7 +385,11 @@ public class DeltaSyncApiController {
 		if (configuration.isFilterOutGroupsWithFutureFromDate()) {
 			LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
 			dbGroups = dbGroups.stream()
-					.filter(g -> g.getFromDate() == null || g.getFromDate().isBefore(futureDate))
+					.filter(g ->
+							g.getFromDate() == null ||
+							!Objects.equals(g.getGroupLevel(), "0") ||
+							(Objects.equals(g.getGroupLevel(), "0") && g.getFromDate().isBefore(futureDate))
+					)
 					.collect(Collectors.toList());
 		}
 

@@ -27,7 +27,6 @@ public class DBStudentGroupId {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private long id;
 
-	@BatchSize(size = 100)
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "student_id")
 	private DBStudent student;

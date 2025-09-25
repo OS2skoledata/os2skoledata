@@ -120,13 +120,13 @@
 						render: function (data, type, row, meta) {
 							if (data != null && data != '') {
 								var result = '<ul style="list-style-type:none; padding: 0px; margin: 0px;">';
-									for (let i = 0; i < data.length; i++) {
-										result += '<li>' + groups.find(g => g.groupId === data[i]).groupName + '</li>';
-									}
-								result += '</ul>';
-								return result;
-							}
-							return '';
+                                for (let i = 0; i < data.length; i++) {
+                                    result += '<li>' + data[i] + '</li>';
+                                }
+                                result += '</ul>';
+                                return result;
+                            }
+                            return '';
 						}
 					}
 // 					, {

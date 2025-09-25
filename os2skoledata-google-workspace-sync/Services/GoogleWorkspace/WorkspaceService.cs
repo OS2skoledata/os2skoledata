@@ -5,6 +5,7 @@ using Google.Apis.Classroom.v1;
 using Google.Apis.Classroom.v1.Data;
 using Google.Apis.Drive.v3;
 using Google.Apis.Drive.v3.Data;
+using Google.Apis.Groupssettings.v1;
 using Google.Apis.Licensing.v1;
 using Google.Apis.Licensing.v1.Data;
 using Google.Apis.Services;
@@ -20,6 +21,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Xml.Linq;
@@ -36,6 +38,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private readonly LicensingService licenseService;
         private readonly ClassroomService classroomService;
         private readonly OS2skoledataService oS2skoledataService;
+        private readonly GroupssettingsService groupsSettingsService;
 
         private readonly string serviceAccountDataFilePath;
         private readonly string emailAccountToImpersonate;
@@ -101,6 +104,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
         private readonly string yearlyClassGroupOnlyStudentsNameStandardNoClassYear;
         private readonly string yearlyClassFolderNameStandard;
         private readonly string yearlyClassFolderNameStandardNoClassYear;
+        private readonly bool handlePermissionsForGroups;
 
         private readonly string KEYS_OS2SKOLEDATA = "OS2skoledata";
         private readonly string KEYS_ROLE = "ROLE";
@@ -191,6 +195,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             yearlyClassGroupOnlyStudentsNameStandardNoClassYear = settings.WorkspaceSettings.NamingSettings.YearlyClassGroupOnlyStudentsNameStandardNoClassYear;
             yearlyClassFolderNameStandard = settings.WorkspaceSettings.NamingSettings.YearlyClassFolderNameStandard;
             yearlyClassFolderNameStandardNoClassYear = settings.WorkspaceSettings.NamingSettings.YearlyClassFolderNameStandardNoClassYear;
+            handlePermissionsForGroups = settings.WorkspaceSettings.HandlePermissionsForGroups;
 
             using FileStream fileStream = System.IO.File.OpenRead(serviceAccountDataFilePath);
             string fileContents;
@@ -200,32 +205,30 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             }
             ServiceAccountCredentialDTO serviceAccountCredentialDTO = JsonConvert.DeserializeObject<ServiceAccountCredentialDTO>(fileContents, jsonSerializerSettings);
 
-            var scopesForUser = new[] {
-                        DirectoryService.Scope.AdminDirectoryUser,
-                        DirectoryService.Scope.AdminDirectoryOrgunit,
-                        DirectoryService.Scope.AdminDirectoryGroup,
-                        DirectoryService.Scope.AdminDirectoryUserschema,
-                        DriveService.Scope.Drive,
-                        LicensingService.Scope.AppsLicensing
-                    };
+            var scopesForUser = new List<string> {
+                DirectoryService.Scope.AdminDirectoryUser,
+                DirectoryService.Scope.AdminDirectoryOrgunit,
+                DirectoryService.Scope.AdminDirectoryGroup,
+                DirectoryService.Scope.AdminDirectoryUserschema,
+                DriveService.Scope.Drive,
+                LicensingService.Scope.AppsLicensing
+            };
 
             if (classroomEnabled)
             {
-                scopesForUser = new[] {
-                        DirectoryService.Scope.AdminDirectoryUser,
-                        DirectoryService.Scope.AdminDirectoryOrgunit,
-                        DirectoryService.Scope.AdminDirectoryGroup,
-                        DirectoryService.Scope.AdminDirectoryUserschema,
-                        DriveService.Scope.Drive,
-                        LicensingService.Scope.AppsLicensing,
-                        ClassroomService.Scope.ClassroomCourses,
-                        ClassroomService.Scope.ClassroomRosters
-                    };
+                scopesForUser.Add(ClassroomService.Scope.ClassroomCourses);
+                scopesForUser.Add(ClassroomService.Scope.ClassroomRosters);
+            }
+
+            if (handlePermissionsForGroups)
+            {
+                scopesForUser.Add(GroupssettingsService.Scope.AppsGroupsSettings);
             }
 
             ServiceAccountCredential credentialWithScopes = new ServiceAccountCredential(
                new ServiceAccountCredential.Initializer(serviceAccountCredentialDTO.ClientEmail)
-               {   Scopes = scopesForUser,
+               {
+                   Scopes = scopesForUser,
                    KeyId = serviceAccountCredentialDTO.KeyId,
                    User = emailAccountToImpersonate
                }.FromPrivateKey(serviceAccountCredentialDTO.PrivateKey));
@@ -254,6 +257,15 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 {
                     HttpClientInitializer = credentialWithScopes,
                     ApplicationName = "Classroom API",
+                });
+            }
+
+            if (handlePermissionsForGroups)
+            {
+                groupsSettingsService = new GroupssettingsService(new BaseClientService.Initializer()
+                {
+                    HttpClientInitializer = credentialWithScopes,
+                    ApplicationName = "Group Settings API"
                 });
             }
 
@@ -2127,7 +2139,66 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 }
             }
 
+            SetGroupPermissions(match.Email);
+
             return match;
+        }
+
+        private void SetGroupPermissions(string groupEmail)
+        {
+            if (!handlePermissionsForGroups)
+            {
+                return;
+            }
+
+            TraceLog("SetGroupPermissions", $"Handling permissions for group: {groupEmail}");
+
+            string encodedGroupEmail = Uri.EscapeDataString(groupEmail);
+
+            // First check current settings to see if update is needed
+            var currentSettings = RetryUtil.WithRetry(() =>
+            {
+                var getRequest = groupsSettingsService.Groups.Get(encodedGroupEmail);
+                getRequest.Alt = GroupssettingsBaseServiceRequest<Google.Apis.Groupssettings.v1.Data.Groups>.AltEnum.Json;
+                return getRequest.Execute();
+            });
+
+            // Check if settings already match desired configuration
+            bool needsUpdate = currentSettings.WhoCanJoin != "CAN_REQUEST_TO_JOIN" ||
+                                currentSettings.WhoCanPostMessage != "ALL_MEMBERS_CAN_POST" ||
+                                currentSettings.WhoCanViewGroup != "ALL_MEMBERS_CAN_VIEW" ||
+                                currentSettings.WhoCanViewMembership != "ALL_MEMBERS_CAN_VIEW" ||
+                                currentSettings.WhoCanContactOwner != "ALL_MANAGERS_CAN_CONTACT" ||
+                                currentSettings.WhoCanModerateMembers != "NONE";
+
+            if (!needsUpdate)
+            {
+                logger.LogInformation($"Group permissions for {groupEmail} already configured correctly");
+                return;
+            }
+
+            logger.LogInformation($"Updating permissions for group {groupEmail}");
+
+            // Create the restricted settings
+            var groupSettings = new Google.Apis.Groupssettings.v1.Data.Groups()
+            {
+                WhoCanJoin = "CAN_REQUEST_TO_JOIN",
+                WhoCanPostMessage = "ALL_MEMBERS_CAN_POST",
+                WhoCanViewGroup = "ALL_MEMBERS_CAN_VIEW",
+                WhoCanViewMembership = "ALL_MEMBERS_CAN_VIEW",
+                WhoCanContactOwner = "ALL_MANAGERS_CAN_CONTACT",
+                WhoCanModerateMembers = "NONE"
+            };
+
+            // Apply the settings
+            RetryUtil.WithRetry(() =>
+            {
+                var patchRequest = groupsSettingsService.Groups.Patch(groupSettings, encodedGroupEmail);
+                patchRequest.Alt = GroupssettingsBaseServiceRequest<Google.Apis.Groupssettings.v1.Data.Groups>.AltEnum.Json;
+                return patchRequest.Execute();
+            });
+
+            logger.LogInformation($"Successfully updated permissions for group {groupEmail}");
         }
 
         private void HandleSetEmailAfterUpdate(Institution institution, string os2skoledataKey, Group match)
@@ -2744,6 +2815,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                 logger.LogInformation("Created deleted ous ou for today: " + deletedOusOu + "/" + newOUName);
             }
 
+            logger.LogInformation($"Trying to move ou with id {id} and path {path} to deleted ous ou for today");
             OrgUnit editedOU = new OrgUnit();
             if (prefix != null && orgUnit != null)
             {
@@ -3823,7 +3895,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                     }
                 }
             }
-            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 // do nothing. Random number will be generated later 
             }
@@ -3883,17 +3955,17 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             foreach (string username in allUsernames)
             {
                 string key = "";
-                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
                 {
                     try
                     {
-                        int wantedTotalLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount + randomStandardNumberCount : 8;
+                        int wantedTotalLength = (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM)) ? randomStandardLetterCount + randomStandardNumberCount : 8;
                         if (username.Length != wantedTotalLength)
                         {
                             continue;
                         }
 
-                        int wantedLetterLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount : 4;
+                        int wantedLetterLength = (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM)) ? randomStandardLetterCount : 4;
                         if (username.Length >= wantedLetterLength)
                         {
                             key = username.Substring(0, wantedLetterLength);
@@ -3962,7 +4034,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
         private string GetPrefix()
         {
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.UNIID) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.UNIID) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 return "";
             }
@@ -3975,7 +4047,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             {
                 return 4;
             }
-            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 return randomStandardLetterCount;
             }
@@ -4013,7 +4085,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             for (int i = 0; i < 1000; i++)
             {
                 string username;
-                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
                 {
                     username = namePart + GetRandomNumber(randomStandardNumberCount);
                 }
@@ -4043,29 +4115,43 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
         private string GetNamePart(string firstname)
         {
-            int namePartLength = getNamePartLength();
-            string name = firstname.ToLower();
-            name.Replace("æ", "ae");
-            name.Replace("ø", "oe");
-            name.Replace("å", "aa");
-            name = name.Unidecode();
-            name = System.Text.RegularExpressions.Regex.Replace(name, "[^a-zA-Z0-9]*", "", System.Text.RegularExpressions.RegexOptions.None);
-
-            if (name.Length >= namePartLength)
+            if (usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
-                return name.Substring(0, namePartLength).ToLower();
+                char[] possibleChars = "abcdefghjkmnpqrstuvwxyz".ToCharArray();
+                StringBuilder randomCharsBuilder = new StringBuilder(randomStandardLetterCount);
+                for (int i = 0; i < randomStandardLetterCount; i++)
+                {
+                    int randomIndex = random.Next(possibleChars.Length);
+                    randomCharsBuilder.Append(possibleChars[randomIndex]);
+                }
+
+                return randomCharsBuilder.ToString();
             }
             else
             {
-                while (name.Length < namePartLength)
+                int namePartLength = getNamePartLength();
+                string name = firstname.ToLower();
+                name.Replace("æ", "ae");
+                name.Replace("ø", "oe");
+                name.Replace("å", "aa");
+                name = name.Unidecode();
+                name = Regex.Replace(name, "[^a-zA-Z0-9]*", "", RegexOptions.None);
+
+                if (name.Length >= namePartLength)
                 {
-                    name = name + "x";
+                    return name.Substring(0, namePartLength).ToLower();
                 }
+                else
+                {
+                    while (name.Length < namePartLength)
+                    {
+                        name = name + "x";
+                    }
+                }
+
+                return name;
             }
-
-            return name;
         }
-
 
         private IDictionary<String, Object> GetOS2skoledataSchemaFromUser(Google.Apis.Admin.Directory.directory_v1.Data.User user, bool nullIfNull = false)
         {

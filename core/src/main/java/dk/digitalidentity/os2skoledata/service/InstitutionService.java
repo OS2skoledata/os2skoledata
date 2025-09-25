@@ -13,6 +13,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.Size;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +35,12 @@ public class InstitutionService {
 		return institutionDao.findByInstitutionNumber(institutionNumber);
 	}
 
+	public DBInstitution findByAbbreviation(String abbreviation) {
+		return institutionDao.findByAbbreviation(abbreviation);
+	}
+
 	public DBInstitution save(DBInstitution dbInstitution) {
+		dbInstitution.setLastModified(LocalDateTime.now());
 		return institutionDao.save(dbInstitution);
 	}
 
@@ -44,8 +52,16 @@ public class InstitutionService {
 		return institutionDao.findAll();
 	}
 
+	public List<DBInstitution> findAllActive() {
+		return institutionDao.findAllByDeletedFalse();
+	}
+
 	public List<DBInstitution> findByIdIn(List<Long> ids) {
 		return institutionDao.findByIdIn(ids);
+	}
+
+	public List<DBInstitution> findAllNonStilInstitutions() {
+		return institutionDao.findByNonSTILInstitutionTrueAndDeletedFalse();
 	}
 
 	public Map<String, String> generateEmailMap(DBInstitution institution, IntegrationType integrationType) {
@@ -63,8 +79,13 @@ public class InstitutionService {
 	public String findCurrentSchoolYearForGWEmails(DBInstitution institution) {
 		Setting setting = settingService.getByKey(CustomerSetting.IMPORT_SOURCE_SCHOOL_YEAR_.toString() + institution.getInstitutionNumber());
 		if (setting == null || setting.getValue() == null) {
-			log.error("Institution missing school year from STIL: " + institution.getInstitutionNumber());
-			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institution missing school year from STIL: " + institution.getInstitutionNumber());
+			if (institution.isNonSTILInstitution()) {
+				setting = settingService.getByKey(CustomerSetting.GLOBAL_SCHOOL_YEAR.toString());
+			}
+			if (setting == null || setting.getValue() == null) {
+				log.error("Institution missing school year from STIL: " + institution.getInstitutionNumber());
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institution missing school year from STIL: " + institution.getInstitutionNumber());
+			}
 		}
 
 		String[] years = setting.getValue().split("-");

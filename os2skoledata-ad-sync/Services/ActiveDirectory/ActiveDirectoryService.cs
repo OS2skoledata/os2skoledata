@@ -9,6 +9,8 @@ using System.Collections.Generic;
 using System.DirectoryServices;
 using System.DirectoryServices.AccountManagement;
 using System.Linq;
+using System.Reflection.Emit;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
 using Unidecode.NET;
@@ -51,6 +53,16 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly string allEmployeesInInstitutionSecurityGroupNameStandard;
         private readonly string classSecurityGroupNameStandard;
         private readonly string classSecurityGroupNameStandardNoClassYear;
+        private readonly string classStudentsSecurityGroupNameStandard;
+        private readonly string classStudentsSecurityGroupNameStandardNoClassYear;
+        private readonly string classEmployeesSecurityGroupNameStandard;
+        private readonly string classEmployeesSecurityGroupNameStandardNoClassYear;
+        private readonly string otherGroupsÅrgangSecurityGroupNameStandard;
+        private readonly string otherGroupsRetningSecurityGroupNameStandard;
+        private readonly string otherGroupsHoldSecurityGroupNameStandard;
+        private readonly string otherGroupsSFOSecurityGroupNameStandard;
+        private readonly string otherGroupsTeamSecurityGroupNameStandard;
+        private readonly string otherGroupsAndetSecurityGroupNameStandard;
         private readonly string securityGroupForEmployeeTypeNameStandard;
         private readonly string securityGroupForYearNameStandard;
         private readonly string securityGroupForLevelNameStandard;
@@ -91,6 +103,14 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly string securityGroupNormalMailNameStandard;
         private readonly string securityGroupNoLineMailNameStandard;
         private readonly string securityGroupNoLineNoYearMailNameStandard;
+        private readonly string securityGroupForEmployeeTypeMailStandard;
+        private readonly string securityGroupForEmployeesMailStandard;
+        private readonly string otherGroupsÅrgangSecurityGroupMailStandard;
+        private readonly string otherGroupsRetningSecurityGroupMailStandard;
+        private readonly string otherGroupsHoldSecurityGroupMailStandard;
+        private readonly string otherGroupsSFOSecurityGroupMailStandard;
+        private readonly string otherGroupsTeamSecurityGroupMailStandard;
+        private readonly string otherGroupsAndetSecurityGroupMailStandard;
         private readonly string multipleCprExcludedGroupDn;
         private readonly string globalSecurityGroupForLevelNameStandard;
         private readonly bool deleteDisabledUsersFully;
@@ -99,6 +119,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly int daysBeforeDeletionExternal;
         private readonly string globalRoleField;
         private readonly string disabledDateField;
+        private readonly bool StudentAndClassGroupsSchoolsOnly;
 
         private char[] first;
         private char[] second;
@@ -142,6 +163,16 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             allEmployeesInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllEmployeesInInstitutionSecurityGroupNameStandard;
             classSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.ClassSecurityGroupNameStandard;
             classSecurityGroupNameStandardNoClassYear = settings.ActiveDirectorySettings.namingSettings.ClassSecurityGroupNameStandardNoClassYear;
+            classStudentsSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.ClassStudentsSecurityGroupNameStandard;
+            classStudentsSecurityGroupNameStandardNoClassYear = settings.ActiveDirectorySettings.namingSettings.ClassStudentsSecurityGroupNameStandardNoClassYear;
+            classEmployeesSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.ClassEmployeesSecurityGroupNameStandard;
+            classEmployeesSecurityGroupNameStandardNoClassYear = settings.ActiveDirectorySettings.namingSettings.ClassEmployeesSecurityGroupNameStandardNoClassYear;
+            otherGroupsÅrgangSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsÅrgangSecurityGroupNameStandard;
+            otherGroupsRetningSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsRetningSecurityGroupNameStandard;
+            otherGroupsHoldSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsHoldSecurityGroupNameStandard;
+            otherGroupsSFOSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsSFOSecurityGroupNameStandard;
+            otherGroupsTeamSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsTeamSecurityGroupNameStandard;
+            otherGroupsAndetSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.OtherGroupsAndetSecurityGroupNameStandard;
             securityGroupForEmployeeTypeNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForEmployeeTypeNameStandard;
             securityGroupForYearNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForYearNameStandard;
             securityGroupForLevelNameStandard = settings.ActiveDirectorySettings.namingSettings.SecurityGroupForLevelNameStandard;
@@ -182,6 +213,14 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             securityGroupNormalMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NormalMailNameStandard;
             securityGroupNoLineMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNameStandard;
             securityGroupNoLineNoYearMailNameStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.NoLineNoYearNameStandard;
+            securityGroupForEmployeeTypeMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.SecurityGroupForEmployeeTypeMailStandard;
+            securityGroupForEmployeesMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.SecurityGroupForEmployeesMailStandard;
+            otherGroupsÅrgangSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsÅrgangSecurityGroupMailStandard;
+            otherGroupsRetningSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsRetningSecurityGroupMailStandard;
+            otherGroupsHoldSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsHoldSecurityGroupMailStandard;
+            otherGroupsSFOSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsSFOSecurityGroupMailStandard;
+            otherGroupsTeamSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsTeamSecurityGroupMailStandard;
+            otherGroupsAndetSecurityGroupMailStandard = settings.ActiveDirectorySettings.optionalSecurityGroupFields == null ? null : settings.ActiveDirectorySettings.optionalSecurityGroupFields.OtherGroupsAndetSecurityGroupMailStandard;
             multipleCprExcludedGroupDn = settings.ActiveDirectorySettings.MultipleCprExcludedGroupDn;
             globalSecurityGroupForLevelNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForLevelNameStandard;
             deleteDisabledUsersFully = settings.ActiveDirectorySettings.DeleteDisabledUsersFully;
@@ -190,6 +229,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             daysBeforeDeletionExternal = settings.ActiveDirectorySettings.DaysBeforeDeletionExternal;
             globalRoleField = settings.ActiveDirectorySettings.optionalUserFields.GlobalRoleField;
             disabledDateField = settings.ActiveDirectorySettings.optionalUserFields.DisabledDateField;
+            StudentAndClassGroupsSchoolsOnly = settings.ActiveDirectorySettings.StudentAndClassGroupsSchoolsOnly;
 
             first = "23456789abcdefghjkmnpqrstuvxyz".ToCharArray();
             second = "abcdefghjkmnpqrstuvxyz".ToCharArray();
@@ -267,7 +307,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             for (int i = 0; i < 1000; i++)
             {
                 string username;
-                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+                if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
                 {
                     username = namePart + GetRandomNumber(randomStandardNumberCount);
                 }
@@ -915,7 +955,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return whitelisted;
         }
 
-        public void UpdateSecurityGroups(Institution institution, List<User> users, List<Group> classes, List<string> allSecurityGroupIds, List<string> allRenamedGroupIds, Dictionary<string,string> usernameADPathMap, HashSet<string> allClassLevels)
+        public void UpdateSecurityGroups(Institution institution, List<User> users, List<Group> classes, List<string> allSecurityGroupIds, List<string> allRenamedGroupIds, Dictionary<string,string> usernameADPathMap, HashSet<string> allClassLevels, List<Group> otherGroups)
         {
             logger.LogInformation($"Handling security groups for institution {institution.InstitutionName}");
             using var institutionEntry = GetOUFromId("inst" + institution.InstitutionNumber);
@@ -925,27 +965,102 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             List<string> securityGroupIds = new List<string>();
             List<string> renamedOrNewSecurityGroupIds = new List<string>();
 
-            // if ADPath is null it means that the user has been excluded
-            // sort classes based on level (highest first) to make sure potential renaming is smooth
-            classes = SortGroupsBasedOnLevel(classes);
-            foreach (Group currentClass in classes) {
-                List<User> usersInClass = users.Where( u => u.ADPath != null && (u.GroupIds.Contains(currentClass.DatabaseId) || (u.StudentMainGroups != null && u.StudentMainGroups.Contains("" + currentClass.DatabaseId)))).ToList();
-                string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_klasse_" + currentClass.DatabaseId;
-                using DirectoryEntry classGroupEntry = UpdateGroup(securityGroupOU, id, GetClassSecurityGroupName(currentClass, institution), institution.InstitutionNumber, GenerateSamAccountName(currentClass, institution, GroupType.CLASS_ALL, null, classes), GetClassSecurityGroupMail(currentClass, institution, classes), renamedOrNewSecurityGroupIds);
-
-                if (classGroupEntry != null)
+            // create student groups if not StudentAndClassGroupsSchoolsOnly or if StudentAndClassGroupsSchoolsOnly and institutionType is school
+            if (!StudentAndClassGroupsSchoolsOnly || (StudentAndClassGroupsSchoolsOnly && institution.Type.Equals(InstitutionType.SCHOOL)))
+            {
+                // if ADPath is null it means that the user has been excluded
+                // sort classes based on level (highest first) to make sure potential renaming is smooth
+                classes = SortGroupsBasedOnLevel(classes);
+                foreach (Group currentClass in classes)
                 {
-                    securityGroupIds.Add(id);
-                    HandleGroupMembers(classGroupEntry, usersInClass, null, usernameADPathMap);
+                    List<User> usersInClass = users.Where(u => u.ADPath != null && (u.GroupIds.Contains(currentClass.DatabaseId) || (u.StudentMainGroups != null && u.StudentMainGroups.Contains("" + currentClass.DatabaseId)))).ToList();
+                    List<User> studentsInClass = usersInClass.Where(u => u.Role.Equals(Role.STUDENT)).ToList();
+                    List<User> employeesInClass = usersInClass.Where(u => u.Role.Equals(Role.EMPLOYEE) || u.Role.Equals(Role.EXTERNAL)).ToList();
+
+                    string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_klasse_" + currentClass.DatabaseId;
+                    string idStudents = "os2skoledata_institution_" + institution.InstitutionNumber + "_elever_klasse_" + currentClass.DatabaseId;
+                    string idEmployees = "os2skoledata_institution_" + institution.InstitutionNumber + "_medarbejdere_klasse_" + currentClass.DatabaseId;
+
+                    using DirectoryEntry classGroupEntry = UpdateGroup(securityGroupOU, id, GetClassSecurityGroupName(currentClass, institution, classSecurityGroupNameStandard, classSecurityGroupNameStandardNoClassYear, "classSecurityGroupNameStandard", "classSecurityGroupNameStandardNoClassYear"), institution.InstitutionNumber, GenerateSamAccountName(currentClass, institution, GroupType.CLASS_ALL, null, classes), GetSecurityGroupMail(currentClass, institution, classes, GroupType.CLASS_ALL), renamedOrNewSecurityGroupIds);
+                    using DirectoryEntry classStudentsGroupEntry = UpdateGroup(securityGroupOU, idStudents, GetClassSecurityGroupName(currentClass, institution, classStudentsSecurityGroupNameStandard, classStudentsSecurityGroupNameStandardNoClassYear, "classStudentsSecurityGroupNameStandard", "classStudentsSecurityGroupNameStandardNoClassYear"), institution.InstitutionNumber, GenerateSamAccountName(currentClass, institution, GroupType.CLASS_STUDENTS, null, classes), null, renamedOrNewSecurityGroupIds);
+                    using DirectoryEntry classEmployeesGroupEntry = UpdateGroup(securityGroupOU, idEmployees, GetClassSecurityGroupName(currentClass, institution, classEmployeesSecurityGroupNameStandard, classEmployeesSecurityGroupNameStandardNoClassYear, "classEmployeesSecurityGroupNameStandard", "classEmployeesSecurityGroupNameStandardNoClassYear"), institution.InstitutionNumber, GenerateSamAccountName(currentClass, institution, GroupType.CLASS_EMPLOYEES, null, classes), null, renamedOrNewSecurityGroupIds);
+
+                    if (classGroupEntry != null)
+                    {
+                        securityGroupIds.Add(id);
+                        HandleGroupMembers(classGroupEntry, usersInClass, null, usernameADPathMap);
+                    }
+                    if (classStudentsGroupEntry != null)
+                    {
+                        securityGroupIds.Add(idStudents);
+                        HandleGroupMembers(classStudentsGroupEntry, studentsInClass, null, usernameADPathMap);
+                    }
+                    if (classEmployeesGroupEntry != null)
+                    {
+                        securityGroupIds.Add(idEmployees);
+                        HandleGroupMembers(classEmployeesGroupEntry, employeesInClass, null, usernameADPathMap);
+                    }
+                }
+
+                // handle security groups for other types of groups
+                foreach (Group otherGroup in otherGroups)
+                {
+                    List<User> usersInGroup = users.Where(u => u.ADPath != null && (u.GroupIds.Contains(otherGroup.DatabaseId) || (u.StudentMainGroups != null && u.StudentMainGroups.Contains("" + otherGroup.DatabaseId)))).ToList();
+                    
+                    string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_gruppe_" + otherGroup.DatabaseId;
+                    
+                    using DirectoryEntry otherGroupEntry = UpdateGroup(securityGroupOU, id, GetOtherGroupSecurityGroupName(otherGroup, institution), institution.InstitutionNumber, GenerateSamAccountName(otherGroup, institution, GroupType.OTHER_GROUPS_ALL, null, otherGroups), GetSecurityGroupMail(otherGroup, institution, otherGroups, GroupType.OTHER_GROUPS_ALL), renamedOrNewSecurityGroupIds);
+                    
+                    if (otherGroupEntry != null)
+                    {
+                        securityGroupIds.Add(id);
+                        HandleGroupMembers(otherGroupEntry, usersInGroup, null, usernameADPathMap);
+                    }
+                }
+
+                using DirectoryEntry institutionStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_elever", GetInstitutionGroupName("STUDENTS", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENTS, null, null));
+                securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_elever");
+                // all students in institution security group
+                if (institutionStudentGroup != null)
+                {
+                    List<User> usersInStudent = users.Where(u => u.ADPath != null && u.Role.Equals(Role.STUDENT)).ToList();
+                    HandleGroupMembers(institutionStudentGroup, usersInStudent, null, usernameADPathMap);
+                }
+
+                // securityGroups for class levels - the groups never change but the students do
+                List<string> classLevels = GetClassLevels(classes);
+                allClassLevels.UnionWith(classLevels);
+                foreach (string level in classLevels)
+                {
+                    List<User> usersInLevel = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupLevelForInstitution != null && u.StudentMainGroupLevelForInstitution.Equals(level)).ToList();
+                    string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_level_" + level;
+                    using DirectoryEntry levelGroupEntry = UpdateGroup(securityGroupOU, id, GetLevelSecurityGroupName(level, institution, securityGroupForLevelNameStandard), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_LEVELS, level, null));
+                    if (levelGroupEntry != null)
+                    {
+                        securityGroupIds.Add(id);
+                        HandleGroupMembers(levelGroupEntry, usersInLevel, null, usernameADPathMap);
+                    }
+                }
+
+                // securityGroups for students in same year
+                List<int> classStartYears = GetClassStartYears(classes);
+                foreach (int year in classStartYears)
+                {
+                    List<User> usersInYear = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupStartYearForInstitution != 0 && u.StudentMainGroupStartYearForInstitution == year).ToList();
+                    string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_år_" + year;
+                    using DirectoryEntry yearGroupEntry = UpdateGroup(securityGroupOU, id, GetYearSecurityGroupName(year, institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENT_YEARS, year.ToString(), null));
+                    if (yearGroupEntry != null)
+                    {
+                        securityGroupIds.Add(id);
+                        HandleGroupMembers(yearGroupEntry, usersInYear, null, usernameADPathMap);
+                    }
                 }
             }
 
-            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEES, null, null));
-            using DirectoryEntry institutionStudentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_elever", GetInstitutionGroupName("STUDENTS", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENTS, null, null));
+            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEES, GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEES), null));
             using DirectoryEntry institutionAllGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_alle", GetInstitutionGroupName("ALL", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_ALL, null, null));
 
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte");
-            securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_elever");
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_alle");
 
             // all users in institution security group
@@ -953,13 +1068,6 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             {
                 List<User> usersInAll = users.Where(u => u.ADPath != null).ToList();
                 HandleGroupMembers(institutionAllGroup, usersInAll, null, usernameADPathMap);
-            }
-
-            // all students in institution security group
-            if (institutionStudentGroup != null)
-            {
-                List<User> usersInStudent = users.Where(u => u.ADPath != null && u.Role.Equals(Role.STUDENT)).ToList();
-                HandleGroupMembers(institutionStudentGroup, usersInStudent, null, usernameADPathMap);
             }
 
             // all employees in institution security group
@@ -972,36 +1080,6 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             // securityGroups for adults based on role
             HandleInstitutionEmployeeTypeSecurityGroups(securityGroupIds, securityGroupOU, institution, users, usernameADPathMap);
 
-            // securityGroups for class levels - the groups never change but the students do
-            List<string> classLevels = GetClassLevels(classes);
-            allClassLevels.UnionWith(classLevels);
-            foreach (string level in classLevels)
-            {
-                List<User> usersInLevel = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupLevelForInstitution != null && u.StudentMainGroupLevelForInstitution.Equals(level)).ToList();
-                string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_level_" + level;
-                using DirectoryEntry levelGroupEntry = UpdateGroup(securityGroupOU, id, GetLevelSecurityGroupName(level, institution, securityGroupForLevelNameStandard), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_LEVELS, level, null));
-                if (levelGroupEntry != null)
-                {
-                    securityGroupIds.Add(id);
-                    HandleGroupMembers(levelGroupEntry, usersInLevel, null, usernameADPathMap);
-                }
-            }
-
-
-            // securityGroups for students in same year
-            List<int> classStartYears = GetClassStartYears(classes);
-            foreach (int year in classStartYears)
-            {
-                List<User> usersInYear = users.Where(u => u.Role.Equals(Role.STUDENT) && u.ADPath != null && u.StudentMainGroupStartYearForInstitution != 0 && u.StudentMainGroupStartYearForInstitution == year).ToList();
-                string id = "os2skoledata_institution_" + institution.InstitutionNumber + "_år_" + year;
-                using DirectoryEntry yearGroupEntry = UpdateGroup(securityGroupOU, id, GetYearSecurityGroupName(year, institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_STUDENT_YEARS, year.ToString(), null));
-                if (yearGroupEntry != null)
-                {
-                    securityGroupIds.Add(id);
-                    HandleGroupMembers(yearGroupEntry, usersInYear, null, usernameADPathMap);
-                }
-            }
-
             // delete other securityGroups
             if (createOUHierarchy)
             {
@@ -1013,6 +1091,63 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             }
 
             logger.LogInformation($"Finished handling security groups for institution {institution.InstitutionName}");
+        }
+
+        private string GetOtherGroupSecurityGroupName(Group otherGroup, Institution institution)
+        {
+            string institutionName = institution.InstitutionName;
+            string groupName = otherGroup.GroupName;
+            if (!useDanishCharacters)
+            {
+                institutionName = institutionName.Unidecode();
+                groupName = groupName.Unidecode();
+            }
+
+            string name;
+            switch (otherGroup.GroupType)
+            {
+                case DBGroupType.ÅRGANG:
+                    name = otherGroupsÅrgangSecurityGroupNameStandard;
+                    break; 
+                case DBGroupType.RETNING:
+                    name = otherGroupsRetningSecurityGroupNameStandard;
+                    break;
+                case DBGroupType.HOLD:
+                    name = otherGroupsHoldSecurityGroupNameStandard;
+                    break;
+                case DBGroupType.SFO:
+                    name = otherGroupsSFOSecurityGroupNameStandard;
+                    break;
+                case DBGroupType.TEAM:
+                    name = otherGroupsTeamSecurityGroupNameStandard;
+                    break;
+                case DBGroupType.ANDET:
+                    name = otherGroupsAndetSecurityGroupNameStandard;
+                    break;
+                default:
+                    return null;
+            }
+
+            if (String.IsNullOrEmpty(name))
+            {
+                return null;
+            }
+
+            name = name.Replace("{INSTITUTION_NAME}", institution.InstitutionName)
+                    .Replace("{INSTITUTION_ABBREVIATION}", institution.Abbreviation)
+                    .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
+                    .Replace("{CLASS_NAME}", otherGroup.GroupName)
+                    .Replace("{CLASS_ID}", otherGroup.GroupId)
+                    .Replace("{DATABASE_ID}", otherGroup.DatabaseId.ToString());
+
+            name = EscapeCharactersForAD(name, true);
+
+            if (name.Length > 64)
+            {
+                name = name.Substring(0, 64);
+            }
+
+            return name;
         }
 
         private List<Group> SortGroupsBasedOnLevel(List<Group> classes)
@@ -1104,16 +1239,16 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 return;
             }
 
-            using DirectoryEntry institutionEmployeeLærerGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER", GetInstitutionEmployeeTypeGroupName("LÆRER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LÆRER", null));
-            using DirectoryEntry institutionEmployeePædagogGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG", GetInstitutionEmployeeTypeGroupName("PÆDAGOG", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PÆDAGOG", null));
-            using DirectoryEntry institutionEmployeeVikarGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_VIKAR", GetInstitutionEmployeeTypeGroupName("VIKAR", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "VIKAR", null));
-            using DirectoryEntry institutionEmployeeLederGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDER", GetInstitutionEmployeeTypeGroupName("LEDER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDER", null));
-            using DirectoryEntry institutionEmployeeLedelseGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDELSE", GetInstitutionEmployeeTypeGroupName("LEDELSE", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDELSE", null));
-            using DirectoryEntry institutionEmployeeTapGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_TAP", GetInstitutionEmployeeTypeGroupName("TAP", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "TAP", null));
-            using DirectoryEntry institutionEmployeeKonsulentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_KONSULENT", GetInstitutionEmployeeTypeGroupName("KONSULENT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "KONSULENT", null));
-            using DirectoryEntry institutionEmployeeUnknownGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_UNKNOWN", GetInstitutionEmployeeTypeGroupName("UNKNOWN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "UNKNOWN", null));
-            using DirectoryEntry institutionEmployeePraktikantGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PRAKTIKANT", GetInstitutionEmployeeTypeGroupName("PRAKTIKANT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PRAKTIKANT", null));
-            using DirectoryEntry institutionEmployeeEksternGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_EKSTERN", GetInstitutionEmployeeTypeGroupName("EKSTERN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "EKSTERN", null));
+            using DirectoryEntry institutionEmployeeLærerGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER", GetInstitutionEmployeeTypeGroupName("LÆRER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LÆRER", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LÆRER"));
+            using DirectoryEntry institutionEmployeePædagogGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG", GetInstitutionEmployeeTypeGroupName("PÆDAGOG", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PÆDAGOG", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PÆDAGOG"));
+            using DirectoryEntry institutionEmployeeVikarGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_VIKAR", GetInstitutionEmployeeTypeGroupName("VIKAR", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "VIKAR", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "VIKAR"));
+            using DirectoryEntry institutionEmployeeLederGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDER", GetInstitutionEmployeeTypeGroupName("LEDER", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDER", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDER"));
+            using DirectoryEntry institutionEmployeeLedelseGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LEDELSE", GetInstitutionEmployeeTypeGroupName("LEDELSE", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDELSE", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "LEDELSE"));
+            using DirectoryEntry institutionEmployeeTapGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_TAP", GetInstitutionEmployeeTypeGroupName("TAP", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "TAP", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "TAP"));
+            using DirectoryEntry institutionEmployeeKonsulentGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_KONSULENT", GetInstitutionEmployeeTypeGroupName("KONSULENT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "KONSULENT", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "KONSULENT"));
+            using DirectoryEntry institutionEmployeeUnknownGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_UNKNOWN", GetInstitutionEmployeeTypeGroupName("UNKNOWN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "UNKNOWN", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "UNKNOWN"));
+            using DirectoryEntry institutionEmployeePraktikantGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PRAKTIKANT", GetInstitutionEmployeeTypeGroupName("PRAKTIKANT", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PRAKTIKANT", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "PRAKTIKANT"));
+            using DirectoryEntry institutionEmployeeEksternGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_EKSTERN", GetInstitutionEmployeeTypeGroupName("EKSTERN", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEE_TYPES, "EKSTERN", null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEE_TYPES, "EKSTERN"));
 
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_LÆRER");
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte_PÆDAGOG");
@@ -1593,7 +1728,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     }
                 }
             }
-            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 // do nothing. Random number will be generated later 
             }
@@ -1653,17 +1788,17 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             foreach (string username in allUsernames)
             {
                 string key = "";
-                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+                if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
                 {
                     try
                     {
-                        int wantedTotalLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount + randomStandardNumberCount : 8;
+                        int wantedTotalLength = (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM)) ? randomStandardLetterCount + randomStandardNumberCount : 8;
                         if (username.Length != wantedTotalLength)
                         {
                             continue;
                         }
 
-                        int wantedLetterLength = usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) ? randomStandardLetterCount : 4;
+                        int wantedLetterLength = (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM)) ? randomStandardLetterCount : 4;
                         if (username.Length >= wantedLetterLength)
                         {
                             key = username.Substring(0, wantedLetterLength);
@@ -2280,11 +2415,15 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             {
                 if (dryRun)
                 {
-                    logger.LogInformation($"DryRun: Would have checked if any ous in the schoolOU or daycareOU should be deleted.");
+                    logger.LogInformation($"DryRun: Would have checked if any ous in the schoolOU or daycareOU or FuOU should be deleted.");
                 } else
                 {
                     DeleteInstitutionLevelOusFor(dtos, schoolsOU);
                     DeleteInstitutionLevelOusFor(dtos, daycareOU);
+                    if (fuOU != null)
+                    {
+                        DeleteInstitutionLevelOusFor(dtos, fuOU);
+                    }
                 }
             }
 
@@ -2351,14 +2490,68 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     // null if dryRun
                     if (ouToCreateIn != null)
                     {
-                        string matchDN = match.Properties["distinguishedName"].Value.ToString();
-                        string createInDN = ouToCreateIn.Properties["distinguishedName"].Value.ToString();
-                        if (!matchDN.EndsWith(createInDN))
+                        if (institutionLevel)
                         {
-                            logger.LogInformation("Attempting to move OU with DN " + matchDN + " to " + createInDN);
-                            match.MoveTo(ouToCreateIn);
-                            logger.LogInformation($"Moved OU with name {match.Name} to OU with path {createInDN}");
-                            moved = true;
+                            string matchDN = match.Properties["distinguishedName"].Value.ToString();
+                            DirectoryEntry toMoveTo = null;
+
+                            if (dto.Type.Equals(InstitutionType.SCHOOL))
+                            {
+                                string createInDN = schoolsOU.Properties["distinguishedName"].Value.ToString();
+                                if (!matchDN.EndsWith(createInDN))
+                                {
+                                    toMoveTo = schoolsOU;
+                                }
+                            }
+                            else if (dto.Type.Equals(InstitutionType.DAYCARE))
+                            {
+                                string createInDN = daycareOU.Properties["distinguishedName"].Value.ToString();
+                                if (!matchDN.EndsWith(createInDN))
+                                {
+                                    toMoveTo = daycareOU;
+                                }
+                            }
+                            else if (dto.Type.Equals(InstitutionType.FU))
+                            {
+                                string createInDN = fuOU.Properties["distinguishedName"].Value.ToString();
+                                if (!matchDN.EndsWith(createInDN))
+                                {
+                                    toMoveTo = fuOU;
+                                }
+                            }
+                            else if (dto.Type.Equals(InstitutionType.MUNICIPALITY))
+                            {
+                                string createInDN = ouToCreateIn.Properties["distinguishedName"].Value.ToString();
+                                if (!matchDN.EndsWith(createInDN))
+                                {
+                                    toMoveTo = ouToCreateIn;
+                                }
+                            }
+                            else
+                            {
+                                throw new Exception($"Unknown institution type: {institution.Type.ToString()}. Institution with database id: {institution.DatabaseId} and institution number: {institution.InstitutionNumber}");
+                            }
+
+                            if (toMoveTo != null)
+                            {
+                                string createInDN = toMoveTo.Properties["distinguishedName"].Value.ToString();
+                                logger.LogInformation("Attempting to move OU with DN " + matchDN + " to " + createInDN);
+                                match.MoveTo(toMoveTo);
+                                logger.LogInformation($"Moved OU with name {match.Name} to OU with path {createInDN}");
+                                moved = true;
+                            }
+                        }
+                        else
+                        {
+                            string matchDN = match.Properties["distinguishedName"].Value.ToString();
+                            string createInDN = ouToCreateIn.Properties["distinguishedName"].Value.ToString();
+                            if (!matchDN.EndsWith(createInDN))
+                            {
+                                logger.LogInformation("Attempting to move OU with DN " + matchDN + " to " + createInDN);
+                                match.MoveTo(ouToCreateIn);
+                                logger.LogInformation($"Moved OU with name {match.Name} to OU with path {createInDN}");
+                                moved = true;
+                            }
                         }
                     }
                     
@@ -2558,8 +2751,9 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             name = name.Replace("#", "");
             name = name.Replace("&", "");
             name = name.Replace("/", "");
-            name = name.Replace(".", "");
             name = name.Replace(":", "");
+            name = name.Replace("(", "");
+            name = name.Replace(")", "");
 
             if (mail)
             {
@@ -2569,6 +2763,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             {
                 name = name.Replace(" ", "_");
                 name = name.Replace("*", "_");
+                name = name.Replace(".", "");
             }
 
             if (!useDanishCharacters)
@@ -2759,32 +2954,46 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private string GetNamePart(string firstname)
         {
-            int namePartLength = getNamePartLength();
-            string name = firstname.ToLower();
-            name.Replace("æ", "ae");
-            name.Replace("ø", "oe");
-            name.Replace("å", "aa");
-            name = name.Unidecode();
-            name = Regex.Replace(name, "[^a-zA-Z0-9]*", "", RegexOptions.None);
-
-            if (name.Length >= namePartLength)
+            if (usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
-                return name.Substring(0, namePartLength).ToLower();
-            }
-            else
-            {
-                while (name.Length < namePartLength)
+                char[] possibleChars = "abcdefghjkmnpqrstuvwxyz".ToCharArray();
+                StringBuilder randomCharsBuilder = new StringBuilder(randomStandardLetterCount);
+                for (int i = 0; i < randomStandardLetterCount; i++)
                 {
-                    name = name + "x";
+                    int randomIndex = random.Next(possibleChars.Length);
+                    randomCharsBuilder.Append(possibleChars[randomIndex]);
                 }
-            }
 
-            return name;
+                return randomCharsBuilder.ToString();
+            } else
+            {
+                int namePartLength = getNamePartLength();
+                string name = firstname.ToLower();
+                name.Replace("æ", "ae");
+                name.Replace("ø", "oe");
+                name.Replace("å", "aa");
+                name = name.Unidecode();
+                name = Regex.Replace(name, "[^a-zA-Z0-9]*", "", RegexOptions.None);
+
+                if (name.Length >= namePartLength)
+                {
+                    return name.Substring(0, namePartLength).ToLower();
+                }
+                else
+                {
+                    while (name.Length < namePartLength)
+                    {
+                        name = name + "x";
+                    }
+                }
+
+                return name;
+            }
         }
 
         private string GetPrefix()
         {
-            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 return "";
             }
@@ -2796,7 +3005,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             if (usernameStandard.Equals(UsernameStandardType.AS_UNILOGIN) || usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN))
             {
                 return 4;
-            } else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM))
+            } else if (usernameStandard.Equals(UsernameStandardType.FROM_STIL_OR_AS_UNILOGIN_RANDOM) || usernameStandard.Equals(UsernameStandardType.RANDOM))
             {
                 return randomStandardLetterCount;
             }
@@ -3013,8 +3222,13 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             
         }
 
-        private string GetClassSecurityGroupName(Group currentClass, Institution institution)
+        private string GetClassSecurityGroupName(Group currentClass, Institution institution, string standard, string standardNoYear, string standardName, string standardNameNoYear)
         {
+            if (String.IsNullOrEmpty(standard))
+            {
+                return null;
+            }   
+                
             string institutionName = institution.InstitutionName;
             string groupName = currentClass.GroupName;
             if (!useDanishCharacters)
@@ -3024,21 +3238,21 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             }
 
             String name;
-            if (currentClass.StartYear != 0 && (!classSecurityGroupNameStandard.Contains("CLASS_LINE") || (!String.IsNullOrEmpty(currentClass.Line) && classSecurityGroupNameStandard.Contains("CLASS_LINE"))))
+            if (currentClass.StartYear != 0 && (!standard.Contains("CLASS_LINE") || (!String.IsNullOrEmpty(currentClass.Line) && standard.Contains("CLASS_LINE"))))
             {
-                name = classSecurityGroupNameStandard;
-                name = FindPlaceholdersAndClassSecurityGroupNameStandard("classSecurityGroupNameStandard", currentClass, institution, institutionName, groupName, name);
+                name = standard;
+                name = FindPlaceholdersAndClassSecurityGroupNameStandard(standardName, currentClass, institution, institutionName, groupName, name);
 
             }
             else
             {
-                if (String.IsNullOrEmpty(classSecurityGroupNameStandardNoClassYear)) {
-                    name = classSecurityGroupNameStandard;
-                    name = FindPlaceholdersAndClassSecurityGroupNameStandard("classSecurityGroupNameStandard", currentClass, institution, institutionName, groupName, name);
+                if (String.IsNullOrEmpty(standardNoYear)) {
+                    name = standard;
+                    name = FindPlaceholdersAndClassSecurityGroupNameStandard(standardName, currentClass, institution, institutionName, groupName, name);
                 } else
                 {
-                    name = classSecurityGroupNameStandardNoClassYear;
-                    name = FindPlaceholdersAndClassSecurityGroupNameStandard("classSecurityGroupNameStandardNoClassYear", currentClass, institution, institutionName, groupName, name);
+                    name = standardNoYear;
+                    name = FindPlaceholdersAndClassSecurityGroupNameStandard(standardNoYear, currentClass, institution, institutionName, groupName, name);
                 }
             }
 
@@ -3352,11 +3566,13 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
             string institutionName = institution == null ? null : institution.InstitutionName;
             string groupName = group == null ? null : group.GroupName;
+            string dbGroupType = group == null ? null : group.GroupType.ToString().ToLower();
             if (!useDanishCharacters)
             {
                 institutionName = institution == null ? null : institutionName.Unidecode();
                 additionalInfo = additionalInfo == null ? null : additionalInfo.Unidecode();
                 groupName = group == null ? null : group.GroupName.Unidecode();
+                dbGroupType = dbGroupType == null ? null : dbGroupType.Unidecode();
             }
 
             string samAccountName = "";
@@ -3411,6 +3627,31 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                         samAccountName = $"{prefix}{institutionName}_{group.StartYear}_{group.Line}";
                     }
                     break;
+                case GroupType.CLASS_STUDENTS:
+                    bool multipleWithSameLineAndLevelStudents = classes.Where(c => c.Line != null && group.Line != null && Object.Equals(c.Line.ToLower(), group.Line.ToLower()) && Object.Equals(c.StartYear, group.StartYear)).Count() > 1;
+                    if (group.Line == null || multipleWithSameLineAndLevelStudents)
+                    {
+                        samAccountName = $"{prefix}{institutionName}_students_{group.StartYear}_{groupName}";
+                    }
+                    else
+                    {
+                        samAccountName = $"{prefix}{institutionName}_students_{group.StartYear}_{group.Line}";
+                    }
+                    break;
+                case GroupType.CLASS_EMPLOYEES:
+                    bool multipleWithSameLineAndLevelEmployees = classes.Where(c => c.Line != null && group.Line != null && Object.Equals(c.Line.ToLower(), group.Line.ToLower()) && Object.Equals(c.StartYear, group.StartYear)).Count() > 1;
+                    if (group.Line == null || multipleWithSameLineAndLevelEmployees)
+                    {
+                        samAccountName = $"{prefix}{institutionName}_employees_{group.StartYear}_{groupName}";
+                    }
+                    else
+                    {
+                        samAccountName = $"{prefix}{institutionName}_employees_{group.StartYear}_{group.Line}";
+                    }
+                    break;
+                case GroupType.OTHER_GROUPS_ALL:
+                    samAccountName = $"{prefix}{institutionName}_{group.DatabaseId}_{groupName}_{dbGroupType}";
+                    break;
                 case GroupType.GLOBAL_STUDENTS:
                     samAccountName = $"{prefix}{globalStudentSecurityGroupName}";
                     break;
@@ -3436,7 +3677,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             return samAccountName;
         }
 
-        private string GetClassSecurityGroupMail(Group group, Institution institution, List<Group> classes)
+        private string GetSecurityGroupMail(Group group, Institution institution, List<Group> classes, GroupType securityGroupType, string additionalInfo = null)
         {
             if (String.IsNullOrEmpty(securityGroupMailField))
             {
@@ -3444,31 +3685,98 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             }
 
             string institutionName = institution.InstitutionName;
-            string groupName = group.GroupName;
+            string groupName = group == null ? "" : group.GroupName;
 
             string mail = "";
 
-            bool multipleWithSameLineAndLevel = classes.Where(c => c.Line != null && group.Line != null && Object.Equals(c.Line.ToLower(), group.Line.ToLower()) && Object.Equals(c.StartYear, group.StartYear)).Count() > 1;
-            if (group.Line == null && group.StartYear == 0)
+            switch (securityGroupType)
             {
-                mail = securityGroupNoLineNoYearMailNameStandard;
-                mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNoLineNoYearMailNameStandard", group, institution, institutionName, groupName, mail);
-            }
-            else if (group.Line == null || multipleWithSameLineAndLevel)
-            {
-                mail = securityGroupNoLineMailNameStandard;
-                mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNoLineMailNameStandard", group, institution, institutionName, groupName, mail);
-            }
-            else
-            {
-                mail = securityGroupNormalMailNameStandard;
-                mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNormalMailNameStandard", group, institution, institutionName, groupName, mail);
+                case GroupType.CLASS_ALL:
+                    bool multipleWithSameLineAndLevel = classes.Where(c => c.Line != null && group.Line != null && Object.Equals(c.Line.ToLower(), group.Line.ToLower()) && Object.Equals(c.StartYear, group.StartYear)).Count() > 1;
+                    if (group.Line == null && group.StartYear == 0)
+                    {
+                        mail = securityGroupNoLineNoYearMailNameStandard;
+                        mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNoLineNoYearMailNameStandard", group, institution, institutionName, groupName, mail);
+                    }
+                    else if (group.Line == null || multipleWithSameLineAndLevel)
+                    {
+                        mail = securityGroupNoLineMailNameStandard;
+                        mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNoLineMailNameStandard", group, institution, institutionName, groupName, mail);
+                    }
+                    else
+                    {
+                        mail = securityGroupNormalMailNameStandard;
+                        mail = FindPlaceholdersAndClassSecurityGroupNameStandard("securityGroupNormalMailNameStandard", group, institution, institutionName, groupName, mail);
+                    }
+                    break;
+                case GroupType.OTHER_GROUPS_ALL:
+                    switch (group.GroupType)
+                    {
+                        case DBGroupType.ÅRGANG:
+                            mail = otherGroupsÅrgangSecurityGroupMailStandard;
+                            break;
+                        case DBGroupType.RETNING:
+                            mail = otherGroupsRetningSecurityGroupMailStandard;
+                            break;
+                        case DBGroupType.HOLD:
+                            mail = otherGroupsHoldSecurityGroupMailStandard;
+                            break;
+                        case DBGroupType.SFO:
+                            mail = otherGroupsSFOSecurityGroupMailStandard;
+                            break;
+                        case DBGroupType.TEAM:
+                            mail = otherGroupsTeamSecurityGroupMailStandard;
+                            break;
+                        case DBGroupType.ANDET:
+                            mail = otherGroupsAndetSecurityGroupMailStandard;
+                            break;
+                        default:
+                            return null;
+                    }
+
+                    if (String.IsNullOrEmpty(mail) || !mail.Contains("{DATABASE_ID}"))
+                    {
+                        return null;
+                    }
+
+                    mail = mail.Replace("{INSTITUTION_NAME}", institutionName)
+                            .Replace("{INSTITUTION_ABBREVIATION}", institution.Abbreviation)
+                            .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
+                            .Replace("{CLASS_NAME}", groupName)
+                            .Replace("{CLASS_ID}", group.GroupId)
+                            .Replace("{DATABASE_ID}", group.DatabaseId.ToString());
+                    break;
+                case GroupType.INSTITUTION_EMPLOYEE_TYPES:
+                    mail = securityGroupForEmployeeTypeMailStandard;
+                    if (String.IsNullOrEmpty(mail))
+                    {
+                        return null;
+                    }
+
+                    mail = mail.Replace("{INSTITUTION_NAME}", institutionName)
+                            .Replace("{INSTITUTION_ABBREVIATION}", institution.Abbreviation)
+                            .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber)
+                            .Replace("{TYPE}", additionalInfo);
+                    break;
+                case GroupType.INSTITUTION_EMPLOYEES:
+                    mail = securityGroupForEmployeesMailStandard;
+                    if (String.IsNullOrEmpty(mail))
+                    {
+                        return null;
+                    }
+
+                    mail = mail.Replace("{INSTITUTION_NAME}", institutionName)
+                            .Replace("{INSTITUTION_ABBREVIATION}", institution.Abbreviation)
+                            .Replace("{INSTITUTION_NUMBER}", institution.InstitutionNumber);
+                    break;
+                default:
+                    return null;
             }
 
             mail = mail.Replace("{DOMAIN}", securityGroupMailDomain);
             mail = EscapeCharactersForADSamAccountNameOrMailHard(mail, true);
 
-            return mail;
+            return mail.ToLower();
         }
 
         public void MoveKeepAliveUsers(List<string> keepAliveUsernames)
@@ -3505,6 +3813,9 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         INSTITUTION_STUDENT_YEARS,
         INSTITUTION_LEVELS,
         CLASS_ALL,
+        CLASS_STUDENTS,
+        CLASS_EMPLOYEES,
+        OTHER_GROUPS_ALL,
         GLOBAL_STUDENTS,
         GLOBAL_EMPLOYEES,
         GLOBAL_EMPLOYEE_TYPES_SCHOOL,

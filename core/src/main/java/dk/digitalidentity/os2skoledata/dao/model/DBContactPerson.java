@@ -54,17 +54,14 @@ public class DBContactPerson {
 	@Column
 	private boolean childCustody;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "unilogin_id", nullable = true)
 	private DBUniLogin uniLogin;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "person_id", nullable = false)
 	private DBPerson person;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "student_id")
 	private DBStudent student;

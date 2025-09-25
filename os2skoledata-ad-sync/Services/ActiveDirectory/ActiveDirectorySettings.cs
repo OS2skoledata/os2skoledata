@@ -35,6 +35,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public int DaysBeforeDeletionStudent { get; set; } = 60;
         public int DaysBeforeDeletionEmployee { get; set; } = 60;
         public int DaysBeforeDeletionExternal { get; set; } = 60;
+        public bool StudentAndClassGroupsSchoolsOnly { get; set; } = false;
     }
 
     public enum UsernameStandardType
@@ -45,7 +46,9 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         PREFIX_NAME_LAST,
         // numbers from 2-9 (0 and 1 is excluded) e.g. 222mad
         THREE_NUMBERS_THREE_CHARS_FROM_NAME,
-        FROM_STIL_OR_AS_UNILOGIN_RANDOM
+        FROM_STIL_OR_AS_UNILOGIN_RANDOM,
+        // x random chars and y random numbers (0 and 1 and chars; L, l, I, i, o, O are excluded) e.g. yazg4593
+        RANDOM
     }
 
     public enum UsernameKeyType

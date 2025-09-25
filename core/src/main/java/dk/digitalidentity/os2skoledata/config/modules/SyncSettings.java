@@ -15,8 +15,7 @@ public class SyncSettings {
 	// only if API_AND_STIL
 	private List<SyncField> fieldsMaintainedBySTIL = new ArrayList<>();
 
-	// used as placeholder if no uniID given
-	private String uniIDPlaceholder = "N/A";
+	private boolean handleAPIOnlyStudents = false;
 
 	/*
 	* if syncFrom is API_AND_STIL we don't normally allow STIL to create and delete users,
@@ -25,5 +24,9 @@ public class SyncSettings {
 	*/
 	private boolean transitionMode = false;
 	private String localSource = "local";
+
+
+	// the percentage to trigger tooFewPeople institution change - default 50%
+	private double thresholdPercentage = 0.5;
 
 }

@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.controller.rest;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
@@ -14,6 +15,7 @@ import dk.digitalidentity.os2skoledata.service.SettingService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -44,6 +46,9 @@ public class InstitutionRestController {
 
 	@Autowired
 	private GroupService groupService;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
 
 	@PostMapping("/rest/institutions/unlock/{number}")
 	public ResponseEntity<?> unlockInstitution(@PathVariable String number) {
@@ -90,6 +95,7 @@ public class InstitutionRestController {
 		}
 
 		institution.setBypassTooFewPeople(true);
+		institution.setChangeProposal(null);
 		institutionService.save(institution);
 
 		return ResponseEntity.ok().build();
@@ -199,4 +205,41 @@ public class InstitutionRestController {
 
 		return score;
 	}
+
+	public record DeleteResponse(boolean success, String message) {}
+	@DeleteMapping("/rest/institutions/nonstil/{id}")
+	public ResponseEntity<DeleteResponse> deleteInstitution(@PathVariable Long id) {
+		if (!configuration.getNonSTILInstitutions().isEnabled()) {
+			return new ResponseEntity<>(HttpStatus.FORBIDDEN);
+		}
+
+		try {
+			DBInstitution institution = institutionService.findById(id);
+
+			if (institution == null || !institution.isNonSTILInstitution()) {
+				return ResponseEntity.status(HttpStatus.NOT_FOUND)
+						.body(new DeleteResponse(false, "Institution ikke fundet"));
+			}
+
+			// Check if institution has users and mark as deleted
+			if (institution.getInstitutionPersons() != null && !institution.getInstitutionPersons().isEmpty()) {
+				for (DBInstitutionPerson institutionPerson : institution.getInstitutionPersons()) {
+					institutionPerson.setDeleted(true);
+					institutionPersonService.save(institutionPerson);
+				}
+			}
+
+			String institutionName = institution.getInstitutionName();
+			institution.setDeleted(true);
+			institutionService.save(institution);
+
+			return ResponseEntity.ok(new DeleteResponse(true,
+					"Institution '" + institutionName + "' blev slettet"));
+
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+					.body(new DeleteResponse(false, "Der opstod en fejl ved sletning af institutionen"));
+		}
+	}
+
 }

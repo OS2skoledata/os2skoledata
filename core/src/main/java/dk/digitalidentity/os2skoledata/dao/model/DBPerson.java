@@ -37,6 +37,7 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @NoArgsConstructor
 @Slf4j
+@BatchSize(size = 100)
 public class DBPerson {
 
 	@Id
@@ -79,22 +80,18 @@ public class DBPerson {
 	@Column(name = "protected")
 	private boolean _protected;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "address_id", nullable = true)
 	private DBAddress address;
 	
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "home_phone_number_id", nullable = true)
 	private DBPhoneNumber homePhoneNumber;
 	
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "mobile_phone_number_id", nullable = true)
 	private DBPhoneNumber mobilePhoneNumber;
 	
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "work_phone_number_id", nullable = true)
 	private DBPhoneNumber workPhoneNumber;

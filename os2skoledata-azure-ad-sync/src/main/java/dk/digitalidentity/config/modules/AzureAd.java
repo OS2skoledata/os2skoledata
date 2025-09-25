@@ -10,6 +10,7 @@ public class AzureAd {
 	private String clientSecret;
 	private boolean usingPEMCertificate;
 	private String certificatePath;
+	private String certificatePassword;
 	private String tenantID;
 	private boolean userDryRun;
 	private boolean teamsAndGroupsOnly = false;

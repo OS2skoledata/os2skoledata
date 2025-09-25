@@ -1,0 +1,10 @@
+﻿{
+  "profiles": {
+    "os2skoledata_apple_school_manager": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

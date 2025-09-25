@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="fragments/header :: header (datatables = true, checkbox = true)" />
+<body class="top-navigation">
+<div id="wrapper">
+    <div id="page-wrapper" class="gray-bg">
+        <div th:replace="fragments/topbar :: topbar (page = 'institutions.changes')" />
+
+        <div class="wrapper wrapper-content">
+            <div class="row">
+
+                <div class="col-lg-12">
+                    <div class="ibox">
+                        <div class="ibox-title">
+                            <h5><em class="fa fa-exchange"></em> &nbsp; <span th:text="#{html.entity.institution.changes.title}"></span></h5>
+                        </div>
+
+                        <div class="ibox-content">
+                            <!-- Institution Info -->
+                            <div class="row mb-4">
+                                <div class="col-lg-12">
+                                    <div class="alert alert-warning">
+                                        <h4><em class="fa fa-warning"></em> <span th:text="#{html.entity.institution.changes.warning.title}"></span></h4>
+                                        <p><strong th:text="#{html.entity.institution.changes.institution}"></strong>: <span th:text="${changes.institutionName}"></span> (<span th:text="${changes.institutionNumber}"></span>)</p>
+                                        <p><strong th:text="#{html.entity.institution.changes.error}"></strong>: <span th:text="${changes.errorMessage}"></span></p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Changes Tables -->
+                            <div class="row">
+                                <!-- Deletions -->
+                                <div class="col-lg-6">
+                                    <div class="ibox">
+                                        <div class="ibox-title">
+                                            <h5 style="color: #d73527;">
+                                                <em class="fa fa-minus-circle"></em>
+                                                <span th:text="#{html.entity.institution.changes.deletions}"></span>
+                                            </h5>
+                                        </div>
+                                        <div class="ibox-content">
+                                            <table id="deletionsTable" class="table table-striped table-hover peopleTable">
+                                                <thead>
+                                                <tr>
+                                                    <th th:text="#{html.entity.institution.changes.name}"></th>
+                                                    <th th:text="#{html.entity.institution.changes.unilogin}"></th>
+                                                    <th th:text="#{html.entity.institution.changes.type}"></th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                <tr th:each="change : ${changes.personChanges}" th:if="${change.changeType == 'DELETE'}">
+                                                    <td>
+                                                        <span th:text="${change.firstName}"></span> <span th:text="${change.familyName}"></span>
+                                                    </td>
+                                                    <td>
+                                                        <span th:text="${change.uniLoginUserId ?: '-'}"></span>
+                                                    </td>
+                                                    <td>
+                                                        <span th:text="${change.personType}"></span>
+                                                    </td>
+                                                </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Additions -->
+                                <div class="col-lg-6">
+                                    <div class="ibox">
+                                        <div class="ibox-title">
+                                            <h5 style="color: #1ab394;">
+                                                <em class="fa fa-plus-circle"></em>
+                                                <span th:text="#{html.entity.institution.changes.additions}"></span>
+                                            </h5>
+                                        </div>
+                                        <div class="ibox-content">
+                                            <table id="additionsTable" class="table table-striped table-hover peopleTable">
+                                                <thead>
+                                                <tr>
+                                                    <th th:text="#{html.entity.institution.changes.name}"></th>
+                                                    <th th:text="#{html.entity.institution.changes.unilogin}"></th>
+                                                    <th th:text="#{html.entity.institution.changes.type}"></th>
+                                                </tr>
+                                                </thead>
+                                                <tbody>
+                                                <tr th:each="change : ${changes.personChanges}" th:if="${change.changeType == 'CREATE'}">
+                                                    <td>
+                                                        <span th:text="${change.firstName}"></span> <span th:text="${change.familyName}"></span>
+                                                    </td>
+                                                    <td>
+                                                        <span th:text="${change.uniLoginUserId ?: '-'}"></span>
+                                                    </td>
+                                                    <td>
+                                                        <span th:text="${change.personType}"></span>
+                                                    </td>
+                                                </tr>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="row">
+                                <div class="col-lg-12 text-center">
+                                    <div class="btn-group" role="group">
+                                        <button
+                                                type="button"
+                                                class="btn btn-danger btn-lg"
+                                                onclick="changesService.approveChanges();"
+                                                th:attr="data-institutionnumber=${changes.institutionNumber}">
+                                            <em class="fa fa-check"></em> <span th:text="#{html.entity.institution.changes.approve}"></span>
+                                        </button>
+                                        <a th:href="@{/ui/institutions}" class="btn btn-default btn-lg">
+                                            <em class="fa fa-times"></em> <span th:text="#{html.entity.institution.changes.cancel}"></span>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Help Text -->
+                            <div class="row mt-4">
+                                <div class="col-lg-12">
+                                    <div class="alert alert-info">
+                                        <h4><em class="fa fa-info-circle"></em> <span th:text="#{html.entity.institution.changes.help.title}"></span></h4>
+                                        <p th:text="#{html.entity.institution.changes.help.text}"></p>
+                                        <ul>
+                                            <li th:text="#{html.entity.institution.changes.help.approve}"></li>
+                                            <li th:text="#{html.entity.institution.changes.help.cancel}"></li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div th:replace="fragments/footer :: scripts (datatables = true)" />
+<script th:inline="javascript">
+    /*<![CDATA[*/
+
+    /*[+
+        var approveTitle = [[#{html.entity.institution.changes.approve.title}]];
+        var approveText = [[#{html.entity.institution.changes.approve.text}]];
+        var approveConfirm = [[#{html.entity.institution.changes.approve.confirm}]];
+        var approveCancel = [[#{html.entity.institution.changes.approve.cancel}]];
+        var approveUrl = [[@{/rest/institutions/}]];
+        var msgSuccess = [[#{html.entity.institution.changes.approve.success}]];
+        var msgFailure = [[#{html.entity.institution.changes.approve.failure}]];
+        var approveSTILUrl = [[@{/rest/institutions/stil/}]];
+
+        var searchTxt = [[#{html.datatables.search}]];
+        var dropdownTxt = [[#{html.datatables.dropdown}]];
+        var infoDefaultTxt = [[#{html.datatables.info.default}]];
+        var infoEmptyTxt = [[#{html.datatables.info.empty}]];
+        var infoFilteredTxt = [[#{html.datatables.info.filtered}]];
+        var prevTxt = [[#{html.datatables.prev}]];
+        var nextTxt = [[#{html.datatables.next}]];
+    +]*/
+
+    var token = $("meta[name='_csrf']").attr("content");
+
+    var changesService;
+    $(document).ready(function(){
+        changesService = new ChangesService();
+        changesService.init();
+    });
+
+    function ChangesService() {
+        this.init = function() {
+            $('.peopleTable').DataTable({
+                'paging':    true,
+                'ordering':  true,
+                'info':      true,
+                'language': {
+                    "search":       searchTxt,
+                    "lengthMenu":   dropdownTxt,
+                    "info":         infoDefaultTxt,
+                    "zeroRecords":  infoEmptyTxt,
+                    "infoEmpty":    "",
+                    "infoFiltered": infoFilteredTxt,
+                    "paginate": {
+                        "next": nextTxt,
+                        "previous": prevTxt
+                    }
+                }
+            });
+        }
+
+        this.approveChanges = function() {
+            var institutionNumber = $("button[data-institutionnumber]").data("institutionnumber");
+
+            swal({
+                html : true,
+                title : approveTitle,
+                text : approveText,
+                type : "warning",
+                showCancelButton : true,
+                confirmButtonColor : "#DD6B55",
+                confirmButtonText : approveConfirm,
+                cancelButtonText : approveCancel,
+                closeOnConfirm : true,
+                closeOnCancel : true
+            },
+            function(isConfirm) {
+                if (isConfirm) {
+                    $.ajax({
+                        contentType: 'application/json',
+                        url: approveSTILUrl + institutionNumber,
+                        method : "POST",
+                        headers: {
+                            'X-CSRF-TOKEN': token
+                        },
+                        error: function(response) {
+                            swal({
+                                title: msgFailure,
+                                type: 'error',
+                                confirmButtonColor: '#3085d6'
+                            });
+                        },
+                        success: function(response) {
+                            window.location.href = '/ui/institutions';
+                        }
+                    });
+                }
+            });
+        }
+    }
+
+    /*]]>*/
+</script>
+</body>
+</html>

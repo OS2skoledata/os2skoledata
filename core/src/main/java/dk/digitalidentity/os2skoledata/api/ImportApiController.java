@@ -1,7 +1,7 @@
 package dk.digitalidentity.os2skoledata.api;
 
-import dk.digitalidentity.os2skoledata.api.model.EmployeeDTO;
-import dk.digitalidentity.os2skoledata.api.model.EmployeeImportDTO;
+import dk.digitalidentity.os2skoledata.api.model.SchoolPersonDTO;
+import dk.digitalidentity.os2skoledata.api.model.SchoolPersonImportDTO;
 import dk.digitalidentity.os2skoledata.api.model.ErrorDTO;
 import dk.digitalidentity.os2skoledata.api.model.enums.PossibleImportRole;
 import dk.digitalidentity.os2skoledata.api.model.enums.PossibleImportSubrole;
@@ -40,7 +40,6 @@ import javax.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Transactional
 @Slf4j
@@ -62,23 +61,30 @@ public class ImportApiController {
 
 	@GetMapping
 	@Operation(
-			summary = "Returns all employees/externals. It is possible to filter on institution",
-			description = "Retrieves a list of employees/externals and optionally filters by institution number."
+			summary = "Returns all employees/externals. It is possible to filter on institution and decide if the response should include students (if student import API feature is enabled)",
+			description = "Retrieves a list of employees/externals and optionally students. It is possible to filter by institution number."
 	)
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "200", description = "Employees found (can be an empty list)",
-					content = @Content(array = @ArraySchema(schema = @Schema(implementation = EmployeeDTO.class)))),
+			@ApiResponse(responseCode = "200", description = "People found (can be an empty list)",
+					content = @Content(array = @ArraySchema(schema = @Schema(implementation = SchoolPersonDTO.class)))),
 			@ApiResponse(responseCode = "404", description = "Institution not found",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class)))
 	})
-	public List<EmployeeDTO> getEmployees(
+	public List<SchoolPersonDTO> getEmployees(
 			@Parameter(
 					name = "institutionNumber",
-					description = "Optional institution number to filter employees/externals by",
+					description = "Optional institution number to filter people by",
 					required = false,
 					example = "10001"
 			)
-			@RequestParam(name = "institutionNumber", required = false) String institutionNumber
+			@RequestParam(name = "institutionNumber", required = false) String institutionNumber,
+			@Parameter(
+					name = "includeStudents",
+					description = "Decides if students should be included in the response",
+					required = false,
+					example = "true"
+			)
+			@RequestParam(name = "includeStudents", required = false, defaultValue = "false") boolean includeStudents
 	) {
 		List<DBInstitutionPerson> people;
 		if (!isNullOrBlank(institutionNumber)) {
@@ -87,13 +93,21 @@ public class ImportApiController {
 				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "The given institution does not exist");
 			}
 
-			people = institutionPersonService.findEmployeeOrExternalByInstitution(institution);
+			if (includeStudents && os2SkoleDataConfiguration.getSyncSettings().isHandleAPIOnlyStudents()) {
+				people = institution.getInstitutionPersons();
+			} else {
+				people = institutionPersonService.findEmployeeOrExternalByInstitution(institution);
+			}
 		} else {
-			people = institutionPersonService.findAllEmployeesAndExternalsIncludingDeleted();
+			if (includeStudents && os2SkoleDataConfiguration.getSyncSettings().isHandleAPIOnlyStudents()) {
+				people = institutionPersonService.findAllIncludingDeleted();
+			} else {
+				people = institutionPersonService.findAllEmployeesAndExternalsIncludingDeleted();
+			}
 		}
 
 		if (people.isEmpty()) {
-			return List.of(); // return empty list if no employees found
+			return List.of(); // return empty list if no people found
 		}
 
 		return people.stream().map(importApiService::toDto).toList();
@@ -102,13 +116,13 @@ public class ImportApiController {
 	private record LookupDTO(String cpr, String institutionNumber) {}
 	@PostMapping("/lookup")
 	@Operation(
-			summary = "Look up employee(s)",
-			description = "Retrieves a list of employees based on civil registration number (CPR) and optionally institution number (LookupDTO)."
+			summary = "Look up people",
+			description = "Retrieves a list of people based on civil registration number (CPR) and optionally institution number (LookupDTO)."
 	)
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "200", description = "Employee(s) found",
-					content = @Content(array = @ArraySchema(schema = @Schema(implementation = EmployeeDTO.class)))),
-			@ApiResponse(responseCode = "404", description = "No employee(s) found or institution does not exist",
+			@ApiResponse(responseCode = "200", description = "People found",
+					content = @Content(array = @ArraySchema(schema = @Schema(implementation = SchoolPersonDTO.class)))),
+			@ApiResponse(responseCode = "404", description = "No people found or institution does not exist",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class)))
 	})
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(
@@ -119,7 +133,7 @@ public class ImportApiController {
 					schema = @Schema(implementation = LookupDTO.class),
 					examples = @ExampleObject(
 							name = "Lookup example",
-							summary = "A valid lookup employee request",
+							summary = "A valid lookup request",
 							value = """
 						{
 						  "cpr": "1234567890",
@@ -129,7 +143,7 @@ public class ImportApiController {
 					)
 			)
 	)
-	public List<EmployeeDTO> getEmployee(
+	public List<SchoolPersonDTO> getPeople(
 			@org.springframework.web.bind.annotation.RequestBody LookupDTO request
 	) {
 		List<DBInstitutionPerson> people;
@@ -158,51 +172,100 @@ public class ImportApiController {
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
 	@Operation(
-			summary = "Create a new employee",
-			description = "Creates a new employee in the system based on the provided import data (EmployeeImportDTO). The following fields are required: CPR, institutionNumber, firstName, familyName, mainRole, roles and source."
+			summary = "Create a new person",
+			description = "Creates a new person in the system based on the provided import data (SchoolPersonDTO). The following fields are required: CPR, institutionNumber, firstName, familyName, mainRole, roles and source."
 	)
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "201", description = "Employee successfully created",
-					content = @Content(mediaType = "application/json", schema = @Schema(implementation = EmployeeDTO.class))),
+			@ApiResponse(responseCode = "201", description = "Person successfully created",
+					content = @Content(mediaType = "application/json", schema = @Schema(implementation = SchoolPersonDTO.class))),
 			@ApiResponse(responseCode = "400", description = "Bad request due to missing or invalid fields",
+					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
+			@ApiResponse(responseCode = "403", description = "Tried to create student, but student import API feature is not enabled",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
 			@ApiResponse(responseCode = "404", description = "Institution not found",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
-			@ApiResponse(responseCode = "409", description = "Conflict - Employee with the same CPR already exists in the institution",
+			@ApiResponse(responseCode = "409", description = "Conflict - person with the same CPR already exists in the institution",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class)))
 	})
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(
-			description = "Request containing employee data including CPR, institution number, roles, and optional username and UNI ID.",
+			description = "Request containing school person data including CPR, institution number, roles, and optional username and UNI ID.",
 			required = true,
 			content = @Content(
 					mediaType = "application/json",
-					schema = @Schema(implementation = EmployeeImportDTO.class),
-					examples = @ExampleObject(
-							name = "Create example",
+					schema = @Schema(implementation = SchoolPersonImportDTO.class),
+					examples = {
+						@ExampleObject(
+							name = "Create Employee example",
 							summary = "A valid employee creation request",
 							value = """
-						{
-						  "firstName": "Anna",
-						  "familyName": "Andersen",
-						  "cpr": "1234567890",
-						  "institutionNumber": "10001",
-						  "mainRole": "ANSAT",
-						  "roles": ["LÆRER", "LEDER"],
-						  "reservedUsername": "anna1234",
-						  "uniID": "1000009642",
-						  "source": "local",
-						  "groupIDs": ["2347032", "2347033"],
-						  "primary": false,
-						  "nameProtected": null,
-						  "aliasFirstName": null,
-						  "aliasFamilyName": null
-						}
-						"""
-					)
+								{
+								  "firstName": "Anna",
+								  "familyName": "Andersen",
+								  "cpr": "1234567890",
+								  "institutionNumber": "10001",
+								  "mainRole": "ANSAT",
+								  "roles": ["LÆRER", "LEDER"],
+								  "reservedUsername": "anna1234",
+								  "uniID": "1000009642",
+								  "source": "local",
+								  "groupIDs": ["2347032", "2347033"],
+								  "primary": false,
+								  "nameProtected": null,
+								  "aliasFirstName": null,
+								  "aliasFamilyName": null,
+								  "apiOnly": true
+								}
+								"""
+						),
+						@ExampleObject(
+							name = "Create External example",
+							summary = "A valid external creation request",
+							value = """
+								{
+								  "firstName": "Anna",
+								  "familyName": "Andersen",
+								  "cpr": "1234567890",
+								  "institutionNumber": "10001",
+								  "mainRole": "EKSTERN",
+								  "roles": ["PRAKTIKANT"],
+								  "reservedUsername": "anna1234",
+								  "uniID": "1000009642",
+								  "source": "local",
+								  "groupIDs": ["2347032"],
+								  "primary": false,
+								  "nameProtected": null,
+								  "aliasFirstName": null,
+								  "aliasFamilyName": null,
+								  "apiOnly": false
+								}
+								"""
+						),
+						@ExampleObject(
+							name = "Create Student example",
+							summary = "A valid student creation request (if student import API feature is enabled). Students must have APIOnly true and be associated with a non STIL institution (can be created in the UI if that feature is enabled). Non stil institutions can not have group, so groups on students is not allowed ",
+							value = """
+								{
+								  "firstName": "Anna",
+								  "familyName": "Andersen",
+								  "cpr": "1234567890",
+								  "institutionNumber": "10001",
+								  "mainRole": "ELEV",
+								  "roles": ["ELEV"],
+								  "reservedUsername": "anna1234",
+								  "source": "local",
+								  "primary": false,
+								  "nameProtected": null,
+								  "aliasFirstName": null,
+								  "aliasFamilyName": null,
+								  "apiOnly": true
+								}
+								"""
+						)
+					}
 			)
 	)
-	public EmployeeDTO createEmployee(
-			@org.springframework.web.bind.annotation.RequestBody @Valid EmployeeImportDTO importDTO
+	public SchoolPersonDTO createShcoolPerson(
+			@org.springframework.web.bind.annotation.RequestBody @Valid SchoolPersonImportDTO importDTO
 	) {
 		DBInstitution institution = institutionService.findByInstitutionNumber(importDTO.getInstitutionNumber());
 		if (institution == null) {
@@ -230,7 +293,29 @@ public class ImportApiController {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Externals are only allowed to have the following roles: LÆRER, PÆDAGOG, VIKAR, LEDER, LEDELSE, TAP, KONSULENT");
 		}
 
-		EmployeeDTO result;
+		// do a bunch of extra checks if type student
+		if (importDTO.getMainRole().equals(PossibleImportRole.ELEV)) {
+			if (!os2SkoleDataConfiguration.getSyncSettings().isHandleAPIOnlyStudents()) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tried to create student, but student import API feature is not enabled");
+			}
+			if (importDTO.getRoles().size() > 1) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students are only allowed to have one role");
+			}
+			if (containsNonStudentRoles(importDTO)) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students are only allowed to have the following roles: ELEV, BARN, STUDERENDE");
+			}
+			if (!importDTO.getApiOnly()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must have apiOnly = true");
+			}
+			if (!institution.isNonSTILInstitution()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must be placed under non STIL institution (kunstig institution)");
+			}
+			if (importDTO.getGroupIDs() != null && !importDTO.getGroupIDs().isEmpty()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must be placed under non STIL institution (kunstig institution) and therefore they are not allowed to be associated with groups (non STIL institutions does not have groups)");
+			}
+		}
+
+		SchoolPersonDTO result;
 		DBInstitutionPerson deletedPersonToReactivate = people.stream().filter(p -> p.isDeleted()).findFirst().orElse(null);
 		if (deletedPersonToReactivate != null) {
 			result = importApiService.handlePatchUpdate(deletedPersonToReactivate, importDTO);
@@ -243,25 +328,27 @@ public class ImportApiController {
 	@Transactional
 	@PatchMapping
 	@Operation(
-			summary = "Patch an existing employee",
-			description = "Patch an existing employee's information based on the provided data (EmployeeImportDTO). If no active employee is found, a deleted employee may be reactivated. If a field is left out or null the field won't be updated."
+			summary = "Patch an existing school person",
+			description = "Patch an existing school person's information based on the provided data (SchoolPersonImportDTO). If no active person is found, a deleted person may be reactivated. If a field is left out or null the field won't be updated."
 	)
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "200", description = "Employee successfully updated",
-					content = @Content(mediaType = "application/json", schema = @Schema(implementation = EmployeeDTO.class))),
+			@ApiResponse(responseCode = "200", description = "Person successfully updated",
+					content = @Content(mediaType = "application/json", schema = @Schema(implementation = SchoolPersonDTO.class))),
 			@ApiResponse(responseCode = "400", description = "Bad request due to invalid or conflicting data",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
-			@ApiResponse(responseCode = "404", description = "Employee or institution not found",
+			@ApiResponse(responseCode = "403", description = "Tried to create student, but student import API feature is not enabled",
+					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
+			@ApiResponse(responseCode = "404", description = "Person or institution not found",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class))),
 			@ApiResponse(responseCode = "409", description = "Conflict - Invalid role changes",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class)))
 	})
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(
-			description = "Request containing employee data to update.",
+			description = "Request containing school person data to update.",
 			required = true,
 			content = @Content(
 					mediaType = "application/json",
-					schema = @Schema(implementation = EmployeeImportDTO.class),
+					schema = @Schema(implementation = SchoolPersonImportDTO.class),
 					examples = @ExampleObject(
 							name = "Patch example",
 							summary = "A valid employee patch request",
@@ -286,8 +373,8 @@ public class ImportApiController {
 					)
 			)
 	)
-	public EmployeeDTO patchEmployee(
-			@org.springframework.web.bind.annotation.RequestBody EmployeeImportDTO importDTO
+	public SchoolPersonDTO patchPerson(
+			@org.springframework.web.bind.annotation.RequestBody SchoolPersonImportDTO importDTO
 	) {
 		DBInstitution institution = institutionService.findByInstitutionNumber(importDTO.getInstitutionNumber());
 		if (institution == null) {
@@ -301,7 +388,7 @@ public class ImportApiController {
 			toUpdate = people.stream().filter(DBInstitutionPerson::isDeleted).findFirst().orElse(null);
 
 			if (toUpdate == null) {
-				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active employee with the given civil registration number in the institution with institution number " + importDTO.getInstitutionNumber() + " was found");
+				throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No person with the given civil registration number in the institution with institution number " + importDTO.getInstitutionNumber() + " was found");
 			}
 		}
 
@@ -322,6 +409,29 @@ public class ImportApiController {
 			throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Externals are only allowed to have the following roles: LÆRER, PÆDAGOG, VIKAR, LEDER, LEDELSE, TAP, KONSULENT");
 		}
 
+		// do a bunch of extra checks if type student
+		if ((importDTO.getMainRole() != null && importDTO.getMainRole().equals(PossibleImportRole.ELEV)) || (importDTO.getMainRole() == null && toUpdate.getStudent() != null)) {
+			if (!os2SkoleDataConfiguration.getSyncSettings().isHandleAPIOnlyStudents()) {
+				throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tried to create student, but student import API feature is not enabled");
+			}
+			if (importDTO.getRoles() != null && importDTO.getRoles().size() > 1) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students are only allowed to have one role");
+			}
+			if ((importDTO.getMainRole() != null && importDTO.getRoles() != null && importDTO.getMainRole().equals(PossibleImportRole.ELEV) && containsNonStudentRoles(importDTO)) ||
+					(importDTO.getMainRole() == null && toUpdate.getStudent() != null && containsNonStudentRoles(importDTO))) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students are only allowed to have the following roles: ELEV, BARN, STUDERENDE");
+			}
+			if (importDTO.getApiOnly() != null && !importDTO.getApiOnly()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must have apiOnly = true");
+			}
+			if (!institution.isNonSTILInstitution()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must be placed under non STIL institution (kunstig institution)");
+			}
+			if (importDTO.getGroupIDs() != null && !importDTO.getGroupIDs().isEmpty()) {
+				throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Students must be placed under non STIL institution (kunstig institution) and therefore they are not allowed to be associated with groups (non STIL institutions does not have groups)");
+			}
+		}
+
 		return importApiService.handlePatchUpdate(toUpdate, importDTO);
 	}
 
@@ -329,23 +439,23 @@ public class ImportApiController {
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	@DeleteMapping
 	@Operation(
-			summary = "Delete employee(s)",
-			description = "Soft deletes all non-deleted employees matching the given CPR and institution number. Deleted employees are marked as inactive but retained in the database."
+			summary = "Delete people",
+			description = "Soft deletes all non-deleted people matching the given CPR and institution number. Deleted people are marked as inactive but retained in the database."
 	)
 	@ApiResponses(value = {
-			@ApiResponse(responseCode = "204", description = "Employee(s) successfully deleted"),
+			@ApiResponse(responseCode = "204", description = "People successfully deleted"),
 			@ApiResponse(responseCode = "404", description = "Institution not found or no matching employees found",
 					content = @Content(schema = @Schema(implementation = ErrorDTO.class)))
 	})
 	@io.swagger.v3.oas.annotations.parameters.RequestBody(
-			description = "Request (LookupDTO) containing CPR and institution number to identify the employee(s) to delete.",
+			description = "Request (LookupDTO) containing CPR and institution number to identify the people to delete.",
 			required = true,
 			content = @Content(
 					mediaType = "application/json",
 					schema = @Schema(implementation = LookupDTO.class),
 					examples = @ExampleObject(
 							name = "Delete example",
-							summary = "A valid delete employee request",
+							summary = "A valid delete people request",
 							value = """
 				{
 				  "cpr": "1234567890",
@@ -365,10 +475,14 @@ public class ImportApiController {
 
 		List<DBInstitutionPerson> people = institutionPersonService.findByPersonCivilRegistrationNumberAndInstitution(request.cpr(), institution);
 		if (people.isEmpty()) {
-			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active employee with the given civil registration number in the institution with institution number " + request.institutionNumber());
+			throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No active people with the given civil registration number in the institution with institution number " + request.institutionNumber());
 		}
+
+		boolean handleStudents = os2SkoleDataConfiguration.getSyncSettings().isHandleAPIOnlyStudents();
 		for (DBInstitutionPerson person : people) {
-			if (person.isDeleted()) continue;
+			if (person.isDeleted() || (!handleStudents && person.getStudent() != null)) {
+				continue;
+			}
 
 			person.setDeleted(true);
 			person.setStilDeleted(LocalDateTime.now());
@@ -380,12 +494,17 @@ public class ImportApiController {
 		return value == null || value.trim().isEmpty();
 	}
 
-	private boolean containsNonExternalRoles(EmployeeImportDTO importDTO) {
+	private boolean containsNonExternalRoles(SchoolPersonImportDTO importDTO) {
 		Set<PossibleImportSubrole> allowed = Set.of(PossibleImportSubrole.PRAKTIKANT, PossibleImportSubrole.EKSTERN);
 		return importDTO.getRoles().stream().anyMatch(role -> !allowed.contains(role));
 	}
 
-	private boolean containsNonEmployeeRoles(EmployeeImportDTO importDTO) {
+	private boolean containsNonStudentRoles(SchoolPersonImportDTO importDTO) {
+		Set<PossibleImportSubrole> allowed = Set.of(PossibleImportSubrole.ELEV, PossibleImportSubrole.BARN, PossibleImportSubrole.STUDERENDE);
+		return importDTO.getRoles().stream().anyMatch(role -> !allowed.contains(role));
+	}
+
+	private boolean containsNonEmployeeRoles(SchoolPersonImportDTO importDTO) {
 		Set<PossibleImportSubrole> allowed = Set.of(
 				PossibleImportSubrole.LÆRER,
 				PossibleImportSubrole.PÆDAGOG,

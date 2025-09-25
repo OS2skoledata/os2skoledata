@@ -32,6 +32,7 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @NoArgsConstructor
 @Slf4j
+@BatchSize(size = 100)
 public class DBInstitutionPerson {
 
 	@Id
@@ -61,34 +62,31 @@ public class DBInstitutionPerson {
 	@Column(name = "primary_institution")
 	private boolean primaryInstitution;
 
+	@Column
+	private boolean apiOnly;
+
 	//Person can be one of the 3 types Employee, Extern, Student
 	
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "employee_id", nullable = true)
 	private DBEmployee employee;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "extern_id", nullable = true)
 	private DBExtern extern;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "student_id", nullable = true)
 	private DBStudent student;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "person_id", nullable = true)
 	private DBPerson person;
 	
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "unilogin_id", nullable = false)
 	private DBUniLogin uniLogin;
 
-	@BatchSize(size = 100)
 	@OneToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "institution_id")
 	private DBInstitution institution;

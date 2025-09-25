@@ -9,6 +9,7 @@ import javax.persistence.GenerationType;
 import javax.persistence.Id;
 import javax.persistence.Table;
 
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import https.unilogin_dk.data.transitional.PhoneNumberProtectable;
@@ -25,6 +26,7 @@ import lombok.extern.slf4j.Slf4j;
 @Setter
 @NoArgsConstructor
 @Slf4j
+@BatchSize(size = 100)
 public class DBPhoneNumber {
 
 	@Id

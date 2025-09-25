@@ -154,7 +154,9 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                     }
 
                     // ous - classes
-                    List<Group> classes = oS2skoledataService.GetClassesForInstitution(institution);
+                    List<Group> allGroups = oS2skoledataService.GetGroupsForInstitution(institution);
+                    List<Group> classes = allGroups.Where(g => g.GroupType.Equals(DBGroupType.HOVEDGRUPPE)).ToList();
+                    List<Group> otherGroups = allGroups.Where(g => !g.GroupType.Equals(DBGroupType.HOVEDGRUPPE)).ToList();
                     if (createOUHierarchy)
                     {
                         activeDirectoryService.UpdateClassesForInstitution(classes, institution);
@@ -173,13 +175,35 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                         {
                             logger.LogInformation($"Checking if user with databaseId {user.DatabaseId} should be created or updated");
 
+                            DirectoryEntry entry = null;
+
                             if (useUsernameAsKey)
                             {
-                                using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
-                                HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap, keepAliveUsernames);
-                            } else
+                                // Handle special case for UNI_ID with fallback logic (because import api does not require uniid at it might be updated later) 
+                                if (user.Username != null && UsernameKeyType.UNI_ID.Equals(usernameKeyType))
+                                {
+                                    entry = activeDirectoryService.GetUserFromSAMAccountName(user.Username);
+
+                                    // Fallback to UniId if SAMAccountName lookup fails
+                                    if (entry == null)
+                                    {
+                                        entry = activeDirectoryService.GetUserFromUsername(user.UniId);
+                                    }
+                                }
+                                else
+                                {
+                                    // Standard username lookup based on key type
+                                    string username = UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username;
+                                    entry = activeDirectoryService.GetUserFromUsername(username);
+                                }
+                            }
+                            else
                             {
-                                using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                                entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                            }
+
+                            using (entry)
+                            {
                                 HandleFullSyncUser(user, entry, institution, excludedRoles, usernameMap, usernameADPathMap, keepAliveUsernames);
                             }
                         }
@@ -188,10 +212,10 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                     // security groups for institution
                     if (createOUHierarchy)
                     {
-                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, null, null, usernameADPathMap, allClassLevels);
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, null, null, usernameADPathMap, allClassLevels, otherGroups);
                     } else
                     {
-                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, allSecurityGroupIds, allRenamedGroupIds, usernameADPathMap, allClassLevels);
+                        activeDirectoryService.UpdateSecurityGroups(institution, users, classes, allSecurityGroupIds, allRenamedGroupIds, usernameADPathMap, allClassLevels, otherGroups);
                     }
                 }
 
@@ -336,22 +360,6 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 stopWatch.Start();
 
                 Dictionary<string, List<string>> usernameMap = null;
-                if (moveUsersEnabled)
-                {
-                    //all usernames
-                    var allUsernames = activeDirectoryService.GetAllUsernames();
-                    if (allUsernames == null)
-                    {
-                        throw new Exception("Failed to get all usernames from AD. Will not perform delta sync.");
-                    }
-
-                    List<string> skoledataUsernames = oS2skoledataService.GetAllUsernames();
-                    usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames, skoledataUsernames);
-                    if (usernameMap == null)
-                    {
-                        throw new Exception("Failed to generate username map from AD. Will not perform delta sync.");
-                    }
-                }
 
                 var totalChanges = 0;
                 List<Institution> institutions = oS2skoledataService.GetInstitutions();
@@ -383,7 +391,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                         List<User> changedUsers = oS2skoledataService.GetChangedUsers(changedPersonIds);
                         List<Institution> changedInstitutions = oS2skoledataService.GetChangedInstitutions(changedInstitutionIds);
-                        List<Group> changedGroups = oS2skoledataService.GetChangedGroups(changedGroupIds);
+                        List<Group> changedGroups = oS2skoledataService.GetChangedGroups(changedGroupIds).Where(g => g.GroupType.Equals(DBGroupType.HOVEDGRUPPE)).ToList();
 
                         // handle changes
                         if (createOUHierarchy)
@@ -394,6 +402,24 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                         if (moveUsersEnabled)
                         {
+                            // only load the list of usernames ONCE, and only if needed
+                            if (usernameMap == null)
+                            {
+                                //all usernames
+                                var allUsernames = activeDirectoryService.GetAllUsernames();
+                                if (allUsernames == null)
+                                {
+                                    throw new Exception("Failed to get all usernames from AD. Will not perform delta sync.");
+                                }
+
+                                List<string> skoledataUsernames = oS2skoledataService.GetAllUsernames();
+                                usernameMap = activeDirectoryService.GenerateUsernameMap(allUsernames, skoledataUsernames);
+                                if (usernameMap == null)
+                                {
+                                    throw new Exception("Failed to generate username map from AD. Will not perform delta sync.");
+                                }
+                            }
+
                             HandlePersonChanges(typePerson, changedUsers, usernameMap);
                         }
 

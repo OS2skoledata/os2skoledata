@@ -2,6 +2,7 @@ package dk.digitalidentity.os2skoledata.dao;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -49,6 +50,9 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
 			"LOWER(ip.username) LIKE LOWER(CONCAT('%', :query, '%')))")
 	List<DBInstitutionPerson> searchByInstitutionNumber(@Param("institutionNumber") String institutionNumber, @Param("query") String query);
 
+	@Query(nativeQuery = true, value = "SELECT username FROM institutionperson WHERE username IS NOT NULL")
+	Set<String> findAllUsernames();
+	
 	// for aud table deletion
 	@Query(value = "select max(rev) from revinfo where revtstmp < unix_timestamp(current_timestamp - interval 5 year) * 1000;", nativeQuery = true)
 	Integer getMaxRev5Years();

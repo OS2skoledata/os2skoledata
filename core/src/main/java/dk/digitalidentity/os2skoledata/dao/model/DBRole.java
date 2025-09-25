@@ -37,7 +37,6 @@ public class DBRole {
 	@Enumerated(EnumType.STRING)
 	private DBEmployeeRole employeeRole;
 
-	@BatchSize(size = 100)
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "employee_id")
 	private DBEmployee employee;

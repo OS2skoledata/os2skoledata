@@ -6,26 +6,10 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import dk.digitalidentity.os2skoledata.api.model.GroupDTO;
-import dk.digitalidentity.os2skoledata.api.model.InstitutionDTO;
-import dk.digitalidentity.os2skoledata.api.model.InstitutionPersonDTO;
-import dk.digitalidentity.os2skoledata.api.model.MiniGroupDTO;
-import dk.digitalidentity.os2skoledata.api.model.enums.Action;
-import dk.digitalidentity.os2skoledata.dao.model.Client;
-import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
-import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
-import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
-import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
-import dk.digitalidentity.os2skoledata.dao.model.Ghost;
-import dk.digitalidentity.os2skoledata.security.SecurityUtil;
-import dk.digitalidentity.os2skoledata.service.CprPasswordMappingService;
-import dk.digitalidentity.os2skoledata.service.GhostService;
-import dk.digitalidentity.os2skoledata.service.GoogleWorkspaceClassFolderOrGroupService;
-import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
-import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -36,10 +20,15 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.fasterxml.jackson.annotation.JsonFormat;
-
+import dk.digitalidentity.os2skoledata.api.model.GroupDTO;
+import dk.digitalidentity.os2skoledata.api.model.InstitutionDTO;
+import dk.digitalidentity.os2skoledata.api.model.InstitutionPersonDTO;
+import dk.digitalidentity.os2skoledata.api.model.MiniGroupDTO;
+import dk.digitalidentity.os2skoledata.api.model.enums.Action;
 import dk.digitalidentity.os2skoledata.api.model.enums.PersonRole;
 import dk.digitalidentity.os2skoledata.api.model.enums.SetFieldType;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.dao.model.DBEmployeeGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
@@ -47,19 +36,27 @@ import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.DBRole;
 import dk.digitalidentity.os2skoledata.dao.model.DBStudentGroupId;
+import dk.digitalidentity.os2skoledata.dao.model.Ghost;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionGroupIdentifierMapping;
+import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBGender;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.EntityType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
+import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
+import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
+import dk.digitalidentity.os2skoledata.security.SecurityUtil;
+import dk.digitalidentity.os2skoledata.service.CprPasswordMappingService;
+import dk.digitalidentity.os2skoledata.service.GhostService;
+import dk.digitalidentity.os2skoledata.service.GoogleWorkspaceClassFolderOrGroupService;
 import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
+import dk.digitalidentity.os2skoledata.service.model.ContactCardDTO;
+import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -99,6 +96,7 @@ public class ReadApiController {
 	
 	@GetMapping("/api/persons")
 	public ResponseEntity<?> getInstitutionPersons(@RequestParam(name = "institutionNumber") String institutionNumber) {
+		log.info("Starting load on persons from " + institutionNumber);
 		DBInstitution institution = institutionService.findByInstitutionNumber(institutionNumber);
 		if (institution == null) {
 			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " not found.");
@@ -110,14 +108,20 @@ public class ReadApiController {
 		}
 
 		int currentYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
+		
+		log.info("Getting persons for institution");
 		List<DBInstitutionPerson> persons = institutionPersonService.findByInstitution(institution);
+		log.info("Getting groups");
 		List<DBGroup> groups = groupService.findAllNotDeleted();
 		List<InstitutionPersonDTO> result = new ArrayList<>();
 
+		log.info("Getting ALL persons including deleted");
 		List<DBInstitutionPerson> allInstitutionPerson = institutionPersonService.findAllIncludingDeleted();
 
 		Map<String, List<DBInstitutionPerson>> institutionPersonMap = allInstitutionPerson.stream().collect(Collectors.groupingBy(i -> i.getPerson().getCivilRegistrationNumber()));
 
+		log.info("Processing persons");
+		
 		for (DBInstitutionPerson person : persons) {
 			if (person.isDeleted()) {
 				continue;
@@ -179,7 +183,7 @@ public class ReadApiController {
 					// check if student is in main group with a future date. If so, skip user
 					if (configuration.isFilterOutGroupsWithFutureFromDate()) {
 						LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
-						if (mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
+						if (Objects.equals(mainGroupForInstitution.getGroupLevel(), "0") && mainGroupForInstitution.getFromDate() != null && mainGroupForInstitution.getFromDate().isAfter(futureDate)) {
 							continue;
 						}
 					}
@@ -298,11 +302,14 @@ public class ReadApiController {
 					setPasswordOnCreate,
 					password,
 					person.getReservedUsername(),
-					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution())
+					primaryPerson == null ? null : institutionService.getInstitutionDTO(primaryPerson.getInstitution()),
+					person.isApiOnly()
 			);
 
 			result.add(personRecord);
 		}
+		
+		log.info("Ending load on persons from " + institutionNumber);
 
 		return ResponseEntity.ok(result);
 	}
@@ -312,6 +319,10 @@ public class ReadApiController {
 		DBInstitution institution = institutionService.findByInstitutionNumber(institutionNumber);
 		if (institution == null) {
 			return ResponseEntity.badRequest().body("Institution with number: " + institutionNumber + " not found.");
+		}
+
+		if (institution.isNonSTILInstitution()) {
+			return ResponseEntity.ok(new ArrayList<DBGroup>());
 		}
 
 		int currentSchoolYear = settingService.getIntegerValueByKey(CustomerSetting.CURRENT_SCHOOL_YEAR_.toString() + institutionNumber);
@@ -330,7 +341,11 @@ public class ReadApiController {
 		if (configuration.isFilterOutGroupsWithFutureFromDate()) {
 			LocalDate futureDate = LocalDate.now().plusDays(configuration.getCreateGroupsXDaysBeforeFromDate() + 1);
 			dbGroups = dbGroups.stream()
-					.filter(g -> g.getFromDate() == null || g.getFromDate().isBefore(futureDate))
+					.filter(g ->
+							g.getFromDate() == null ||
+							!Objects.equals(g.getGroupLevel(), "0") ||
+							(Objects.equals(g.getGroupLevel(), "0") && g.getFromDate().isBefore(futureDate))
+					)
 					.collect(Collectors.toList());
 		}
 
@@ -567,7 +582,17 @@ public class ReadApiController {
 				groupIds.add(institution.getStudentAzureSecurityGroupId());
 			}
 
-			groupIds.addAll(institution.getGroups().stream().filter(g -> g.getAzureSecurityGroupId() != null).map(DBGroup::getAzureSecurityGroupId).collect(Collectors.toSet()));
+			groupIds.addAll(institution.getGroups().stream()
+					.filter(g -> g.getAzureSecurityGroupId() != null)
+					.map(DBGroup::getAzureSecurityGroupId)
+					.collect(Collectors.toSet())
+			);
+
+			groupIds.addAll(institution.getIntegrationGroupIdentifierMappings().stream()
+					.filter(g -> g.getIntegrationType().equals(IntegrationType.AZURE))
+					.map(g -> g.getGroupIdentifier())
+					.collect(Collectors.toSet())
+			);
 		}
 
 		return ResponseEntity.ok(groupIds);
@@ -616,8 +641,7 @@ public class ReadApiController {
 
 	@GetMapping("/api/usernames/all")
 	public ResponseEntity<?> getAllUsernames() {
-		List<DBInstitutionPerson> institutionPeople = institutionPersonService.findAllIncludingDeleted();
-		List<String> allUsernames = institutionPeople.stream().filter(i -> i.getUsername() != null).map(i -> i.getUsername()).collect(Collectors.toList());
+		Set<String> allUsernames = institutionPersonService.findAllUsernames();
 
 		return ResponseEntity.ok(allUsernames);
 	}

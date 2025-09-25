@@ -23,6 +23,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata.Model
         public string Password { get; set; }
         public string ReservedUsername { get; set; }
         public Institution PrimaryInstitution { get; set; }
+        public bool ApiOnly { get; set; }
 
         // empty for all other than students
         public List<string> StudentMainGroups { get; set; }

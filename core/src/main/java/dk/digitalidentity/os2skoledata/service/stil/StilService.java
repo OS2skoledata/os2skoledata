@@ -5,6 +5,7 @@ import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.service.ClientService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
+import dk.digitalidentity.os2skoledata.service.YearChangeNotificationService;
 import https.wsieksport_unilogin_dk.eksport.ImportSource;
 import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
 import https.wsieksport_unilogin_dk.ws.WsiEksportPortType;
@@ -26,8 +27,12 @@ public class StilService {
 
 	@Autowired
 	private SettingService settingService;
+
 	@Autowired
 	private ClientService clientService;
+
+	@Autowired
+	private YearChangeNotificationService yearChangeNotificationService;
 
 	public record InstitutionYearChangeDTO(InstitutionFullMyndighed institutionFullMyndighed, boolean yearChange) {}
 	public InstitutionYearChangeDTO getInstitution(String institutionCode) {
@@ -39,7 +44,7 @@ public class StilService {
 			// fx "2022-2023"
 			List<String> importSourceSchoolYears = response.getUNILoginExportFullMyndighed().getImportSource().stream().map(ImportSource::getSchoolYear).toList();
 			if (!importSourceSchoolYears.isEmpty()) {
-				yearChange = handleSchoolYearsAndCheckForSchoolYearChange(importSourceSchoolYears, institutionCode);
+				yearChange = handleSchoolYearsAndCheckForSchoolYearChange(importSourceSchoolYears, institutionCode, response.getUNILoginExportFullMyndighed().getInstitution());
 			}
 
 			return new InstitutionYearChangeDTO(response.getUNILoginExportFullMyndighed().getInstitution(), yearChange);
@@ -50,7 +55,7 @@ public class StilService {
 		}
 	}
 
-	private boolean handleSchoolYearsAndCheckForSchoolYearChange(List<String> importSourceSchoolYears, String institutionCode) {
+	private boolean handleSchoolYearsAndCheckForSchoolYearChange(List<String> importSourceSchoolYears, String institutionCode, InstitutionFullMyndighed institution) {
 		boolean yearChange = false;
 		int maxSchoolYear = 0;
 		String maxImportSourceSchoolYear = null;
@@ -77,7 +82,10 @@ public class StilService {
 			if (!Objects.equals(dbSchoolYear, maxImportSourceSchoolYear)) {
 				yearChange = true;
 				lockInstitution(institutionCode);
-				log.error(institutionCode + ": Year change. Locking institution (db: " + dbSchoolYear + " vs stil:" + maxImportSourceSchoolYear + ")");
+
+				// Record the year change for notification
+				String institutionName = institution != null ? institution.getInstitutionName() : "Ukendt institution";
+				yearChangeNotificationService.recordYearChange(institutionCode, institutionName, dbSchoolYear, maxImportSourceSchoolYear);
 			}
 		}
 

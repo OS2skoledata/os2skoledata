@@ -38,7 +38,6 @@ public class Affiliation {
 	@Column
 	private LocalDate stopDate;
 
-	@BatchSize(size = 100)
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "person_id")
 	private DBPerson person;

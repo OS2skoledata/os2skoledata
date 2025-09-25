@@ -19,6 +19,16 @@
         public string AllEmployeesInInstitutionSecurityGroupNameStandard { get; set; }
         public string ClassSecurityGroupNameStandard { get; set; }
         public string ClassSecurityGroupNameStandardNoClassYear { get; set; }
+        public string ClassStudentsSecurityGroupNameStandard { get; set; }
+        public string ClassStudentsSecurityGroupNameStandardNoClassYear { get; set; }
+        public string ClassEmployeesSecurityGroupNameStandard { get; set; }
+        public string ClassEmployeesSecurityGroupNameStandardNoClassYear { get; set; }
+        public string OtherGroupsÅrgangSecurityGroupNameStandard { get; set; }
+        public string OtherGroupsRetningSecurityGroupNameStandard { get; set; }
+        public string OtherGroupsHoldSecurityGroupNameStandard { get; set; }
+        public string OtherGroupsSFOSecurityGroupNameStandard { get; set; }
+        public string OtherGroupsTeamSecurityGroupNameStandard { get; set; }
+        public string OtherGroupsAndetSecurityGroupNameStandard { get; set; }
         public string SecurityGroupForEmployeeTypeNameStandard {  get; set; }
         public string SecurityGroupForYearNameStandard { get; set; }
         public string SecurityGroupForLevelNameStandard { get; set; }

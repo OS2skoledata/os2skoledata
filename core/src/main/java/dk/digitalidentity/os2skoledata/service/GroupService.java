@@ -1,6 +1,8 @@
 package dk.digitalidentity.os2skoledata.service;
 
 import dk.digitalidentity.os2skoledata.api.model.MiniGroupDTO;
+import dk.digitalidentity.os2skoledata.config.Constants;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.GroupDao;
 import dk.digitalidentity.os2skoledata.dao.model.DBEmployeeGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
@@ -8,6 +10,7 @@ import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.GoogleWorkspaceClassFolderOrGroup;
+import dk.digitalidentity.os2skoledata.dao.model.PasswordAdmin;
 import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
@@ -19,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -41,6 +45,12 @@ public class GroupService {
 	@Autowired
 	private StudentPasswordChangeConfigurationService studentPasswordChangeConfigurationService;
 
+	@Autowired
+	private PasswordAdminService passwordAdminService;
+
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
 	public DBGroup findById(long id) {
 		return groupDao.findById(id);
 	}
@@ -62,11 +72,16 @@ public class GroupService {
 		return groupDao.findByDeletedFalse();
 	}
 
+	public List<DBGroup> findAllNotDeletedMainGroups() {
+		return groupDao.findByDeletedFalseAndGroupType(DBImportGroupType.HOVEDGRUPPE);
+	}
+
 	public List<DBGroup> findByIdIn(List<Long> ids) {
 		return groupDao.findByIdIn(ids);
 	}
 
 	public DBGroup save(DBGroup group) {
+		group.setLastModified(LocalDateTime.now());
 		return groupDao.save(group);
 	}
 
@@ -138,74 +153,87 @@ public class GroupService {
 		List<PrintGroupDTO> result = new ArrayList<>();
 		Set<Long> canChangePasswordIds = new HashSet<>();
 		List<DBGroup> allGroupsForLoggedInPerson = new ArrayList<>();
-
 		String username = SecurityUtil.getUserId();
-		List<DBInstitutionPerson> adultInstitutionPeople = institutionPersonService.findByUsernameAndDeletedFalse(username).stream()
-				.filter(p -> p.getEmployee() != null || p.getExtern() != null)
-				.collect(Collectors.toList());
-		List<StudentPasswordChangeConfiguration> configurations = studentPasswordChangeConfigurationService.findAll();
 
-		// quick abort
-		if (adultInstitutionPeople.isEmpty()) {
-			return result;
-		}
+		if (SecurityUtil.hasRole(Constants.PASSWORD_ADMIN)) {
+			PasswordAdmin passwordAdmin = passwordAdminService.getByUsername(username);
+			if (passwordAdmin != null) {
+				allGroupsForLoggedInPerson = findByInstitutionIdIn(passwordAdmin.getInstitutions().stream()
+						.map(DBInstitution::getId)
+						.collect(Collectors.toList()));
 
-		// find all groups from the same institutions that the employee belongs to
-		List<DBGroup> groups = findByInstitutionIdIn(adultInstitutionPeople.stream()
-				.map(p -> p.getInstitution().getId())
-				.collect(Collectors.toList()));
-
-		for (DBInstitutionPerson loggedInPersonInstitutionPerson : adultInstitutionPeople) {
-
-			// groups for adult institution person
-			List<String> groupIdsForEmployee = loggedInPersonInstitutionPerson.getEmployee() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList());
-			List<String> groupIdsForExternal = loggedInPersonInstitutionPerson.getExtern() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getExtern().getGroupIds().stream().map(DBExternGroupId::getGroupId).collect(Collectors.toList());
-			List<DBGroup> adultInstitutionPersonGroups = groups.stream()
-					.filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId())
-					.filter(g -> groupIdsForEmployee.contains(g.getGroupId()) || groupIdsForExternal.contains(g.getGroupId()))
-					.collect(Collectors.toList());
-			allGroupsForLoggedInPerson.addAll(adultInstitutionPersonGroups);
-
-			List<DBGroup> groupsForInstitution = groups.stream().filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId()).collect(Collectors.toList());
-
-			List<String> allRolesForPerson = institutionPersonService.findAdultRoles(loggedInPersonInstitutionPerson);
-			for (String role : allRolesForPerson) {
-
-				// find the setting for this role
-				StudentPasswordChangeConfiguration roleSetting = configurations.stream()
-						.filter(r -> Objects.equals(r.getRole(), StudentPasswordChangerSTILRoles.getFromInstitutionPersonRoleAsString(role)))
-						.findFirst()
-						.orElse(null);
-
-				if (roleSetting == null || (roleSetting.getType().equals(RoleSettingType.CANNOT_CHANGE_PASSWORD))) {
-					continue;
+				if (!configuration.getStudentAdministration().isClassListsOnly()) {
+					canChangePasswordIds.addAll(allGroupsForLoggedInPerson.stream().map(DBGroup::getId).toList());
 				}
+			}
+		} else {
+			List<DBInstitutionPerson> adultInstitutionPeople = institutionPersonService.findByUsernameAndDeletedFalse(username).stream()
+					.filter(p -> p.getEmployee() != null || p.getExtern() != null)
+					.collect(Collectors.toList());
+			List<StudentPasswordChangeConfiguration> configurations = studentPasswordChangeConfigurationService.findAll();
 
-				// find the groups where password change is allowed to find out if show password is possible (only level <= 3)
-				switch (roleSetting.getType()) {
-					case CAN_CHANGE_PASSWORD_ON_GROUP_MATCH:
-						List<String> filterClassTypes = Arrays.asList(roleSetting.getFilter().split(",")).stream()
-								.filter(t -> DBImportGroupType.fromPasswordFilter(t) != null)
-								.map(t -> DBImportGroupType.fromPasswordFilter(t).toString())
-								.collect(Collectors.toList());
-						List<Long> loggedInPersonSchoolRoleSchoolClassIds = adultInstitutionPersonGroups.stream()
-								.filter(c -> filterClassTypes.contains(c.getGroupType().toString()) && isYoungGroup(c))
-								.map(DBGroup::getId)
-								.collect(Collectors.toList());
-						canChangePasswordIds.addAll(loggedInPersonSchoolRoleSchoolClassIds);
+			// quick abort
+			if (adultInstitutionPeople.isEmpty()) {
+				return result;
+			}
 
-						break;
-					case CAN_CHANGE_PASSWORD_ON_LEVEL_MATCH:
-						List<String> filterClassLevels = institutionPersonService.getLevelFiltersAsNumbers(roleSetting);
-						for (DBGroup group : groupsForInstitution) {
-							if (group.getGroupLevel() != null && filterClassLevels.contains(group.getGroupLevel()) && isYoungGroup(group)) {
-								canChangePasswordIds.add(group.getId());
+			// find all groups from the same institutions that the employee belongs to
+			List<DBGroup> groups = findByInstitutionIdIn(adultInstitutionPeople.stream()
+					.map(p -> p.getInstitution().getId())
+					.collect(Collectors.toList()));
+
+			for (DBInstitutionPerson loggedInPersonInstitutionPerson : adultInstitutionPeople) {
+
+				// groups for adult institution person
+				List<String> groupIdsForEmployee = loggedInPersonInstitutionPerson.getEmployee() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList());
+				List<String> groupIdsForExternal = loggedInPersonInstitutionPerson.getExtern() == null ? new ArrayList<>() : loggedInPersonInstitutionPerson.getExtern().getGroupIds().stream().map(DBExternGroupId::getGroupId).collect(Collectors.toList());
+				List<DBGroup> adultInstitutionPersonGroups = groups.stream()
+						.filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId())
+						.filter(g -> groupIdsForEmployee.contains(g.getGroupId()) || groupIdsForExternal.contains(g.getGroupId()))
+						.collect(Collectors.toList());
+				allGroupsForLoggedInPerson.addAll(adultInstitutionPersonGroups);
+
+				List<DBGroup> groupsForInstitution = groups.stream().filter(g -> g.getInstitution().getId() == loggedInPersonInstitutionPerson.getInstitution().getId()).collect(Collectors.toList());
+
+				List<String> allRolesForPerson = institutionPersonService.findAdultRoles(loggedInPersonInstitutionPerson);
+				for (String role : allRolesForPerson) {
+
+					// find the setting for this role
+					StudentPasswordChangeConfiguration roleSetting = configurations.stream()
+							.filter(r -> Objects.equals(r.getRole(), StudentPasswordChangerSTILRoles.getFromInstitutionPersonRoleAsString(role)))
+							.findFirst()
+							.orElse(null);
+
+					if (roleSetting == null || (roleSetting.getType().equals(RoleSettingType.CANNOT_CHANGE_PASSWORD))) {
+						continue;
+					}
+
+					// find the groups where password change is allowed to find out if show password is possible (only level <= 3)
+					switch (roleSetting.getType()) {
+						case CAN_CHANGE_PASSWORD_ON_GROUP_MATCH:
+							List<String> filterClassTypes = Arrays.asList(roleSetting.getFilter().split(",")).stream()
+									.filter(t -> DBImportGroupType.fromPasswordFilter(t) != null)
+									.map(t -> DBImportGroupType.fromPasswordFilter(t).toString())
+									.collect(Collectors.toList());
+							List<Long> loggedInPersonSchoolRoleSchoolClassIds = adultInstitutionPersonGroups.stream()
+									.filter(c -> filterClassTypes.contains(c.getGroupType().toString()) && isYoungGroup(c))
+									.map(DBGroup::getId)
+									.collect(Collectors.toList());
+							canChangePasswordIds.addAll(loggedInPersonSchoolRoleSchoolClassIds);
+
+							break;
+						case CAN_CHANGE_PASSWORD_ON_LEVEL_MATCH:
+							List<String> filterClassLevels = institutionPersonService.getLevelFiltersAsNumbers(roleSetting);
+							for (DBGroup group : groupsForInstitution) {
+								if (group.getGroupLevel() != null && filterClassLevels.contains(group.getGroupLevel()) && isYoungGroup(group)) {
+									canChangePasswordIds.add(group.getId());
+								}
 							}
-						}
 
-						break;
-					case CANNOT_CHANGE_PASSWORD:
-						break;
+							break;
+						case CANNOT_CHANGE_PASSWORD:
+							break;
+					}
 				}
 			}
 		}

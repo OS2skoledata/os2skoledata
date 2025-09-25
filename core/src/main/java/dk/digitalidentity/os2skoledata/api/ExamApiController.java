@@ -33,7 +33,7 @@ public class ExamApiController {
 	public record ExamInstitutionRecord(String name, String institutionNumber) {}
 	public record ExamClassRecord(String name, String classNumber, String level, String institutionNumber) {}
 	public record ExamCourseRecord(String name, String courseNumber, String level, String institutionNumber) {}
-	public record ExamStudentRecord(String name, String studentNumber, String studentClassNumber, String level, List<String> courseNumber) {}
+	public record ExamStudentRecord(String name, long studentNumber, String studentClassNumber, String level, List<String> courseNumber, String uniId) {}
 	public record LevelRequest(List<String> levels) {}
 
 	@PostMapping("/api/examSync")
@@ -47,7 +47,6 @@ public class ExamApiController {
 				)).toList();
 		List<ExamClassRecord> studentClasses = groupService.findAll().stream()
 				.filter(g -> g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
-				.filter(g -> requestedLevels.levels.contains(g.getGroupLevel()))
 				.map(e -> new ExamClassRecord(
 						e.getGroupName(),
 						e.getGroupId(),
@@ -56,7 +55,6 @@ public class ExamApiController {
 				)).toList();
 		List<ExamCourseRecord> courses = groupService.findAll().stream()
 				.filter(g -> !g.getGroupType().equals(DBImportGroupType.HOVEDGRUPPE))
-				.filter(g -> requestedLevels.levels.contains(g.getGroupLevel()))
 				.map(e -> new ExamCourseRecord(
 						e.getGroupName(),
 						e.getGroupId(),
@@ -68,10 +66,11 @@ public class ExamApiController {
 				.filter(e -> requestedLevels.levels.contains(e.getStudent().getLevel()))
 				.map(e -> new ExamStudentRecord(
 						DBPerson.getName(e.getPerson()),
-						e.getStudent().getStudentNumber(),
+						e.getStudent().getId(),
 						e.getStudent().getMainGroupId(),
 						e.getStudent().getLevel(),
-						e.getStudent().getGroupIds().stream().map(g -> g.getGroupId()).toList()
+						e.getStudent().getGroupIds().stream().map(g -> g.getGroupId()).toList(),
+						e.getUniLogin().getUserId()
 				)).toList();
 		return ResponseEntity.ok(new ExamCompletePackage(institutions, studentClasses, courses, students));
 	}
