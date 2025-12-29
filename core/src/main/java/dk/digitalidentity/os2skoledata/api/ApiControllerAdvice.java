@@ -14,7 +14,7 @@ import javax.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 
 @Slf4j
-@ControllerAdvice
+@ControllerAdvice(basePackages = "dk.digitalidentity.os2skoledata.api")
 public class ApiControllerAdvice {
 
     @ExceptionHandler(RuntimeException.class)

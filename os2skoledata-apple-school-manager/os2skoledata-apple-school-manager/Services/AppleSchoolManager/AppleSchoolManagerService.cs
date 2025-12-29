@@ -21,6 +21,8 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
         string sftpPassword;
         string sftpUrl;
         string zipFileName;
+        bool moreThanThreeInstructors;
+
         public AppleSchoolManagerService(IServiceProvider sp) : base(sp)
         {
             config = new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -36,6 +38,7 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
             sftpPassword = settings.AppleSchoolManagerSettings.SFTP.Password;
             sftpUrl = settings.AppleSchoolManagerSettings.SFTP.Url;
             zipFileName = settings.AppleSchoolManagerSettings.ZipFileName;
+            moreThanThreeInstructors = settings.AppleSchoolManagerSettings.MoreThanThreeInstructors;
         }
 
         private string GenerateStudentsCsv(List<AppleUserDto> students)
@@ -138,26 +141,36 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
             using StringWriter writer = new StringWriter();
             using CsvWriter csv = new CsvWriter(writer, config);
 
+            // Determine how many instructor columns to include
+            int maxInstructors = moreThanThreeInstructors ? 15 : 3;
+
+            // Write header fields
             csv.WriteField("class_id");
             csv.WriteField("class_number");
             csv.WriteField("course_id");
-            csv.WriteField("instructor_id");
-            csv.WriteField("instructor_id_2");
-            csv.WriteField("instructor_id_3");
+
+            for (int i = 1; i <= maxInstructors; i++)
+            {
+                csv.WriteField($"instructor_id{(i > 1 ? "_" + i : "")}");
+            }
+
             csv.WriteField("location_id");
             csv.NextRecord();
 
+            // Write data rows
             foreach (AppleGroupDto group in groups)
             {
                 csv.WriteField("class_" + group.Id);
                 csv.WriteField(group.StilId);
                 csv.WriteField("course_" + group.Id);
 
-                var instructors = group.TeacherUniIds?.Take(3).ToList() ?? new List<string>();
+                var instructors = group.TeacherUniIds?.Take(maxInstructors).ToList() ?? new List<string>();
 
-                csv.WriteField(instructors.Count > 0 ? instructors[0] : "");
-                csv.WriteField(instructors.Count > 1 ? instructors[1] : "");
-                csv.WriteField(instructors.Count > 2 ? instructors[2] : "");
+                // Write instructor fields (empty string if not present)
+                for (int i = 0; i < maxInstructors; i++)
+                {
+                    csv.WriteField(i < instructors.Count ? instructors[i] : "");
+                }
 
                 csv.WriteField("institution_" + group.InstitutionId);
                 csv.NextRecord();

@@ -83,20 +83,12 @@ public class SettingService {
 		return self.getByKey(key.toString());
 	}
 
-	@Cacheable("settings")
 	public Setting getByKey(String key) {
 		return settingDao.findByKey(key);
 	}
 
-	@CacheEvict(value = "settings", allEntries = true)
 	public void save(Setting setting) {
 		settingDao.save(setting);
-	}
-
-	@Scheduled(fixedRate = 5 * 60 * 1000)
-	@CacheEvict(value = "settings", allEntries = true)
-	public void clearGetSettingCache() {
-		// Clear cache
 	}
 
 	public void setValueForKey(String key, boolean enabled) {

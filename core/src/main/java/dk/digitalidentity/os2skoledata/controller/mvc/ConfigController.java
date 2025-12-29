@@ -46,7 +46,7 @@ public class ConfigController {
     @Autowired
     private PasswordAdminService passwordAdminService;
 
-    record PasswordAdminDTO(long id, String username, String institutions) {}
+    record PasswordAdminDTO(long id, String username, String institutions, boolean createdByClaim) {}
     record RoleSettingDTO(long id, StudentPasswordChangerSTILRoles role, RoleSettingType type, String filter, String filterValues) {}
     @GetMapping("/ui/config")
     public String list(Model model) {
@@ -74,7 +74,7 @@ public class ConfigController {
 
         // password admin section
         model.addAttribute("institutions", institutionService.findAll());
-        model.addAttribute("passwordAdmins", passwordAdminService.getAll().stream().map(a -> new PasswordAdminDTO(a.getId(), a.getUsername(), a.getInstitutions().stream().map(DBInstitution::getInstitutionName).collect(Collectors.joining(", ")))).collect(Collectors.toList()));
+        model.addAttribute("passwordAdmins", passwordAdminService.getAll().stream().map(a -> new PasswordAdminDTO(a.getId(), a.getUsername(), a.getInstitutions().stream().map(DBInstitution::getInstitutionName).collect(Collectors.joining(", ")), a.isCreatedByClaim())).collect(Collectors.toList()));
 
         return "config";
     }

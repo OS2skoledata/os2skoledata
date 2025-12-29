@@ -36,6 +36,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public int DaysBeforeDeletionEmployee { get; set; } = 60;
         public int DaysBeforeDeletionExternal { get; set; } = 60;
         public bool StudentAndClassGroupsSchoolsOnly { get; set; } = false;
+        public bool MatchOnSamAccountNameFallbackToCpr { get; set; } = false;
     }
 
     public enum UsernameStandardType

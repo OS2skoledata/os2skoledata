@@ -1,73 +1,86 @@
 <!DOCTYPE html>
 <html>
 <body>
-	<div th:fragment="topbar" class="row border-bottom white-bg">
-		<nav class="navbar navbar-expand-lg navbar-static-top" role="navigation">
-			<a th:href="@{/}" class="navbar-brand" style="background: white; padding: 10px 25px !important;">
-				<img class="img-fluid" src="/img/os2skoledata.png" style="display: inline; max-width: 30vw; max-height: 38px;">
-			</a>
+<div th:fragment="topbar" class="row border-bottom white-bg">
+    <nav class="navbar navbar-expand-lg navbar-static-top" role="navigation">
+        <a th:href="@{/}" class="navbar-brand" style="background: white; padding: 10px 25px !important;">
+            <img class="img-fluid" src="/img/os2skoledata.png" style="display: inline; max-width: 30vw; max-height: 38px;">
+        </a>
 
-			<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar">
-				<span class="fa fa-bars"></span>
-			</button>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbar">
+            <span class="fa fa-bars"></span>
+        </button>
 
-			<div class="navbar-collapse collapse" id="navbar">
-				<ul class="nav navbar-nav mr-auto">
-					<li sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'queue')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/showQueue}"><span th:text="#{html.navbar.queue}"></span></a>
-					</li>
-					
-					<li sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'client')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/clients}"><span th:text="#{html.navbar.clients}"></span></a>
-					</li>
+        <div class="navbar-collapse collapse" id="navbar">
+            <ul class="nav navbar-nav mr-auto">
 
-					<li sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'institution')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/institutions}"><span th:text="#{html.navbar.institutions}"></span></a>
-					</li>
+                <!-- Administration Dropdown (only for administrators) -->
+                <li sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item dropdown"
+                    th:classappend="${page != null and (#strings.startsWith(page, 'queue') or #strings.startsWith(page, 'client') or #strings.startsWith(page, 'institution') or #strings.startsWith(page, 'nonstil') or #strings.startsWith(page, 'teamadmin') or #strings.startsWith(page, 'config') or #strings.startsWith(page, 'ghosts'))} ? 'active' : ''">
+                    <a class="nav-link dropdown-toggle" href="#" id="administrationDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span th:text="#{html.navbar.administration}">Administration</span>
+                    </a>
+                    <div class="dropdown-menu" aria-labelledby="administrationDropdown">
+                        <a class="dropdown-item" th:href="@{/ui/showQueue}">
+                            <span th:text="#{html.navbar.queue}"></span>
+                        </a>
+                        <a class="dropdown-item" th:href="@{/ui/clients}">
+                            <span th:text="#{html.navbar.clients}"></span>
+                        </a>
+                        <a class="dropdown-item" th:href="@{/ui/institutions}">
+                            <span th:text="#{html.navbar.institutions}"></span>
+                        </a>
+                        <a th:if="@{__${@OS2SkoleDataConfiguration.nonSTILInstitutions.enabled}__}" class="dropdown-item" th:href="@{/ui/institutions/nonstil}">
+                            <span th:text="#{html.navbar.institutions.nonstil}"></span>
+                        </a>
+                        <a th:if="@{__${@OS2SkoleDataConfiguration.teamAdminAdministration.enabled}__}" class="dropdown-item" th:href="@{/ui/institutions/teamadmins}">
+                            <span th:text="#{html.navbar.teamadmins}"></span>
+                        </a>
+                        <a th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} OR @{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" class="dropdown-item" th:href="@{/ui/config}">
+                            <span th:text="#{html.navbar.config}"></span>
+                        </a>
+                        <a th:if="@{__${@OS2SkoleDataConfiguration.ghostAdministration.enabled}__}" class="dropdown-item" th:href="@{/ui/keepalive}">
+                            <span th:text="#{html.navbar.ghosts}"></span>
+                        </a>
+                    </div>
+                </li>
 
-                    <li th:if="@{__${@OS2SkoleDataConfiguration.nonSTILInstitutions.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'nonstil')} ? 'active' : ''">
-                        <a role="button" th:href="@{/ui/institutions/nonstil}"><span th:text="#{html.navbar.institutions.nonstil}"></span></a>
-                    </li>
+                <!-- Students (for school employees and password admins) -->
+                <li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}" sec:authorize="hasRole('ROLE_SCHOOL_EMPLOYEE') || hasRole('ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'students')} ? 'active' : ''">
+                    <a role="button" th:href="@{/ui/students}"><span th:text="#{html.navbar.students}"></span></a>
+                </li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.teamAdminAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'teamadmin')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/institutions/teamadmins}"><span th:text="#{html.navbar.teamadmins}"></span></a>
-					</li>
+                <!-- Students for parents -->
+                <li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__} AND @{__${@OS2SkoleDataConfiguration.studentAdministration.parentPasswordChangeEnabled}__}" sec:authorize="hasRole('ROLE_PARENT')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'student.parents')} ? 'active' : ''">
+                    <a role="button" th:href="@{/ui/students/parents/changepassword}"><span th:text="#{html.navbar.students}"></span></a>
+                </li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} OR @{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'config')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/config}"><span th:text="#{html.navbar.config}"></span></a>
-					</li>
+                <!-- Groups -->
+                <li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}" sec:authorize="hasAnyRole('ROLE_SCHOOL_EMPLOYEE', 'ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'groups')} ? 'active' : ''">
+                    <a role="button" th:href="@{/ui/students/groups}"><span th:text="#{html.navbar.groups}"></span></a>
+                </li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__}" sec:authorize="hasRole('ROLE_SCHOOL_EMPLOYEE') || hasRole('ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'students')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/students}"><span th:text="#{html.navbar.students}"></span></a>
-					</li>
+                <!-- Google Classroom -->
+                <li th:if="@{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" sec:authorize="hasRole('ROLE_GOOGLE_CLASSROOM_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'classroom')} ? 'active' : ''">
+                    <a role="button" th:href="@{/ui/classrooms}"><span th:text="#{html.navbar.classrooms}"></span></a>
+                </li>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__} AND !@{__${@OS2SkoleDataConfiguration.studentAdministration.classListsOnly}__} AND @{__${@OS2SkoleDataConfiguration.studentAdministration.parentPasswordChangeEnabled}__}" sec:authorize="hasRole('ROLE_PARENT')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'student.parents')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/students/parents/changepassword}"><span th:text="#{html.navbar.students}"></span></a>
-					</li>
+                <!-- Primary Institutions -->
+                <li sec:authorize="hasAnyRole('ROLE_ADMINISTRATOR', 'ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'primaryInstitutions')} ? 'active' : ''">
+                    <a role="button" th:href="@{/ui/primaryinstitutions}"><span th:text="#{html.navbar.primaryInstitutions}"></span></a>
+                </li>
+            </ul>
 
-					<li th:if="@{__${@OS2SkoleDataConfiguration.studentAdministration.enabled}__}" sec:authorize="hasAnyRole('ROLE_SCHOOL_EMPLOYEE', 'ROLE_PASSWORD_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'groups')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/students/groups}"><span th:text="#{html.navbar.groups}"></span></a>
-					</li>
-
-					<li th:if="@{__${@OS2SkoleDataConfiguration.ghostAdministration.enabled}__}" sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'ghosts')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/keepalive}"><span th:text="#{html.navbar.ghosts}"></span></a>
-					</li>
-
-					<li th:if="@{__${@OS2SkoleDataConfiguration.classroomAdministration.enabled}__}" sec:authorize="hasRole('ROLE_GOOGLE_CLASSROOM_ADMIN')" class="nav-item" th:classappend="${page != null and #strings.startsWith(page, 'classroom')} ? 'active' : ''">
-						<a role="button" th:href="@{/ui/classrooms}"><span th:text="#{html.navbar.classrooms}"></span></a>
-					</li>
-				</ul>
-
-				<ul sec:authorize="isAuthenticated()" class="nav navbar-top-links navbar-right">
-					<li>
-						<a th:href="@{/saml/logout}">
-							<i class="fa fa-sign-out"></i>
-							<span th:text="#{html.control.button.logout}"></span>
-						</a>
-					</li>
-				</ul>
-			</div>
-		</nav>
-	</div>
+            <ul sec:authorize="isAuthenticated()" class="nav navbar-top-links navbar-right">
+                <li>
+                    <a th:href="@{/saml/logout}">
+                        <i class="fa fa-sign-out"></i>
+                        <span th:text="#{html.control.button.logout}"></span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</div>
 </body>
 </html>

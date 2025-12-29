@@ -3,6 +3,7 @@
     public class ActiveDirectorySettings
     {
         public string ActiveEmployeesSecurityGroupDN { get; set; }
+        public string InactiveEmployeesSecurityGroupDN { get; set; }
         public string CprField { get; set; }
         public string EmployeeSecurityGroupDN { get; set; }
     }

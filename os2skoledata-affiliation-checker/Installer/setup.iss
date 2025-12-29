@@ -3,8 +3,8 @@
 #define AppName "OS2skoledata affiliation checker"
 #define AppPublisher "Digital Identity"
 #define AppURL "http://digital-identity.dk/"
-#define ExeName "os2skoledata_affiliation_checker.exe"
-#define AppVersion "1.0.0"
+#define ExeName "os2skoledata-affiliation-checker.exe"
+#define AppVersion "1.1.0"
 
 [Setup]
 AppId={#AppId}

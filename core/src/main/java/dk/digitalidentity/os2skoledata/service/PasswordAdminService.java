@@ -25,7 +25,7 @@ public class PasswordAdminService {
 		passwordAdminDao.deleteById(id);
 	}
 
-	public void save(PasswordAdmin passwordAdmin) {
-		passwordAdminDao.save(passwordAdmin);
+	public PasswordAdmin save(PasswordAdmin passwordAdmin) {
+		return passwordAdminDao.save(passwordAdmin);
 	}
 }

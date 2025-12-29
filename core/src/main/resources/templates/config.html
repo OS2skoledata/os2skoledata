@@ -82,10 +82,13 @@
 
                                     <tbody>
                                     <tr th:each="admin : ${passwordAdmins}">
-                                        <td th:text="${admin.username}" />
+                                        <td>
+                                            <span th:text="${admin.username}"></span>
+                                            <small th:if="${admin.createdByClaim}" th:text="#{html.config.passwordAdmin.claim}" th:title="#{html.config.passwordAdmin.claim.explainer}"></small>
+                                        </td>
                                         <td th:text="${admin.institutions}" />
                                         <td>
-                                            <em class="fa fa-times deletePasswordAdminBtn" th:attr="data-id=${admin.id}"></em>
+                                            <em th:unless="${admin.createdByClaim}" class="fa fa-times deletePasswordAdminBtn" th:attr="data-id=${admin.id}"></em>
                                         </td>
                                     </tr>
                                     </tbody>

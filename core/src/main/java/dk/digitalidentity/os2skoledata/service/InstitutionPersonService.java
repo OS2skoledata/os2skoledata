@@ -791,6 +791,10 @@ public class InstitutionPersonService {
 
 	}
 
+	public List<DBInstitutionPerson> findByPrimaryTrue() {
+		return institutionPersonDao.findByPrimaryInstitutionTrue();
+	}
+
 	public Set<String> findAllUsernames() {
 		return institutionPersonDao.findAllUsernames();
 	}

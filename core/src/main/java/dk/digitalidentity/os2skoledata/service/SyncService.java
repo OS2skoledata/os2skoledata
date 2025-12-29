@@ -280,18 +280,23 @@ public class SyncService {
 		// find institution persons to be deleted (from within the same institution)
 		List<DBInstitutionPerson> toBeDeleted = institutionPersonService.findByInstitution(dbInstitution).stream()
 				.filter(dbInstitutionPerson -> !dbInstitutionPerson.isDeleted() && !dbInstitutionPerson.isApiOnly())
-				.filter(dbInstitutionPerson -> stilInstitution.getInstitutionPerson().stream()
-						.noneMatch(stilInstitutionPerson -> Objects.equals(stilInstitutionPerson.getLocalPersonId(), dbInstitutionPerson.getLocalPersonId())))
 				.collect(Collectors.toList());
 
 		// if syncFrom is API_AND_STIL we only delete students. Deletion of employees and externals is managed by the API and not STIL
 		// if transitionMode we allow deletion of everyone unless people with local source
 		if (configuration.getSyncSettings().getSyncFrom().equals(SyncFrom.API_AND_STIL)) {
+			toBeDeleted = toBeDeleted.stream().filter(dbInstitutionPerson -> stilInstitution.getInstitutionPerson().stream()
+							.noneMatch(stilInstitutionPerson -> Objects.equals(stilInstitutionPerson.getPerson().getCivilRegistrationNumber(), dbInstitutionPerson.getPerson().getCivilRegistrationNumber())))
+					.collect(Collectors.toList());
 			if (configuration.getSyncSettings().isTransitionMode()) {
 				toBeDeleted = toBeDeleted.stream().filter(p -> !Objects.equals(p.getSource(), configuration.getSyncSettings().getLocalSource())).collect(Collectors.toList());
 			} else {
 				toBeDeleted = toBeDeleted.stream().filter(p -> p.getStudent() != null).collect(Collectors.toList());
 			}
+		} else {
+			toBeDeleted = toBeDeleted.stream().filter(dbInstitutionPerson -> stilInstitution.getInstitutionPerson().stream()
+					.noneMatch(stilInstitutionPerson -> Objects.equals(stilInstitutionPerson.getLocalPersonId(), dbInstitutionPerson.getLocalPersonId())))
+					.collect(Collectors.toList());
 		}
 
 		toBeDeleted.forEach(person -> {

@@ -5,6 +5,7 @@ import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
@@ -12,6 +13,7 @@ import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
 import dk.digitalidentity.os2skoledata.service.model.NameDTO;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -53,7 +55,10 @@ public class AppleApiController {
 				.stream()
 				.filter(i -> !i.isNonSTILInstitution())
 				.collect(Collectors.toList());
-		List<DBInstitutionPerson> dbInstitutionPeople = institutionPersonService.findAllNotDeleted();
+		List<DBInstitutionPerson> dbInstitutionPeople = institutionPersonService.findAllNotDeleted()
+				.stream()
+				.filter(i -> !i.isApiOnly())
+				.collect(Collectors.toList());
 		List<DBGroup> dbMainGroups = groupService.findAllNotDeletedMainGroups();
 
 		Map<Long, Set<String>> groupIdEmployeeUniIdMap = new HashMap<>();
@@ -129,10 +134,19 @@ public class AppleApiController {
 			String uniId = entry.getKey();
 			List<DBInstitutionPerson> matchingPeople = entry.getValue();
 			DBInstitutionPerson defaultPerson = matchingPeople.get(0);
+
+			if (!StringUtils.hasLength(defaultPerson.getUsername())) {
+				continue;
+			}
+
 			PersonRole role = institutionPersonService.findGlobalRole(defaultPerson, matchingPeople);
 			NameDTO calculatedName = institutionPersonService.calculateName(matchingPeople);
 
-			if (role == PersonRole.EMPLOYEE || role == PersonRole.STUDENT) {
+			if (PersonRole.EMPLOYEE.equals(role) || PersonRole.STUDENT.equals(role)) {
+				if (PersonRole.STUDENT.equals(role) && defaultPerson.getStudent() != null && !defaultPerson.getStudent().getRole().equals(DBStudentRole.ELEV)) {
+					continue;
+				}
+
 				InstitutionAndLevelDTO institutionAndLevelDTO = resolvePrimaryInstitutionAndLevel(matchingPeople, defaultPerson, role, dbMainGroups);
 				AppleUserDto dto = new AppleUserDto(
 						uniId,

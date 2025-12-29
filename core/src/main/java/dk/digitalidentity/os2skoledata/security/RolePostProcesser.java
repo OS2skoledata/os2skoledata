@@ -2,11 +2,13 @@ package dk.digitalidentity.os2skoledata.security;
 
 import dk.digitalidentity.os2skoledata.config.Constants;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordAdmin;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
 import dk.digitalidentity.os2skoledata.service.ClassroomAdminService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
+import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import dk.digitalidentity.os2skoledata.service.PasswordAdminService;
 import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
 import dk.digitalidentity.samlmodule.model.SamlLoginPostProcessor;
@@ -15,10 +17,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component
 public class RolePostProcesser implements SamlLoginPostProcessor {
@@ -37,6 +42,9 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 
 	@Autowired
 	private PasswordAdminService passwordAdminService;
+
+	@Autowired
+	private InstitutionService institutionService;
 
 	@Override
 	public void process(TokenUser tokenUser) {
@@ -68,9 +76,54 @@ public class RolePostProcesser implements SamlLoginPostProcessor {
 			newAuthorities.add(new SamlGrantedAuthority(Constants.GOOGLE_CLASSROOM_ADMIN));
 		}
 
+		// handle password admin by instnr claim
+		PasswordAdmin pwAdmin = passwordAdminService.getByUsername(username);
+		String institutionNumberString = (String) tokenUser.getAttributes().get(Constants.INSTITUTION_NUMBER_CLAIM);
+		if (institutionNumberString != null) {
+			List<String> institutionNumbers = Arrays.asList(institutionNumberString.split(","));
+			if (pwAdmin == null) {
+				PasswordAdmin passwordAdmin = new PasswordAdmin();
+				passwordAdmin.setUsername(username);
+				passwordAdmin.setCreatedByClaim(true);
+				passwordAdmin.setInstitutions(new ArrayList<>());
+				passwordAdmin.getInstitutions().addAll(institutionService.findByInstitutionNumberIn(institutionNumbers));
+				pwAdmin = passwordAdminService.save(passwordAdmin);
+			} else {
+				// Synchronize institutions: add new ones and remove obsolete ones
+				List<DBInstitution> newInstitutions = institutionService.findByInstitutionNumberIn(institutionNumbers);
+				Set<String> newInstitutionNumbers = newInstitutions.stream()
+						.map(DBInstitution::getInstitutionNumber)
+						.collect(Collectors.toSet());
+
+				// Remove institutions that are no longer in the list
+				pwAdmin.getInstitutions().removeIf(institution ->
+						!newInstitutionNumbers.contains(institution.getInstitutionNumber()));
+
+				// Add new institutions that aren't already present
+				Set<String> existingInstitutionNumbers = pwAdmin.getInstitutions().stream()
+						.map(DBInstitution::getInstitutionNumber)
+						.collect(Collectors.toSet());
+
+				for (DBInstitution institution : newInstitutions) {
+					if (!existingInstitutionNumbers.contains(institution.getInstitutionNumber())) {
+						pwAdmin.getInstitutions().add(institution);
+					}
+				}
+
+				pwAdmin.setCreatedByClaim(true);
+				pwAdmin = passwordAdminService.save(pwAdmin);
+			}
+		} else {
+			if (pwAdmin != null && pwAdmin.isCreatedByClaim()) {
+				passwordAdminService.delete(pwAdmin.getId());
+				pwAdmin = null;
+			}
+		}
+
+
 		// check if the user is a password admin
 		if (passwordAdminPossible) {
-			if (passwordAdminService.getByUsername(username) != null) {
+			if (pwAdmin != null) {
 				newAuthorities.add(new SamlGrantedAuthority(Constants.PASSWORD_ADMIN));
 			}
 		}

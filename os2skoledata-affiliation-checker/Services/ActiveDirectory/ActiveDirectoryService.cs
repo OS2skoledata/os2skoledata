@@ -9,29 +9,29 @@ namespace os2skoledata_affiliation_checker.Services.ActiveDirectory
 {
     internal class ActiveDirectoryService : ServiceBase<ActiveDirectoryService>
     {
-        private readonly string activeEmployeesSecurityGroupDN;
+        private readonly string employeeSecurityGroup;
         private readonly string cprField;
 
         public ActiveDirectoryService(IServiceProvider sp) : base(sp)
         {
-            activeEmployeesSecurityGroupDN = settings.ActiveDirectorySettings.ActiveEmployeesSecurityGroupDN;
             cprField = settings.ActiveDirectorySettings.CprField;
+            employeeSecurityGroup = settings.ActiveDirectorySettings.EmployeeSecurityGroupDN;
         }
 
-        public void handleGroup(List<string> memberCprNumbers)
+        public void handleGroup(List<string> memberCprNumbers, string groupDn, string type)
         {
-            if (String.IsNullOrEmpty(activeEmployeesSecurityGroupDN))
+            if (String.IsNullOrEmpty(groupDn))
             {
                 return;
             }
 
-            using DirectoryEntry group = GetGroupFromDN(activeEmployeesSecurityGroupDN);
+            using DirectoryEntry group = GetGroupFromDN(groupDn);
             if (group == null)
             {
-                throw new Exception($"Failed to find activeEmployeesSecurityGroupDN with dN {activeEmployeesSecurityGroupDN}");
+                throw new Exception($"Failed to find {type} with dN {groupDn}");
             }
 
-            logger.LogInformation($"Handling members for group {activeEmployeesSecurityGroupDN}");
+            logger.LogInformation($"Handling members for group {groupDn}");
             PrincipalContext context = new PrincipalContext(ContextType.Domain, Environment.UserDomainName);
             GroupPrincipal groupPrincipal = GroupPrincipal.FindByIdentity(context, IdentityType.Guid, group.Guid.ToString());
             List<Principal> members = new List<Principal>();
@@ -88,9 +88,6 @@ namespace os2skoledata_affiliation_checker.Services.ActiveDirectory
 
         public Dictionary<string, List<string>> FetchAllEmployeesFromAD()
         {
-            string cprAttribute = settings.ActiveDirectorySettings.CprField;
-            string employeeSecurityGroup = settings.ActiveDirectorySettings.EmployeeSecurityGroupDN;
-
             var dictionary = new Dictionary<string, List<string>>();
 
             using var directoryEntry = new DirectoryEntry();
@@ -98,12 +95,12 @@ namespace os2skoledata_affiliation_checker.Services.ActiveDirectory
             {
                 "DistinguishedName",
                 "sAMAccountName",
-                cprAttribute
+                cprField
             };
 
             string filter = CreateFilter(
                 "!(isDeleted=TRUE)",
-                cprAttribute + "=*",
+                cprField + "=*",
                 "memberOf:1.2.840.113556.1.4.1941:=" + employeeSecurityGroup
             );
 
@@ -111,11 +108,11 @@ namespace os2skoledata_affiliation_checker.Services.ActiveDirectory
             directorySearcher.PageSize = 1000;
 
             using var searchResultCollection = directorySearcher.FindAll();
-            logger.LogInformation("Found {0} users in Active Directory with a value in {1}", searchResultCollection.Count, cprAttribute);
+            logger.LogInformation("Found {0} users in Active Directory with a value in {1}", searchResultCollection.Count, cprField);
 
             foreach (SearchResult searchResult in searchResultCollection)
             {
-                var cpr = (string)searchResult.Properties[cprAttribute][0];
+                var cpr = (string)searchResult.Properties[cprField][0];
                 var dn = (string)searchResult.Properties["DistinguishedName"][0];
 
                 List<string> dns = null;

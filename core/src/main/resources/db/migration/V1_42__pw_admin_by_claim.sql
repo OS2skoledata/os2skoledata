@@ -1,0 +1,1 @@
+ALTER TABLE password_admin ADD COLUMN created_by_claim BOOLEAN NOT NULL DEFAULT FALSE;

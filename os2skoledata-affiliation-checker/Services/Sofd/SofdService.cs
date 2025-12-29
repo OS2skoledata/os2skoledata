@@ -10,7 +10,7 @@ namespace os2skoledata_affiliation_checker.Services.Sofd
 {
     internal class SofdService : ServiceBase<SofdService>
     {
-        private readonly Uri baseUri;
+        private readonly string baseUrl;
         private readonly string apiKey;
         private readonly long personsPageSize = 1000;
         private readonly long personsPageCount = 20;
@@ -18,7 +18,7 @@ namespace os2skoledata_affiliation_checker.Services.Sofd
 
         public SofdService(IServiceProvider sp) : base(sp)
         {
-            baseUri = new Uri(settings.SyncSettings.SOFDBaseUrl);
+            baseUrl = settings.SyncSettings.SOFDBaseUrl;
             apiKey = settings.SyncSettings.SOFDApiKey;
         }
 
@@ -44,6 +44,7 @@ namespace os2skoledata_affiliation_checker.Services.Sofd
         private async Task<List<Person>> GetPersonsAsync(int page)
         {
             using var httpClient = GetHttpClient();
+            Uri baseUri = new Uri(baseUrl);
             var response = await httpClient.GetAsync(new Uri(baseUri, $"api/v2/persons?size={personsPageSize}&page={page}"));
             response.EnsureSuccessStatusCode();
             var responseString = await response.Content.ReadAsStringAsync();

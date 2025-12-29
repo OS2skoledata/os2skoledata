@@ -60,6 +60,10 @@ public class InstitutionService {
 		return institutionDao.findByIdIn(ids);
 	}
 
+	public List<DBInstitution> findByInstitutionNumberIn(List<String> institutionNumbers) {
+		return institutionDao.findByInstitutionNumberIn(institutionNumbers);
+	}
+
 	public List<DBInstitution> findAllNonStilInstitutions() {
 		return institutionDao.findByNonSTILInstitutionTrueAndDeletedFalse();
 	}

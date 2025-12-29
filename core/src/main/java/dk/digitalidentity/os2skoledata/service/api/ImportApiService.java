@@ -300,7 +300,7 @@ public class ImportApiService {
 				p.getPerson().getCivilRegistrationNumber(),
 				p.getInstitution().getInstitutionName(),
 				p.getInstitution().getInstitutionNumber(),
-				p.getEmployee() != null ? PossibleImportRole.ANSAT : PossibleImportRole.EKSTERN,
+				getMainRole(p),
 				getRoles(p),
 				p.getSource(),
 				p.getUniLogin().getUserId(),
@@ -319,6 +319,16 @@ public class ImportApiService {
 				p.getGwDeactivated(),
 				p.getAzureCreated(),
 				p.getAzureDeactivated());
+	}
+
+	private PossibleImportRole getMainRole(DBInstitutionPerson p) {
+		if (p.getEmployee() != null) {
+			return PossibleImportRole.ANSAT;
+		}
+		if (p.getExtern() != null) {
+			return PossibleImportRole.EKSTERN;
+		}
+		return PossibleImportRole.ELEV;
 	}
 
 	private List<String> getGroupIds(DBInstitutionPerson p) {

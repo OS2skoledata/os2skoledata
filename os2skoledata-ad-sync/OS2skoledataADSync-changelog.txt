@@ -59,5 +59,9 @@
 2025.08.07 - 1.27.0 - 2 nye klassegrupper. klasse-alle-medarbejdere og klasse-alle-elever. Derudover StudentAndClassGroupsSchoolsOnly, der gør det muligt kun at oprette grupper til klasser og alle elever for skoler.
 2025.09.01 - 1.28.0 - Mulighed for sikkerhedsgrupper til andre STIL gruppetyper end hovedgrupper. Ny helt random brugernavnestandard.
 2025.09.04 - 1.29.0 - Bugfix. Håndtering af flytning efter en institution skifter type
-2025.09.04 - 1.30.0 - Tilføj apiOnly flag, så den kan bruges i powershell, hvis UserAsJSON = true. Derudover håndteres skiftende UNIID ved brug af import API
-2025.09.04 - 1.31.0 - MailEnable institution employees group
+2025.09.19 - 1.30.0 - Tilføj apiOnly flag, så den kan bruges i powershell, hvis UserAsJSON = true. Derudover håndteres skiftende UNIID ved brug af import API
+2025.09.22 - 1.31.0 - MailEnable institution employees group
+2025.09.25 - 1.31.1 - MailEnable institution employees group bugfix
+2025.09.26 - 1.32.0 - Bugfix og mulighed for at matche på brugernavn, hvis det er udfyldt i databasen, ellers cpr. Det kan fx være nyttigt ved skift af cpr (fiktivt cpr til cpr)
+2025.12.04 - 1.32.1 - Performance opdatering: Kun omdøb enheder med prefix, når det er nødvendigt
+

@@ -24,6 +24,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
         private List<string> globalLockedInstitutionNumbers;
         private readonly List<string> usersToInclude;
         private readonly UsernameKeyType usernameKeyType;
+        private readonly bool matchOnSamAccountNameFallbackToCpr;
 
         public SyncService(IServiceProvider sp) : base(sp)
         {
@@ -38,6 +39,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             usersToInclude = settings.ActiveDirectorySettings.UsersToInclude == null ? new List<string>() : settings.ActiveDirectorySettings.UsersToInclude;
             globalLockedInstitutionNumbers = new List<string>();
             usernameKeyType = settings.ActiveDirectorySettings.UsernameKeyType;
+            matchOnSamAccountNameFallbackToCpr = settings.ActiveDirectorySettings.MatchOnSamAccountNameFallbackToCpr;
         }
 
         public void SetFullSync()
@@ -199,7 +201,21 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                             }
                             else
                             {
-                                entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                                if (matchOnSamAccountNameFallbackToCpr && user.Username != null)
+                                {
+                                    entry = activeDirectoryService.GetUserFromSAMAccountName(user.Username);
+
+                                    // Fallback to cpr if SAMAccountName lookup fails
+                                    if (entry == null)
+                                    {
+                                        entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                                    }
+                                } 
+                                else 
+                                {
+                                    entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                                }
+                                
                             }
 
                             using (entry)
@@ -466,13 +482,48 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
 
                 logger.LogInformation($"Delta sync handling user with databaseId {user.DatabaseId}");
 
+                DirectoryEntry entry = null;
                 if (useUsernameAsKey)
                 {
-                    using DirectoryEntry entry = activeDirectoryService.GetUserFromUsername(UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username);
-                    HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap, keepAliveUsernames);
-                } else
+                    // Handle special case for UNI_ID with fallback logic (because import api does not require uniid at it might be updated later) 
+                    if (user.Username != null && UsernameKeyType.UNI_ID.Equals(usernameKeyType))
+                    {
+                        entry = activeDirectoryService.GetUserFromSAMAccountName(user.Username);
+
+                        // Fallback to UniId if SAMAccountName lookup fails
+                        if (entry == null)
+                        {
+                            entry = activeDirectoryService.GetUserFromUsername(user.UniId);
+                        }
+                    }
+                    else
+                    {
+                        // Standard username lookup based on key type
+                        string username = UsernameKeyType.UNI_ID.Equals(usernameKeyType) ? user.UniId : user.Username;
+                        entry = activeDirectoryService.GetUserFromUsername(username);
+                    }
+                }
+                else
                 {
-                    using DirectoryEntry entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                    if (matchOnSamAccountNameFallbackToCpr && user.Username != null)
+                    {
+                        entry = activeDirectoryService.GetUserFromSAMAccountName(user.Username);
+
+                        // Fallback to cpr if SAMAccountName lookup fails
+                        if (entry == null)
+                        {
+                            entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                        }
+                    }
+                    else
+                    {
+                        entry = activeDirectoryService.GetUserFromCpr(user.Cpr);
+                    }
+
+                }
+
+                using (entry)
+                {
                     HandleOnePersonChanges(entry, user, create, update, delete, usernameMap, usernameADPathMap, keepAliveUsernames);
                 }
             }

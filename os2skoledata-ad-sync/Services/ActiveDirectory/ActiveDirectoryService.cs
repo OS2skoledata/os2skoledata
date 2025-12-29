@@ -1057,7 +1057,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 }
             }
 
-            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEES, GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEES), null));
+            using DirectoryEntry institutionEmployeeGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte", GetInstitutionGroupName("EMPLOYEES", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_EMPLOYEES, null, null), GetSecurityGroupMail(null, institution, null, GroupType.INSTITUTION_EMPLOYEES));
             using DirectoryEntry institutionAllGroup = UpdateGroup(securityGroupOU, "os2skoledata_institution_" + institution.InstitutionNumber + "_alle", GetInstitutionGroupName("ALL", institution), institution.InstitutionNumber, GenerateSamAccountName(null, institution, GroupType.INSTITUTION_ALL, null, null));
 
             securityGroupIds.Add("os2skoledata_institution_" + institution.InstitutionNumber + "_ansatte");
@@ -2448,42 +2448,52 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 else
                 {
                     name = GetNameForOU(institutionLevel, institution.InstitutionName, institution.InstitutionNumber, dto.Abbreviation, dto.Name, dto.StilId, dto.Level, dto.StartYear, dto.Line);
-                    
-                    // give classes a prefix when creating/ updating in full sync to make sure we don't get any renaming isues - if length is less than max lenght minus 2
-                    if (name.Length <= 62)
-                    {
-                        name = "c_" + name;
-                        idsWithPrefix.Add(dto.Id);
-                    }
                 }
 
                 if (match == null)
                 {
+                    // Add prefix for new classes to avoid naming issues during creation
+                    string nameToCreate = name;
+                    if (!institutionLevel && nameToCreate.Length <= 62)
+                    {
+                        nameToCreate = "c_" + nameToCreate;
+                        idsWithPrefix.Add(dto.Id);
+                    }
+
                     if (institutionLevel)
                     {
                         if (dto.Type.Equals(InstitutionType.SCHOOL))
                         {
-                            CreateOU(schoolsOU, institutionLevel, dto.Id, name);
-                        } else if (dto.Type.Equals(InstitutionType.DAYCARE))
+                            CreateOU(schoolsOU, institutionLevel, dto.Id, nameToCreate);
+                        }
+                        else if (dto.Type.Equals(InstitutionType.DAYCARE))
                         {
-                            CreateOU(daycareOU, institutionLevel, dto.Id, name);
-                        } else if (dto.Type.Equals(InstitutionType.FU))
+                            CreateOU(daycareOU, institutionLevel, dto.Id, nameToCreate);
+                        }
+                        else if (dto.Type.Equals(InstitutionType.FU))
                         {
-                            CreateOU(fuOU, institutionLevel, dto.Id, name);
-                        } else if (dto.Type.Equals(InstitutionType.MUNICIPALITY))
+                            CreateOU(fuOU, institutionLevel, dto.Id, nameToCreate);
+                        }
+                        else if (dto.Type.Equals(InstitutionType.MUNICIPALITY))
                         {
-                            CreateOU(ouToCreateIn, institutionLevel, dto.Id, name);
-                        } else
+                            CreateOU(ouToCreateIn, institutionLevel, dto.Id, nameToCreate);
+                        }
+                        else
                         {
                             throw new Exception($"Unknown institution type: {institution.Type.ToString()}. Institution with database id: {institution.DatabaseId} and institution number: {institution.InstitutionNumber}");
                         }
-                    } else
+                    }
+                    else
                     {
-                        CreateOU(ouToCreateIn, institutionLevel, dto.Id, name);
+                        CreateOU(ouToCreateIn, institutionLevel, dto.Id, nameToCreate);
                     }
                 }
                 else
                 {
+                    // Check if current name is correct
+                    string currentName = RemovePrefix(match.Name, "OU=");
+                    bool nameNeedsUpdate = !currentName.Equals(name, StringComparison.OrdinalIgnoreCase);
+
                     // if it has been deleted, move it back to the right place
                     bool moved = false;
 
@@ -2554,15 +2564,31 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                             }
                         }
                     }
-                    
-                    // check if ou should be updated
-                    if (moved)
+
+                    // Update only if name needs changing
+                    if (nameNeedsUpdate)
                     {
-                        using DirectoryEntry movedEntry = GetOUFromId(dto.Id);
-                        UpdateOU(movedEntry, name);
-                    } else
+                        // Add prefix when renaming classes to avoid naming conflicts
+                        string nameToUpdate = name;
+                        if (!institutionLevel && nameToUpdate.Length <= 62)
+                        {
+                            nameToUpdate = "c_" + nameToUpdate;
+                            idsWithPrefix.Add(dto.Id);
+                        }
+
+                        if (moved)
+                        {
+                            using DirectoryEntry movedEntry = GetOUFromId(dto.Id);
+                            UpdateOU(movedEntry, nameToUpdate);
+                        }
+                        else
+                        {
+                            UpdateOU(match, nameToUpdate);
+                        }
+                    }
+                    else
                     {
-                        UpdateOU(match, name);
+                        logger.LogInformation($"OU with id {dto.Id} already has correct name: {name}");
                     }
                 }
             }
@@ -3435,6 +3461,8 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 bool created = false;
                 bool updated = false;
                 bool hasPrefix = false;
+                bool wasRenamed = false;
+
                 if (group == null)
                 {
                     logger.LogInformation($"Did not find group with name {name} and id {id} in AD. Attempting to create");
@@ -3464,11 +3492,30 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                         logger.LogInformation("Setting value " + mail + " in field " + securityGroupMailField + " when creating group " + name);
                     }
 
-
                     created = true;
                 }
                 else
                 {
+                    // First handle rename if needed
+                    if (!group.Name.Equals("CN=" + name))
+                    {
+                        logger.LogInformation($"Updating name on group {group.Name} from {group.Name} to {"CN=" + name}");
+                        if (renamedOrNewSecurityGroupIds != null && name.Length <= 62)
+                        {
+                            group.Rename("CN=c_" + RemovePrefix(name, "c_"));
+                            hasPrefix = true;
+                        }
+                        else
+                        {
+                            group.Rename("CN=" + name);
+                        }
+                        wasRenamed = true;
+
+                        // Refresh the group object after rename to ensure we have the latest state
+                        group.RefreshCache();
+                    }
+
+                    // Now handle all other property updates
                     if (!object.Equals(group.Properties[securityGroupInstitutionNumberField].Value, institutionNumber))
                     {
                         logger.LogInformation($"Updating securityGroupInstitutionNumberField on group {group.Name} from {group.Properties[securityGroupInstitutionNumberField].Value} to {institutionNumber}");
@@ -3491,7 +3538,8 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     if (securityGroupOverwriteExistingMail && !String.IsNullOrEmpty(securityGroupMailField) && !String.IsNullOrEmpty(mail))
                     {
                         updateGeneratedMail = true;
-                    } else if (!String.IsNullOrEmpty(securityGroupMailField) && !String.IsNullOrEmpty(mail))
+                    }
+                    else if (!String.IsNullOrEmpty(securityGroupMailField) && !String.IsNullOrEmpty(mail))
                     {
                         string currentMail = group.Properties[securityGroupMailField].Value?.ToString();
                         if (String.IsNullOrEmpty(currentMail))
@@ -3510,35 +3558,22 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                             updated = true;
                         }
                     }
-                    
-
-                    if (!group.Name.Equals("CN=" + name))
-                    {
-                        logger.LogInformation($"Updating name on group {group.Name} from {group.Name} to {"CN=" + name}");
-                        if (renamedOrNewSecurityGroupIds != null && name.Length <= 62)
-                        {
-                            group.Rename("CN=c_" + RemovePrefix(name, "c_"));
-                            hasPrefix = true;
-                        } else
-                        {
-                            group.Rename("CN=" + name);
-                        }
-                            
-                        updated = true;
-                    }
                 }
 
+                // Handle prefix logic
                 if (hasPrefix)
                 {
                     if (setSamAccountName && samAccountName != null)
                     {
-                        // if name has prefix, also set prefix on samAccountName
+                        // If name has prefix, also set prefix on samAccountName
                         group.Properties["sAMAccountName"].Value = "c_" + RemovePrefix(samAccountName, "c_");
+                        updated = true;
                     }
-                    
+
                     renamedOrNewSecurityGroupIds.Add(id);
                 }
 
+                // Commit changes (this will handle both new properties and any remaining updates after rename)
                 if (updated || created)
                 {
                     group.CommitChanges();
@@ -3548,7 +3583,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 {
                     logger.LogInformation($"Created security group with name {name} and id {id}");
                 }
-                else if (updated)
+                else if (updated || wasRenamed)
                 {
                     logger.LogInformation($"Updated security group with name {name} and id {id}");
                 }

@@ -24,6 +24,9 @@ public class PasswordAdmin {
     @Column
     private String username;
 
+	@Column
+	private boolean createdByClaim;
+
     @OneToMany
     @JoinTable(name = "password_admin_institutions", joinColumns = @JoinColumn(name = "password_admin_id"), inverseJoinColumns = @JoinColumn(name = "institution_id"))
     private List<DBInstitution> institutions;

@@ -4,14 +4,12 @@ using os2skoledata_affiliation_checker.Services.ActiveDirectory;
 using os2skoledata_affiliation_checker.Services.OS2skoledata;
 using os2skoledata_affiliation_checker.Services.OS2skoledata.Model;
 using os2skoledata_affiliation_checker.Services.Sofd;
-using os2skoledata_affiliation_checker.Services.Sofd.Model;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Data.SqlClient;
 using System.Diagnostics;
 using System.Linq;
-using System.Runtime.ConstrainedExecution;
 using System.Xml.Linq;
 
 namespace os2skoledata_affiliation_checker.Services.Sync
@@ -21,12 +19,17 @@ namespace os2skoledata_affiliation_checker.Services.Sync
         private readonly ActiveDirectoryService activeDirectoryService;
         private readonly OS2skoledataService oS2skoledataService;
         private readonly SofdService sofdService;
+        private readonly string activeEmployeesSecurityGroupDN;
+        private readonly string inactiveEmployeesSecurityGroupDN;
 
         public SyncService(IServiceProvider sp) : base(sp)
         {
             activeDirectoryService = sp.GetService<ActiveDirectoryService>();
             oS2skoledataService = sp.GetService<OS2skoledataService>();
             sofdService = sp.GetService<SofdService>();
+
+            activeEmployeesSecurityGroupDN = settings.ActiveDirectorySettings.ActiveEmployeesSecurityGroupDN;
+            inactiveEmployeesSecurityGroupDN = settings.ActiveDirectorySettings.InactiveEmployeesSecurityGroupDN;
         }
 
         public void Synchronize()
@@ -88,12 +91,24 @@ namespace os2skoledata_affiliation_checker.Services.Sync
                 }
 
                 activeAffiliationsRequests = activeAffiliationsRequests.Where(a => !toRemove.Contains(a.Cpr)).ToList();
+                List<string> activeCprs = activeAffiliationsRequests.Select(a => a.Cpr).ToList();
+                List<string> inactiveCprs = new List<string>();
+
+                // find inactive users from employee group
+                foreach (string key in allEmployees.Keys)
+                {
+                    if (!activeCprs.Contains(key))
+                    {
+                        inactiveCprs.Add(key);
+                    }
+                }
 
                 // send active affiliations to OS2skoledata
                 oS2skoledataService.SendAffiliations(activeAffiliationsRequests);
 
-                // update group if configured
-                activeDirectoryService.handleGroup(activeAffiliationsRequests.Select(a => a.Cpr).ToList());
+                // update groups if configured
+                activeDirectoryService.handleGroup(activeCprs, activeEmployeesSecurityGroupDN, "activeEmployeesSecurityGroup");
+                activeDirectoryService.handleGroup(inactiveCprs, inactiveEmployeesSecurityGroupDN, "inactiveEmployeesSecurityGroupDN");
 
                 stopWatch.Stop();
                 logger.LogDebug($"Finsihed executing FullSyncJob in {stopWatch.ElapsedMilliseconds / 1000} seconds");
