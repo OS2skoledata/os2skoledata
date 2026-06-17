@@ -3,8 +3,10 @@ package dk.digitalidentity.os2skoledata.controller.rest;
 import java.util.ArrayList;
 import java.util.List;
 
-import javax.persistence.criteria.Predicate;
-import javax.validation.Valid;
+import dk.digitalidentity.os2skoledata.dao.model.enums.EntityType;
+import dk.digitalidentity.os2skoledata.service.AuditDiffService;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.validation.Valid;
 
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionModificationHistoryOffset;
@@ -14,7 +16,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.jpa.datatables.mapping.DataTablesInput;
 import org.springframework.data.jpa.datatables.mapping.DataTablesOutput;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.BindingResult;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -40,6 +45,20 @@ public class ModificationHistoryRestController {
 	@Autowired
 	private InstitutionService institutionService;
 
+	@Autowired
+	private AuditDiffService auditDiffService;
+
+	@PostMapping("/rest/modificationhistory/list/all")
+	public DataTablesOutput<GridModificationHistory> listAll(@Valid @RequestBody DataTablesInput input, BindingResult bindingResult) {
+		if (bindingResult.hasErrors()) {
+			DataTablesOutput<GridModificationHistory> error = new DataTablesOutput<>();
+			error.setError(bindingResult.toString());
+			return error;
+		}
+
+		return modificationHistoryDatatableDao.findAll(input);
+	}
+
 	@SuppressWarnings("unchecked")
 	@PostMapping("/rest/modificationhistory/list/{clientId}")
 	public DataTablesOutput<GridModificationHistory> list(@Valid @RequestBody DataTablesInput input, @PathVariable("clientId") long clientId, BindingResult bindingResult) {
@@ -59,7 +78,7 @@ public class ModificationHistoryRestController {
 			return new DataTablesOutput<>();
 		}
 
-		List<DBInstitution> institutions = institutionService.findAll();
+		List<DBInstitution> institutions = institutionService.findAllActive();
 		Specification<GridModificationHistory> specification = (Specification<GridModificationHistory>) (root, query, criteriaBuilder) -> {
 			List<Predicate> predicates = new ArrayList<>();
 			for (DBInstitution institution : institutions) {
@@ -92,5 +111,17 @@ public class ModificationHistoryRestController {
 		output.setData((List<GridModificationHistory>) result.getData());
 
 		return output;
+	}
+
+	@GetMapping("/rest/modificationhistory/diff/{entityId}/{entityType}/{rev}")
+	public ResponseEntity<AuditDiffService.DiffResult> diff(
+			@PathVariable("entityId") long entityId,
+			@PathVariable("entityType") EntityType entityType,
+			@PathVariable("rev") long rev) {
+		AuditDiffService.DiffResult result = auditDiffService.getDiff(entityId, entityType, rev);
+		if (result == null) {
+			return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+		}
+		return new ResponseEntity<>(result, HttpStatus.OK);
 	}
 }

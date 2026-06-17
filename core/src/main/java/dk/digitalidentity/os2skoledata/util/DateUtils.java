@@ -6,7 +6,7 @@ import javax.xml.datatype.XMLGregorianCalendar;
 
 public class DateUtils {
 
-	public static LocalDate fromXMLGregorianCalendar(XMLGregorianCalendar date) {
+	public static LocalDate fromXMLGregorianCalendar(javax.xml.datatype.XMLGregorianCalendar date) {
 		if (date == null) {
 			return null;
 		}

@@ -5,8 +5,10 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
+import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
@@ -21,7 +23,7 @@ public class SSLConfiguration {
 	}
 
 	private static void allowUntrustedCert() throws NoSuchAlgorithmException, KeyManagementException {
-		TrustManager[] trustAllCerts = new TrustManager[] {
+		javax.net.ssl.TrustManager[] trustAllCerts = new TrustManager[] {
 			new X509TrustManager() {
 
 				@Override
@@ -48,8 +50,8 @@ public class SSLConfiguration {
 
 	private static void allowAllHostnames() {
 		HttpsURLConnection.setDefaultHostnameVerifier(
-			new javax.net.ssl.HostnameVerifier() {
-				public boolean verify(String hostname, javax.net.ssl.SSLSession sslSession) {
+			new HostnameVerifier() {
+				public boolean verify(String hostname, SSLSession sslSession) {
 					return true;
 				}
 			}

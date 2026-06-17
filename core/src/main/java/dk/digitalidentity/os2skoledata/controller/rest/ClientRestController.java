@@ -2,7 +2,7 @@ package dk.digitalidentity.os2skoledata.controller.rest;
 
 import java.util.UUID;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import dk.digitalidentity.os2skoledata.security.RequireAdministratorRole;

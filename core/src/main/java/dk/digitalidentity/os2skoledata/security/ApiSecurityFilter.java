@@ -4,14 +4,14 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.Filter;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.FilterConfig;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.ServletRequest;
+import jakarta.servlet.ServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
 import dk.digitalidentity.samlmodule.model.SamlGrantedAuthority;
@@ -58,13 +58,19 @@ public class ApiSecurityFilter implements Filter {
 			switch (client.getAccessRole()) {
 				case SYNC_API_ACCESS:
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.SYNC_API_ACCESS.toString()));
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.LOOKUP_ACCESS.toString()));
 					break;
 				case PASSWORD_ACCESS:
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.SYNC_API_ACCESS.toString()));
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.PASSWORD_ACCESS.toString()));
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.LOOKUP_ACCESS.toString()));
 					break;
 				case IMPORT_ACCESS:
 					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.IMPORT_ACCESS.toString()));
+					break;
+				case LOOKUP_ACCESS:
+					authorities.add(new SamlGrantedAuthority(ROLE_API + ClientAccessRole.LOOKUP_ACCESS.toString()));
+					break;
 			}
 
 			if (authorities.isEmpty()) {

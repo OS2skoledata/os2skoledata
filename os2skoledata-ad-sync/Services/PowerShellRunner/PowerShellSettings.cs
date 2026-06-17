@@ -4,6 +4,7 @@
     {
         public string createPowerShellScript { get; set; }
         public string DisablePowerShellScript { get; set; }
+        public string UpdatePowerShellScript { get; set; }
         public bool DryRun { get; set; }
         public bool UserAsJSON { get; set; }
     }

@@ -8,7 +8,7 @@ import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
 import dk.digitalidentity.os2skoledata.security.RequireParent;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
-import dk.digitalidentity.os2skoledata.service.ADPasswordService;
+import dk.digitalidentity.os2skoledata.service.PasswordSyncService;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.PasswordSettingService;
@@ -30,7 +30,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -178,7 +178,7 @@ public class ParentsChangePasswordOnStudentsController {
 		try {
 			SetPasswordResponse.PasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), student.getCpr(), form.getPassword());
 
-			if (ADPasswordService.isCritical(adPasswordStatus)) {
+			if (PasswordSyncService.isCritical(adPasswordStatus)) {
 				if (configuration.getStudentAdministration().isIndskolingSpecialEnabled() && Objects.equals(passwordSettingService.findGradeGroup(form.getUsername()), GradeGroup.YOUNGEST)) {
 					model.addAttribute("technicalError", true);
 					model.addAttribute("passwordWords", passwordSettingService.getPasswordWords());

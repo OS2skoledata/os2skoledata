@@ -6,7 +6,12 @@ CREATE OR REPLACE VIEW view_datatables_modification_history AS SELECT
     m.institution_name,
     m.institution_id,
     m.entity_type,
+    m.entity_id,
     m.entity_name,
     m.event_type,
-    m.groups
+    m.groups,
+    m.rev,
+    m.uni_id,
+    m.username,
+    m.entity_role
   FROM modification_history m

@@ -31,6 +31,9 @@ public interface InstitutionPersonDao extends JpaRepository<DBInstitutionPerson,
 	List<DBInstitutionPerson> findByStudentNotNullAndDeletedFalseAndInstitution(DBInstitution institution);
 	List<DBInstitutionPerson> findByPersonCivilRegistrationNumberAndInstitution(String civilRegistrationNumber, DBInstitution institution);
 	List<DBInstitutionPerson> findByPrimaryInstitutionTrue();
+	List<DBInstitutionPerson> findByUniLoginUserId(String userId);
+	List<DBInstitutionPerson> findByDeletedFalseAndApiOnlyFalseAndInstitutionIdIn(List<Long> institutionIds);
+	List<DBInstitutionPerson> findByDeletedFalseAndApiOnlyFalseAndStilCreatedAfter(LocalDateTime after);
 
 	// search in all institutions
 	@Query("SELECT ip FROM DBInstitutionPerson ip JOIN ip.person p WHERE " +

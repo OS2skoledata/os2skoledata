@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header (datatables = true, datepicker = true)" />
+<head th:replace="~{fragments/header :: header (datatables = true, datepicker = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 		<div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar (page = 'ghosts')" />
+			<div th:replace="~{fragments/topbar :: topbar (page = 'ghosts')}" />
 
 			<div class="wrapper wrapper-content">
 				<div class="row">
@@ -58,10 +58,10 @@
 		</div>
 	</div>
 
-	<div th:replace="ghosts/fragments/ghostModal :: modal" />
+	<div th:replace="~{ghosts/fragments/ghostModal :: modal}" />
 
-	<div th:replace="fragments/footer :: scripts (datatables = true, datepicker = true)" />
-	<div th:replace="ghosts/fragments/ghostModal :: scripts" />
+	<div th:replace="~{fragments/footer :: scripts (datatables = true, datepicker = true)}" />
+	<div th:replace="~{ghosts/fragments/ghostModal :: scripts}" />
 
 	<script th:inline="javascript">
 		/*<![CDATA[*/

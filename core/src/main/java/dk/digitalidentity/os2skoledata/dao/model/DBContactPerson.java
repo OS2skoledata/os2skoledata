@@ -2,24 +2,23 @@ package dk.digitalidentity.os2skoledata.dao.model;
 
 import java.util.Objects;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.ContactPersonFullMyndighed;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
 
-import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBRelationType;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.ContactPersonFullMyndighed;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -40,10 +39,12 @@ public class DBContactPerson {
 
 	@Column
 	private Integer accessLevel;
-	
+
+	// no longer in STIL payload for WS17 v7
 	@Column
 	private String cvr;
 
+	// no longer in STIL payload for WS17 v7
 	@Column
 	private String pnr;
 	
@@ -54,6 +55,7 @@ public class DBContactPerson {
 	@Column
 	private boolean childCustody;
 
+	// no longer in STIL payload for WS17 v7
 	@OneToOne(fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
 	@JoinColumn(name = "unilogin_id", nullable = true)
 	private DBUniLogin uniLogin;
@@ -71,21 +73,8 @@ public class DBContactPerson {
 			return false;
 		}
 
-		if ((this.accessLevel == null && contactPerson.getAccessLevel() != null) ||
-			(this.accessLevel != null && contactPerson.getAccessLevel() == null) ||
-			((this.accessLevel != null && contactPerson.getAccessLevel() != null && (this.accessLevel.intValue() != contactPerson.getAccessLevel().intValue())))) {
-			
+		if (!Objects.equals(this.accessLevel, contactPerson.getAccessLevel())) {
 			log.debug("DBContactPerson: Not equals on 'accessLevel' for " + this.id + " local: " + this.accessLevel + " stil: " + contactPerson.getAccessLevel());
-			return false;
-		}
-
-		if (!Objects.equals(this.cvr, contactPerson.getCvr())) {
-			log.debug("DBContactPerson: Not equals on 'cvr' for " + this.id);
-			return false;
-		}
-
-		if (!Objects.equals(this.pnr, contactPerson.getPnr())) {
-			log.debug("DBContactPerson: Not equals on 'pnr' for " + this.id);
 			return false;
 		}
 
@@ -109,13 +98,6 @@ public class DBContactPerson {
 			return false;
 		}
 
-		if ((this.uniLogin == null && contactPerson.getUNILogin() != null) ||
-			(this.uniLogin != null && !this.uniLogin.apiEquals(contactPerson.getUNILogin()))) {
-
-			log.debug("DBContactPerson: Not equals on 'uniLogin' for " + this.id);
-			return false;
-		}
-
 		return true;
 	}
 
@@ -125,10 +107,8 @@ public class DBContactPerson {
 		}
 		
 		this.accessLevel = contactPerson.getAccessLevel();
-		this.cvr = contactPerson.getCvr();
 		this.childCustody = contactPerson.isChildCustody();
-		this.pnr = contactPerson.getPnr();
-		
+
 		if (contactPerson.getRelation() != null) {
 			this.relation = DBRelationType.from(contactPerson.getRelation());
 		}
@@ -142,14 +122,6 @@ public class DBContactPerson {
 		
 		if (this.person != null) {
 			this.person.copyFields(contactPerson.getPerson(), false);
-		}
-
-		if (this.uniLogin == null && contactPerson.getUNILogin() != null) {
-			this.uniLogin = new DBUniLogin();
-		}
-		
-		if (this.uniLogin != null) {
-			this.uniLogin.copyFields(contactPerson.getUNILogin());
 		}
 	}
 }

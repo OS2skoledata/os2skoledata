@@ -4,26 +4,26 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.OneToMany;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.PersonFullMyndighed;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBGender;
 import dk.digitalidentity.os2skoledata.util.DateUtils;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.PersonFullMyndighed;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -71,9 +71,10 @@ public class DBPerson {
 	
 	@Column
 	private String photoId;
-	
+
+	// no longer in STIL payload for WS17 v7
 	@Column
-	private int verificationLevel;
+	private int verificationLevel = 0;
 	
 	@Getter(AccessLevel.NONE)
 	@Setter(AccessLevel.NONE)
@@ -137,11 +138,6 @@ public class DBPerson {
 		
 		if (!Objects.equals(this.birthDate, DateUtils.fromXMLGregorianCalendar(person.getBirthDate()))) {
 			log.debug("DBPerson: Not equals on 'birthDate' for " + this.id);
-			return false;
-		}
-
-		if (!Objects.equals(this.verificationLevel, person.getVerificationLevel())) {
-			log.debug("DBPerson: Not equals on 'verificationLevel' for " + this.id);
 			return false;
 		}
 
@@ -209,7 +205,7 @@ public class DBPerson {
 		this.familyName = person.getFamilyName();
 		this.firstName = person.getFirstName();
 		this._protected = person.isProtected();
-		this.verificationLevel = person.getVerificationLevel();
+		this.verificationLevel = 0;
 
 		if (!requiredOnly) {
 			if (person.getGender() != null) {
@@ -225,32 +221,40 @@ public class DBPerson {
 				this.address = new DBAddress();
 			}
 
-			if (this.address != null) {
+			if (person.getAddress() != null) {
+				if (this.address == null) {
+					this.address = new DBAddress();
+				}
 				this.address.copyFields(person.getAddress());
+			} else {
+				this.address = null;
 			}
 
-			if (this.homePhoneNumber == null && person.getHomePhoneNumber() != null) {
-				this.homePhoneNumber = new DBPhoneNumber();
-			}
-
-			if (this.homePhoneNumber != null) {
+			if (person.getHomePhoneNumber() != null) {
+				if (this.homePhoneNumber == null) {
+					this.homePhoneNumber = new DBPhoneNumber();
+				}
 				this.homePhoneNumber.copyFields(person.getHomePhoneNumber());
+			} else {
+				this.homePhoneNumber = null;
 			}
 
-			if (this.mobilePhoneNumber == null && person.getMobilePhoneNumber() != null) {
-				this.mobilePhoneNumber = new DBPhoneNumber();
-			}
-
-			if (this.mobilePhoneNumber != null) {
+			if (person.getMobilePhoneNumber() != null) {
+				if (this.mobilePhoneNumber == null) {
+					this.mobilePhoneNumber = new DBPhoneNumber();
+				}
 				this.mobilePhoneNumber.copyFields(person.getMobilePhoneNumber());
+			} else {
+				this.mobilePhoneNumber = null;
 			}
 
-			if (this.workPhoneNumber == null && person.getWorkPhoneNumber() != null) {
-				this.workPhoneNumber = new DBPhoneNumber();
-			}
-
-			if (this.workPhoneNumber != null) {
+			if (person.getWorkPhoneNumber() != null) {
+				if (this.workPhoneNumber == null) {
+					this.workPhoneNumber = new DBPhoneNumber();
+				}
 				this.workPhoneNumber.copyFields(person.getWorkPhoneNumber());
+			} else {
+				this.workPhoneNumber = null;
 			}
 		}
 	}

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head th:replace="~{fragments/header :: header (datatables = false, checkbox = false)}" />
+<body class="top-navigation">
+<div id="wrapper">
+    <div id="page-wrapper" class="gray-bg">
+        <div th:replace="~{fragments/topbar :: topbar (page = 'mailreports')}" />
+
+        <div class="wrapper wrapper-content">
+            <div class="row">
+
+                <div class="col-lg-12">
+                    <div class="ibox">
+                        <div class="ibox-title">
+                            <h5><em class="fa fa-envelope"></em> &nbsp; <span th:text="#{html.mailreports.header}"></span></h5>
+                        </div>
+
+                        <div class="ibox-content">
+                            <p th:text="#{html.mailreports.explainer}"></p>
+
+                            <h4 th:text="#{html.mailreports.dailycreated.header}"></h4>
+                            <p th:text="#{html.mailreports.dailycreated.explainer}"></p>
+
+                            <div class="form-group row">
+                                <label class="col-lg-2 col-form-label" for="dailyCreatedEmails" th:text="#{html.mailreports.dailycreated.emails}"></label>
+                                <div class="col-lg-6">
+                                    <input id="dailyCreatedEmails" type="text" class="form-control" th:value="${dailyCreatedEmails}" />
+                                    <small class="form-text text-muted" th:text="#{html.mailreports.dailycreated.emails.help}"></small>
+                                </div>
+                            </div>
+
+                            <button id="saveDailyCreatedBtn" type="button" class="btn btn-primary" th:text="#{html.control.button.save}"></button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div th:replace="~{fragments/footer :: scripts (datatables = false, checkbox = false)}" />
+<script th:inline="javascript">
+    /*<![CDATA[*/
+
+    /*[+
+        var successMessage = [[#{html.messages.saved}]];
+        var errorMessage = [[#{html.messages.error}]];
+    +]*/
+
+    var token = $("meta[name='_csrf']").attr("content");
+
+    $(document).ready(function() {
+        document.getElementById("saveDailyCreatedBtn").addEventListener("click", function() {
+            var emails = document.getElementById("dailyCreatedEmails").value;
+
+            $.ajax({
+                contentType: 'application/json',
+                url: "/rest/mailreports/dailycreated/save",
+                method: "POST",
+                headers: {
+                    'X-CSRF-TOKEN': token
+                },
+                data: JSON.stringify({ "emails": emails }),
+                error: function() {
+                    toastr.error(errorMessage);
+                },
+                success: function() {
+                    toastr.success(successMessage);
+                }
+            });
+        });
+    });
+
+    /*]]>*/
+</script>
+</body>
+</html>

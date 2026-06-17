@@ -70,8 +70,8 @@ public class PasswordSettingService {
 			try {
 				return passwordChangeQueueService.encryptPassword(pw);
 			}
-			catch (NoSuchPaddingException | NoSuchAlgorithmException | InvalidKeyException | UnsupportedEncodingException |
-					BadPaddingException | IllegalBlockSizeException | InvalidAlgorithmParameterException e) {
+			catch (NoSuchPaddingException | IllegalBlockSizeException | BadPaddingException | NoSuchAlgorithmException | InvalidKeyException | UnsupportedEncodingException |
+					InvalidAlgorithmParameterException e) {
 				log.error("Failed to encrypt generated indskoling password");
 			}
 		}

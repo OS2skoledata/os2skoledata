@@ -1,6 +1,6 @@
 package dk.digitalidentity.os2skoledata.dao.model.enums;
 
-import https.unilogin_dk.data.ImportGroupType;
+import dk.stil.brugerdatabasen.common.v3.ImportGroupType;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

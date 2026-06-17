@@ -41,7 +41,7 @@ public class PrimaryInstitutionRestController {
 	@GetMapping("/rest/institution/primary/institutions")
 	public ResponseEntity<List<InstitutionDTO>> getInstitutionsForUser(@RequestParam String username) {
 		try {
-			List<DBInstitutionPerson> institutionPersons = institutionPersonService.findByUsername(username);
+			List<DBInstitutionPerson> institutionPersons = institutionPersonService.findByUsernameAndDeletedFalse(username);
 
 			if (institutionPersons == null || institutionPersons.isEmpty()) {
 				return ResponseEntity.notFound().build();
@@ -70,7 +70,7 @@ public class PrimaryInstitutionRestController {
 				return ResponseEntity.badRequest().build();
 			}
 
-			List<DBInstitutionPerson> institutionPersons = institutionPersonService.findByUsername(request.username());
+			List<DBInstitutionPerson> institutionPersons = institutionPersonService.findByUsernameAndDeletedFalse(request.username());
 
 			if (institutionPersons == null || institutionPersons.isEmpty()) {
 				return ResponseEntity.notFound().build();

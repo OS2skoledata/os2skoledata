@@ -158,15 +158,27 @@ public class InstitutionPersonService {
 		return institutionPersonDao.findByPersonCivilRegistrationNumberAndInstitution(civilRegistrationNumber, institution);
 	}
 
+	public List<DBInstitutionPerson> findByUniLoginUserId(String userId) {
+		return institutionPersonDao.findByUniLoginUserId(userId);
+	}
+
+	public List<DBInstitutionPerson> findAllNotDeletedNotApiOnlyByInstitutionIn(List<Long> institutionIds) {
+		return institutionPersonDao.findByDeletedFalseAndApiOnlyFalseAndInstitutionIdIn(institutionIds);
+	}
+
+	public List<DBInstitutionPerson> findCreatedAfter(LocalDateTime after) {
+		return institutionPersonDao.findByDeletedFalseAndApiOnlyFalseAndStilCreatedAfter(after);
+	}
+
 	public PersonRole findGlobalRole(DBInstitutionPerson person, List<DBInstitutionPerson> matchingPeople) {
-		if (person.getEmployee() != null) {
-			return PersonRole.EMPLOYEE;
+		if (person.getStudent() != null) {
+			return PersonRole.STUDENT;
 		}
 
-		if (matchingPeople.stream().anyMatch(p -> p.getEmployee() != null)) {
-			return PersonRole.EMPLOYEE;
-		} else if (matchingPeople.stream().anyMatch(p -> p.getStudent() != null)) {
+		if (matchingPeople.stream().anyMatch(p -> p.getStudent() != null)) {
 			return PersonRole.STUDENT;
+		} else if (matchingPeople.stream().anyMatch(p -> p.getEmployee() != null)) {
+			return PersonRole.EMPLOYEE;
 		} else if (matchingPeople.stream().anyMatch(p -> p.getExtern() != null)) {
 			return PersonRole.EXTERNAL;
 		}
@@ -481,7 +493,7 @@ public class InstitutionPersonService {
 		return null;
 	}
 
-	public SetPasswordResponse.PasswordStatus changePassword(String username, String cpr, String newPassword) throws InvalidAlgorithmParameterException, NoSuchPaddingException, UnsupportedEncodingException, IllegalBlockSizeException, NoSuchAlgorithmException, BadPaddingException, InvalidKeyException {
+	public SetPasswordResponse.PasswordStatus changePassword(String username, String cpr, String newPassword) throws InvalidAlgorithmParameterException, UnsupportedEncodingException, NoSuchAlgorithmException, InvalidKeyException, NoSuchPaddingException, IllegalBlockSizeException, BadPaddingException {
 		SetPasswordResponse.PasswordStatus adPasswordStatus = SetPasswordResponse.PasswordStatus.INSUFFICIENT_PERMISSION;
 		if (configuration.getStudentAdministration().isEnabled() && !configuration.getStudentAdministration().isClassListsOnly() && StringUtils.hasLength(username)) {
 			adPasswordStatus = passwordChangeQueueService.attemptPasswordChangeFromUI(username, cpr, newPassword);
@@ -771,7 +783,7 @@ public class InstitutionPersonService {
 		for (DBInstitutionPerson student : students) {
 			List<String> groupIds = student.getStudent().getGroupIds().stream().map(DBStudentGroupId::getGroupId).collect(Collectors.toList());
 			if (student.getStudent().getMainGroupId().equals(group.getGroupId()) || groupIds.contains(group.getGroupId())) {
-				if (withPassword) {
+				if (withPassword && configuration.getStudentAdministration().isSavePasswordInDB()) {
 					result.add(new PrintStudentDTO(student, cprPasswordMappingService.getDecryptedPassword(student.getPerson().getCivilRegistrationNumber())));
 				} else {
 					result.add(new PrintStudentDTO(student, null));

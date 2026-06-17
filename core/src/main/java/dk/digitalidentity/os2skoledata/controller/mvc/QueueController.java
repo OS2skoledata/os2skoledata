@@ -1,9 +1,13 @@
 package dk.digitalidentity.os2skoledata.controller.mvc;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClientAccessRole;
+import dk.digitalidentity.os2skoledata.dao.model.enums.EntityType;
+import dk.digitalidentity.os2skoledata.service.model.EventType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -36,6 +40,18 @@ public class QueueController {
 				.filter(c -> !c.getAccessRole().equals(ClientAccessRole.IMPORT_ACCESS))
 				.map(c -> new ClientRecord(c.getId(), c.getName())).collect(Collectors.toList());
 		model.addAttribute("clients", clients);
+
+		Map<String, String> entityTypeLabels = new HashMap<>();
+		for (EntityType type : EntityType.values()) {
+			entityTypeLabels.put(type.name(), type.getMessage());
+		}
+		model.addAttribute("entityTypeLabels", entityTypeLabels);
+
+		Map<String, String> eventTypeLabels = new HashMap<>();
+		for (EventType type : EventType.values()) {
+			eventTypeLabels.put(type.name(), type.getMessage());
+		}
+		model.addAttribute("eventTypeLabels", eventTypeLabels);
 
 		return "queue/list";
 	}

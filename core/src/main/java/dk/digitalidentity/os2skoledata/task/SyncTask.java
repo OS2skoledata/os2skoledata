@@ -1,6 +1,8 @@
 package dk.digitalidentity.os2skoledata.task;
 
 import dk.digitalidentity.os2skoledata.config.modules.InstitutionDTO;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.CprFilter;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.FiltreFuld;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,8 +39,13 @@ public class SyncTask {
 
 		syncService.deleteInstitutions(institutionDTOList);
 
+		FiltreFuld filters = new FiltreFuld();
+		CprFilter cprFilter = new CprFilter();
+		cprFilter.setInkluderCpr(true);
+		filters.setCprFilter(cprFilter);
+
 		for (InstitutionDTO institutionDTO : institutionDTOList) {
-			syncService.sync(institutionDTO);
+			syncService.sync(institutionDTO, filters);
 		}
 
 		log.info("STIL synchronization: Done");

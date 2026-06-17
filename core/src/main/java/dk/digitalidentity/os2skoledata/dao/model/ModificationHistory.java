@@ -3,16 +3,16 @@ package dk.digitalidentity.os2skoledata.dao.model;
 import java.util.Date;
 import java.util.List;
 
-import javax.persistence.Column;
-import javax.persistence.Convert;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Temporal;
-import javax.persistence.TemporalType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Temporal;
+import jakarta.persistence.TemporalType;
 
 import org.hibernate.annotations.CreationTimestamp;
 
@@ -55,6 +55,18 @@ public class ModificationHistory {
 
 	@Column
 	private String institutionName;
+
+	@Column
+	private long rev;
+
+	@Column
+	private String uniId;
+
+	@Column
+	private String username;
+
+	@Column
+	private String entityRole;
 
 	// only for persons. List of groups person is member of.
 	@Column

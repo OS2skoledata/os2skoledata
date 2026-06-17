@@ -8,19 +8,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.OneToMany;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.common.Group;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.InstitutionFullMyndighed;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
@@ -30,8 +32,6 @@ import org.springframework.data.annotation.LastModifiedDate;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
-import https.unilogin_dk.data.Group;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -54,7 +54,6 @@ public class DBInstitution {
 
 	@Column
 	@JsonFormat(pattern="yyyy-MM-dd HH:mm:ss")
-	@LastModifiedDate
 	private LocalDateTime lastModified;
 
 	@Column
@@ -161,14 +160,19 @@ public class DBInstitution {
 			return false;
 		}
 		else {
-			List<DBGroup> existingGroups = this.groups;
+			List<DBGroup> existingGroups = this.groups.stream().filter(g -> !g.isDeleted()).collect(Collectors.toList());
 			List<Group> stilGroups = other.getGroup();
-			
+
+			if (existingGroups.size() != stilGroups.size()) {
+				log.debug("DBInstitution: Not equals on 'groups' for " + this.id + " different collection size.");
+				return false;
+			}
+
 			if (existingGroups.stream().filter(g1 -> stilGroups.stream().noneMatch(g2 -> g2.getGroupId().equals(g1.getGroupId()))).findAny().isPresent()) {
 				log.debug("DBInstitution: Not equals on 'groups' for " + this.id);
 				return false;
 			}
-			
+
 			if (stilGroups.stream().filter(g1 -> existingGroups.stream().noneMatch(g2 -> g2.getGroupId().equals(g1.getGroupId()))).findAny().isPresent()) {
 				log.debug("DBInstitution: Not equals on 'groups' for " + this.id);
 				return false;
@@ -177,7 +181,6 @@ public class DBInstitution {
 			// if all the groupIds match on both list we check if the group fields are different
 			for (DBGroup existingGroup : existingGroups) {
 				var stilGroup = stilGroups.stream().filter(sg -> sg.getGroupId().equals(existingGroup.getGroupId())).findAny();
-				
 				if (stilGroup.isPresent() && !existingGroup.apiEquals(stilGroup.get())) {
 					log.debug("DBInstitution: Not equals on 'groups' for " + this.id + " group: " + existingGroup.getGroupId() + " has been modified.");
 					return false;

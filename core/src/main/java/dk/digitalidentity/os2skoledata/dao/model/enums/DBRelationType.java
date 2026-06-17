@@ -1,6 +1,6 @@
 package dk.digitalidentity.os2skoledata.dao.model.enums;
 
-import https.unilogin.Kontaktpersonsrelation;
+import dk.stil.brugerdatabasen.common.v3.Kontaktpersonsrelation;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

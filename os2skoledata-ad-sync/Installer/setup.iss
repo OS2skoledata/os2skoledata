@@ -4,8 +4,8 @@
 #define AppPublisher "Digital Identity"
 #define AppURL "http://digital-identity.dk/"
 #define ExeName "os2skoledata-ad-sync.exe"
-#define AppVersion "1.32.1"
-#define AppVersionOut "1.32.1"
+#define AppVersion "1.34.2"
+#define AppVersionOut "1.34.2"
 
 [Setup]
 AppId={#AppId}

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import dk.digitalidentity.os2skoledata.dao.model.Client;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.ClientService;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +44,7 @@ import dk.digitalidentity.os2skoledata.service.InstitutionService;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class SqlSyncApi {
 
 	@Autowired
@@ -144,10 +146,14 @@ public class SqlSyncApi {
 				List<ContactPersonFullRecord> contactPersons = new ArrayList<>();
 				for (DBContactPerson contactPerson : institutionPerson.getStudent().getContactPersons()) {
 
-					UniLoginFullRecord contactPersonUniLogin = new UniLoginFullRecord(
-							contactPerson.getUniLogin().getCivilRegistrationNumber(),
-							contactPerson.getUniLogin().getInitialPassword(), contactPerson.getUniLogin().getName(),
-							contactPerson.getUniLogin().getPasswordState(), contactPerson.getUniLogin().getUserId());
+					UniLoginFullRecord contactPersonUniLogin = null;
+					if (contactPerson.getUniLogin() != null) {
+						contactPersonUniLogin = new UniLoginFullRecord(
+								contactPerson.getUniLogin().getCivilRegistrationNumber(),
+								contactPerson.getUniLogin().getInitialPassword(), contactPerson.getUniLogin().getName(),
+								contactPerson.getUniLogin().getPasswordState(), contactPerson.getUniLogin().getUserId());
+					}
+
 
 					PersonFullRecord pRecord = new PersonFullRecord(
 							institutionPerson.getId(),

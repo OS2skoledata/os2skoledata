@@ -10,14 +10,11 @@ import lombok.Setter;
 public class AuditWrapper {
 	private long id;
 	private EventType changeType;
-
-	public AuditWrapper(long id, EventType changeType) {
-		this.id = id;
-		this.changeType = changeType;
-	}
+	private long rev;
 
 	public AuditWrapper(ResultSet rs) throws SQLException {
 		id = rs.getLong("id");
+		this.rev = rs.getLong("rev");
 		String revType = rs.getString("revtype");
 
 		switch (revType) {

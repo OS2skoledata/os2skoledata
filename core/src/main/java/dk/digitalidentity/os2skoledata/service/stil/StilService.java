@@ -3,18 +3,20 @@ package dk.digitalidentity.os2skoledata.service.stil;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
-import dk.digitalidentity.os2skoledata.service.ClientService;
 import dk.digitalidentity.os2skoledata.service.SettingService;
 import dk.digitalidentity.os2skoledata.service.YearChangeNotificationService;
-import https.wsieksport_unilogin_dk.eksport.ImportSource;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
-import https.wsieksport_unilogin_dk.ws.WsiEksportPortType;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.FiltreFuld;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.WsiEksportPortType;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.common.ImportSource;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.InstitutionFullMyndighed;
+import dk.stil.brugerdatabasen.common.v3.UdbydersystemIdType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Objects;
+
 @Slf4j
 @Service
 public class StilService {
@@ -29,15 +31,13 @@ public class StilService {
 	private SettingService settingService;
 
 	@Autowired
-	private ClientService clientService;
-
-	@Autowired
 	private YearChangeNotificationService yearChangeNotificationService;
 
 	public record InstitutionYearChangeDTO(InstitutionFullMyndighed institutionFullMyndighed, boolean yearChange) {}
-	public InstitutionYearChangeDTO getInstitution(String institutionCode) {
+	public InstitutionYearChangeDTO getInstitution(String institutionCode, FiltreFuld filtreFuld) {
 		try {
-			var response = stilService.eksporterXmlFuldMyndighed(configuration.getStilUsername(), configuration.getStilPassword(), institutionCode);
+
+			var response = stilService.eksporterXmlFuldMyndighed(institutionCode, filtreFuld, defaultUdbydersystemId());
 			boolean yearChange = false;
 
 			// for some reason there is more than one schoolYear
@@ -110,6 +110,29 @@ public class StilService {
 		}
 		settingImportSource.setValue(maxImportSourceSchoolYear);
 		settingService.save(settingImportSource);
+
+		// Update global school year if not set or if the received year is newer
+		String globalSchoolYear = settingService.getStringValueByKey(CustomerSetting.GLOBAL_SCHOOL_YEAR);
+		if (maxImportSourceSchoolYear != null) {
+			boolean shouldUpdate = false;
+
+			if (globalSchoolYear == null) {
+				shouldUpdate = true;
+			} else if (globalSchoolYear.length() > 4) {
+				try {
+					int globalYear = Integer.parseInt(globalSchoolYear.substring(0, 4));
+					shouldUpdate = maxSchoolYear > globalYear;
+				} catch (NumberFormatException e) {
+					log.warn("Could not parse GLOBAL_SCHOOL_YEAR value: {}", globalSchoolYear);
+					shouldUpdate = true;
+				}
+			}
+
+			if (shouldUpdate) {
+				settingService.setValueForKey(CustomerSetting.GLOBAL_SCHOOL_YEAR.toString(), maxImportSourceSchoolYear);
+				log.info("Updated GLOBAL_SCHOOL_YEAR from {} to {}", globalSchoolYear, maxImportSourceSchoolYear);
+			}
+		}
 	}
 
 	private void lockInstitution(String institutionCode) {
@@ -126,5 +149,11 @@ public class StilService {
 
 			settingService.save(lockedSetting);
 		}
+	}
+
+	public UdbydersystemIdType defaultUdbydersystemId() {
+		UdbydersystemIdType udbydersystemId = new UdbydersystemIdType();
+		udbydersystemId.setValue(configuration.getStilITSystemId());
+		return udbydersystemId;
 	}
 }

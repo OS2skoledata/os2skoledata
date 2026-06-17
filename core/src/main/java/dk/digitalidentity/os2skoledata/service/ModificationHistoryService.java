@@ -4,7 +4,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.stream.Collectors;
 
-import javax.transaction.Transactional;
+import jakarta.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -28,7 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class ModificationHistoryService {
 	private static final String maxQuery = "SELECT MAX(rev) FROM revinfo";
-	private static final String insertQuery = "INSERT INTO modification_history (`tts`,`entity_id`,`entity_type`,`entity_name`,`event_type`, `institution_id`, `institution_name`, `groups`) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+	private static final String insertQuery = "INSERT INTO modification_history (`tts`,`entity_id`,`entity_type`,`entity_name`,`event_type`, `institution_id`, `institution_name`, `groups`, `rev`, `uni_id`, `username`, `entity_role`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 	private static final String deleteQuery = "DELETE FROM modification_history WHERE tts < NOW() - INTERVAL ? DAY";
 	private static final String getHeadQuery = "SELECT IFNULL(MAX(id),0) FROM modification_history;";
 	
@@ -67,6 +67,7 @@ public class ModificationHistoryService {
 					modificationHistory.setTts(new Date());
 					modificationHistory.setEventType(institutionChange.getChangeType());
 					modificationHistory.setGroups(new ArrayList<>());
+					modificationHistory.setRev(institutionChange.getRev());
 
 					if (institution != null) {
 						modificationHistory.setEntityName(institution.getInstitutionName());
@@ -93,10 +94,25 @@ public class ModificationHistoryService {
 					modificationHistory.setTts(new Date());
 					modificationHistory.setEventType(institutionPersonChange.getChangeType());
 					modificationHistory.setGroups(new ArrayList<>());
+					modificationHistory.setRev(institutionPersonChange.getRev());
+
 
 					modificationHistory.setEntityName(DBPerson.getName(institutionPerson.getPerson()));
 					modificationHistory.setInstitutionId(institutionPerson.getInstitution().getId());
 					modificationHistory.setInstitutionName(institutionPerson.getInstitution().getInstitutionName());
+					modificationHistory.setUsername(institutionPerson.getUsername());
+
+					if (institutionPerson.getUniLogin() != null) {
+						modificationHistory.setUniId(institutionPerson.getUniLogin().getUserId());
+					}
+
+					if (institutionPerson.getStudent() != null) {
+						modificationHistory.setEntityRole("Elev");
+					} else if (institutionPerson.getEmployee() != null) {
+						modificationHistory.setEntityRole("Medarbejder");
+					} else if (institutionPerson.getExtern() != null) {
+						modificationHistory.setEntityRole("Ekstern");
+					}
 
 					if (institutionPerson.getEmployee() != null) {
 						modificationHistory.setGroups(institutionPerson.getEmployee().getGroupIds().stream()
@@ -132,6 +148,7 @@ public class ModificationHistoryService {
 					modificationHistory.setTts(new Date());
 					modificationHistory.setEventType(groupChange.getChangeType());
 					modificationHistory.setGroups(new ArrayList<>());
+					modificationHistory.setRev(groupChange.getRev());
 					
 					if (group != null) {
 						modificationHistory.setEntityName(group.getGroupName());
@@ -208,17 +225,21 @@ public class ModificationHistoryService {
 				modificationHistory.getEventType().toString(),
 				modificationHistory.getInstitutionId(),
 				modificationHistory.getInstitutionName(),
-				String.join(",", modificationHistory.getGroups()));
+				String.join(",", modificationHistory.getGroups()),
+				modificationHistory.getRev(),
+				modificationHistory.getUniId(),
+				modificationHistory.getUsername(),
+				modificationHistory.getEntityRole());
 	}
 
 	public int removeModificationHistoryOlderThan(int days) {
 		return jdbcTemplate.update(deleteQuery, days);
 	}
-	
+
 	private String getSelectSQL(String tableName) {
-		return "SELECT id, revtype FROM " + tableName + " WHERE " + tableName + ".rev > ? AND " + tableName + ".rev <= ?;";
+		return "SELECT id, revtype, rev FROM " + tableName + " WHERE " + tableName + ".rev > ? AND " + tableName + ".rev <= ?;";
 	}
-	
+
 	private void updateLatestRevisionNumber(Long revNumber) {
 		Setting setting = settingService.getByKey(CustomerSetting.LAST_READ_REVISION);
 		setting.setValue(Long.toString(revNumber));

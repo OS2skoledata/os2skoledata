@@ -16,7 +16,7 @@
 
                 <!-- Administration Dropdown (only for administrators) -->
                 <li sec:authorize="hasRole('ROLE_ADMINISTRATOR')" class="nav-item dropdown"
-                    th:classappend="${page != null and (#strings.startsWith(page, 'queue') or #strings.startsWith(page, 'client') or #strings.startsWith(page, 'institution') or #strings.startsWith(page, 'nonstil') or #strings.startsWith(page, 'teamadmin') or #strings.startsWith(page, 'config') or #strings.startsWith(page, 'ghosts'))} ? 'active' : ''">
+                    th:classappend="${page != null and (#strings.startsWith(page, 'queue') or #strings.startsWith(page, 'client') or #strings.startsWith(page, 'institution') or #strings.startsWith(page, 'nonstil') or #strings.startsWith(page, 'teamadmin') or #strings.startsWith(page, 'config') or #strings.startsWith(page, 'ghosts') or #strings.startsWith(page, 'mailreports'))} ? 'active' : ''">
                     <a class="nav-link dropdown-toggle" href="#" id="administrationDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                         <span th:text="#{html.navbar.administration}">Administration</span>
                     </a>
@@ -41,6 +41,9 @@
                         </a>
                         <a th:if="@{__${@OS2SkoleDataConfiguration.ghostAdministration.enabled}__}" class="dropdown-item" th:href="@{/ui/keepalive}">
                             <span th:text="#{html.navbar.ghosts}"></span>
+                        </a>
+                        <a class="dropdown-item" th:href="@{/ui/mailreports}">
+                            <span th:text="#{html.navbar.mailreports}"></span>
                         </a>
                     </div>
                 </li>

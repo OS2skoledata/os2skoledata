@@ -2,6 +2,7 @@ package dk.digitalidentity.os2skoledata.api;
 
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
 import lombok.extern.slf4j.Slf4j;
@@ -15,6 +16,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class PrimaryInstitutionApiController {
 
 	@Autowired

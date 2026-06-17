@@ -3,23 +3,23 @@ package dk.digitalidentity.os2skoledata.dao.model;
 import java.time.LocalDateTime;
 import java.util.Objects;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.InstitutionPersonFullMyndighed;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionPersonFullMyndighed;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -167,8 +167,8 @@ public class DBInstitutionPerson {
 			return false;
 		}
 
-		if ((this.uniLogin == null && other.getUNILogin() != null) ||
-			(this.uniLogin != null && !this.uniLogin.apiEquals(other.getUNILogin()))) {
+		if ((this.uniLogin == null && other.getPerson().getUserId() != null) ||
+			(this.uniLogin != null && !this.uniLogin.apiEquals(other.getPerson().getUserId()))) {
 			
 			log.debug("DBInstitutionPerson: Not equals on 'uniLogin' for " + this.id);
 			return false;
@@ -217,12 +217,12 @@ public class DBInstitutionPerson {
 			this.student.copyFields(institutionPerson.getStudent(), requiredOnly);
 		}
 
-		if (this.uniLogin == null && institutionPerson.getUNILogin() != null) {
+		if (this.uniLogin == null && institutionPerson.getPerson().getUserId() != null) {
 			this.uniLogin = new DBUniLogin();
 		}
 		
 		if (this.uniLogin != null) {
-			this.uniLogin.copyFields(institutionPerson.getUNILogin());
+			this.uniLogin.copyFields(institutionPerson.getPerson().getUserId());
 		}
 	}
 }

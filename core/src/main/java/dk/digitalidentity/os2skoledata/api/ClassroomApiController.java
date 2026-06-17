@@ -4,6 +4,7 @@ import dk.digitalidentity.os2skoledata.dao.model.ClassroomActionQueue;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClassroomAction;
 import dk.digitalidentity.os2skoledata.dao.model.enums.ClassroomActionStatus;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.service.ClassroomActionQueueService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import java.util.List;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class ClassroomApiController {
 
 	@Autowired

@@ -12,7 +12,8 @@ public enum CustomerSetting {
 	STIL_CHANGE_EMAIL(null),
 	AZURE_SCHEMA_ID(null),
 	PERFORM_YEAR_CHANGE_("false"),
-	PERFORM_YEAR_CHANGE_YEAR(null);
+	PERFORM_YEAR_CHANGE_YEAR(null),
+	DAILY_CREATED_REPORT_EMAILS(null);
 
 	private String defaultValue;
 

@@ -8,6 +8,7 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
         public string ZipFileName { get; set; } = "os2skoledata_apple_school_manager_upload.zip";
         public SFTP SFTP { get; set; }
         public bool MoreThanThreeInstructors { get; set; } = false;
+        public string StudentPasswordPolicy { get; set; } = ""; // allowed values: "", "4", "6", "8"
 
     }
 }

@@ -3,6 +3,7 @@ package dk.digitalidentity.os2skoledata.api;
 import dk.digitalidentity.os2skoledata.dao.model.Client;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.SettingService;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class LogApiController {
 
 	@Autowired

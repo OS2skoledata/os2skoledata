@@ -2,4 +2,5 @@
 2025.01.30 - 1.0.0 - Fejlrettelse der korrekt håndterer opdateringer
 2025.05.13 - 1.1.0 - Tilføjede reservedUsername og Primary til institutionPerson Tabellen 
 2025.05.13 - 1.1.1 - Bug fix + tilføj OS2skoledata ID
+2026.04.20 - 1.1.2 - Bug fix (slash efter api endpoint kald)
 

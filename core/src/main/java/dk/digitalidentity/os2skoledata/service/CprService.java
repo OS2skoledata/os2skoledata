@@ -5,6 +5,7 @@ import dk.digitalidentity.os2skoledata.service.model.CprLookupDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.AsyncResult;
@@ -70,7 +71,7 @@ public class CprService {
 		catch (RestClientResponseException ex) {
 			String responseBody = ex.getResponseBodyAsString();
 
-			if (ex.getRawStatusCode() == 404 && responseBody != null && responseBody.contains("PNR not found")) {
+			if (ex.getStatusCode().equals(HttpStatusCode.valueOf(404)) && responseBody != null && responseBody.contains("PNR not found")) {
 				log.warn("Person cpr does not exists in cpr-register: " + safeCprSubstring(cpr));
 				
 				CprLookupDTO dto = new CprLookupDTO();

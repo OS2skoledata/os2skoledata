@@ -1,7 +1,7 @@
 package dk.digitalidentity.os2skoledata.dao.model.enums;
 
 import dk.digitalidentity.os2skoledata.api.model.enums.PossibleImportSubrole;
-import https.unilogin.Elevrolle;
+import dk.stil.brugerdatabasen.common.v3.Elevrolle;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 

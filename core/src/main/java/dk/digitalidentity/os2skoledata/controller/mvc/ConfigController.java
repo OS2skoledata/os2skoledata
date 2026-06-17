@@ -73,7 +73,7 @@ public class ConfigController {
         }
 
         // password admin section
-        model.addAttribute("institutions", institutionService.findAll());
+        model.addAttribute("institutions", institutionService.findAllActive());
         model.addAttribute("passwordAdmins", passwordAdminService.getAll().stream().map(a -> new PasswordAdminDTO(a.getId(), a.getUsername(), a.getInstitutions().stream().map(DBInstitution::getInstitutionName).collect(Collectors.joining(", ")), a.isCreatedByClaim())).collect(Collectors.toList()));
 
         return "config";

@@ -52,7 +52,7 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             logger.LogDebug("Fetching institutions from OS2skoledata");
             using var httpClient = GetHttpClient();
 
-            var response = httpClient.GetAsync(new Uri(baseUri, "api/institutions/"));
+            var response = httpClient.GetAsync(new Uri(baseUri, "api/institutions"));
             response.Wait();
             response.Result.EnsureSuccessStatusCode();
             var responseString = response.Result.Content.ReadAsStringAsync();

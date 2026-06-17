@@ -62,6 +62,10 @@
 		<th:block th:if="${datepicker == true}">
 			<script th:src="@{/webjars/inspinia/2.9.3/js/plugins/datapicker/bootstrap-datepicker.js}"></script>
 		</th:block>
+
+		<th:block th:if="${diff == true}">
+			<script th:src="@{/js/jsondiffpatch.umd.js}"></script>
+		</th:block>
 	</div>
 
 </body>

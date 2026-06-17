@@ -22,6 +22,7 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
         string sftpUrl;
         string zipFileName;
         bool moreThanThreeInstructors;
+        string studentPasswordPolicy;
 
         public AppleSchoolManagerService(IServiceProvider sp) : base(sp)
         {
@@ -39,6 +40,7 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
             sftpUrl = settings.AppleSchoolManagerSettings.SFTP.Url;
             zipFileName = settings.AppleSchoolManagerSettings.ZipFileName;
             moreThanThreeInstructors = settings.AppleSchoolManagerSettings.MoreThanThreeInstructors;
+            studentPasswordPolicy = settings.AppleSchoolManagerSettings.StudentPasswordPolicy;
         }
 
         private string GenerateStudentsCsv(List<AppleUserDto> students)
@@ -68,7 +70,7 @@ namespace os2skoledata_apple_school_manager.Services.AppleSchoolManager
                 csv.WriteField(user.Level == null ? "" : user.Level.ToString());
                 csv.WriteField(user.Username + "@" + domain);
                 csv.WriteField(user.Username);
-                csv.WriteField("");
+                csv.WriteField(studentPasswordPolicy);
                 csv.WriteField("institution_" + user.PrimaryInstitutionId);
                 csv.NextRecord();
             }

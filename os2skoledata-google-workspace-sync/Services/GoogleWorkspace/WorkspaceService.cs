@@ -1361,6 +1361,8 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
             name = name.Replace(";", "");
             name = name.Replace("#", "");
             name = name.Replace("&", "");
+            name = name.Replace("(", "");
+            name = name.Replace(")", "");
             name = name.Replace("/", "");
             name = name.Replace("*", "_");
             name = name.Replace(".", "");
@@ -1565,6 +1567,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
                             logger.LogInformation($"Trying to add member with username {username} to folder with id {currentClass.CurrentYearGWFolderIdentifier}");
                             CreatePermission(currentClass.CurrentYearGWFolderIdentifier, username + "@" + domain, "fileOrganizer", "user", true);
                             addedUsernames.Add(username);
+
                             logger.LogInformation($"Added member with username {username} to folder with id {currentClass.CurrentYearGWFolderIdentifier}");
                         }
                     }
@@ -1649,7 +1652,7 @@ namespace os2skoledata_google_workspace_sync.Services.GoogleWorkspace
 
                 if (setFieldType.Equals(SetFieldType.GROUP_YEAR_FOLDER_WORKSPACE_ID))
                 {
-                    currentClass.CurrentYearGWFolderIdentifier = id;
+                    currentClass.CurrentYearGWFolderIdentifier = match.Id;
                 }
 
                 oS2skoledataService.SetFields(currentClass.DatabaseId, EntityType.GROUP, setFieldType, match.Id);

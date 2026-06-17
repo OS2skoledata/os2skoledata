@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 
 @Slf4j
@@ -37,12 +37,12 @@ public class ApiControllerAdvice {
         // Hvis de hellere vil have text/plain, man man også blot returnere en streng herfra.
         return new ResponseEntity<>(ErrorDTO.builder()
                 .timestamp(LocalDateTime.now())
-                .status(ex.getRawStatusCode())
+                .status(ex.getBody().getStatus())
                 .error(ex.getReason())
                 .path(request.getRequestURI())
                 .message(ex.getMessage())
                 .build(),
-                ex.getStatus());
+                ex.getStatusCode());
     }
 
 }

@@ -1,7 +1,7 @@
 package dk.digitalidentity.os2skoledata.task;
 
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
-import dk.digitalidentity.os2skoledata.service.ADPasswordService;
+import dk.digitalidentity.os2skoledata.service.PasswordSyncService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -17,7 +17,7 @@ public class SyncQueueCleanupTask {
 	private OS2SkoleDataConfiguration configuration;
 
 	@Autowired
-	private ADPasswordService adPasswordService;
+	private PasswordSyncService passwordSyncService;
 
 	// Nightly
 	@Scheduled(cron = "0 #{new java.util.Random().nextInt(55)} 1 * * ?")
@@ -25,7 +25,7 @@ public class SyncQueueCleanupTask {
 		if (configuration.getScheduled().isEnabled()) {
 			log.debug("Delete synchronized passwords from the queue");
 
-			adPasswordService.syncQueueCleanupTask();
+			passwordSyncService.syncQueueCleanupTask();
 		}
 	}
 }

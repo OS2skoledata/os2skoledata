@@ -263,8 +263,8 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
             }
             catch (Exception e)
             {
-                oS2skoledataService.ReportError(e.Message + "\n" + e.StackTrace);
                 logger.LogError(e, "Failed to execute FullSyncJob");
+                oS2skoledataService.ReportError(e.Message + "\n" + e.StackTrace);
             }
         }
 
@@ -456,8 +456,8 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 }
                 else
                 {
-                    oS2skoledataService.ReportError("Delta sync error:\n" + e.Message + "\n" + e.StackTrace);
                     logger.LogError(e, "Failed to execute DeltaSyncJob");
+                    oS2skoledataService.ReportError("Delta sync error:\n" + e.Message + "\n" + e.StackTrace);
                 }
             }
         }
@@ -538,16 +538,17 @@ namespace os2skoledata_ad_sync.Services.OS2skoledata
                 return;
             }
 
+            // is user excluded?
+            List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(user.CurrentInstitutionNumber);
+            bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
+            if (shouldBeExcluded)
+            {
+                logger.LogInformation($"Not performing delta sync on user with db id {user.DatabaseId}, excluded.");
+                return;
+            }
+
             if (!user.Deleted && create && entry == null)
             {
-                // should user be created?
-                List<string> excludedRoles = activeDirectoryService.GetExcludedRoles(user.CurrentInstitutionNumber);
-                bool shouldBeExcluded = activeDirectoryService.shouldBeExcluded(user, excludedRoles);
-                if (shouldBeExcluded)
-                {
-                    return;
-                }
-
                 // find available username and create
                 string username = null;
                 if (user.ReservedUsername != null && !activeDirectoryService.AccountExists(user.ReservedUsername))

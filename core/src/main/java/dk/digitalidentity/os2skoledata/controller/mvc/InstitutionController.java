@@ -20,10 +20,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
-import javax.validation.Valid;
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Size;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -47,7 +47,7 @@ public class InstitutionController {
 	record ListInstitutionDTO(String name, String number, boolean locked, boolean unlockPossible, boolean hasTooFewPeople, String tooFewPeopleErrorMessage) {}
 	@GetMapping("/ui/institutions")
 	public String list(Model model) {
-		List<DBInstitution> institutions = institutionService.findAll();
+		List<DBInstitution> institutions = institutionService.findAllActive();
 		Setting globalSetting = settingService.getByKey(CustomerSetting.GLOBAL_SCHOOL_YEAR.toString());
 		String globalSchoolYear = globalSetting == null ? "-1" : globalSetting.getValue();
 
@@ -79,7 +79,7 @@ public class InstitutionController {
 			return "redirect:/error";
 		}
 
-		List<DBInstitution> institutions = institutionService.findAll().stream().filter(i -> i.getType().equals(InstitutionType.SCHOOL)).collect(Collectors.toList());
+		List<DBInstitution> institutions = institutionService.findAllActive().stream().filter(i -> i.getType().equals(InstitutionType.SCHOOL)).collect(Collectors.toList());
 		model.addAttribute("institutions", institutions);
 
 		return "institutions/teamadmins";

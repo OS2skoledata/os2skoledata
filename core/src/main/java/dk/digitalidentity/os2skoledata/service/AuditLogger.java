@@ -2,7 +2,7 @@ package dk.digitalidentity.os2skoledata.service;
 
 import java.time.LocalDateTime;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import org.springframework.beans.factory.annotation.Autowired;

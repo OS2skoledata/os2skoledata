@@ -1,12 +1,14 @@
 package dk.digitalidentity.os2skoledata.api;
 
 import dk.digitalidentity.os2skoledata.api.model.enums.PersonRole;
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
 import dk.digitalidentity.os2skoledata.service.InstitutionService;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/apple")
+@RequireNormalAPIAccess
 public class AppleApiController {
 
 	@Autowired
@@ -43,6 +46,9 @@ public class AppleApiController {
 	@Autowired
 	private SettingService settingService;
 
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
 	private record AppleFullLoadDto(List<AppleInstitutionDto> institutions, List<AppleGroupDto> groups, List<AppleUserDto> students, List<AppleUserDto> staff, List<AppleRosterDto> rosters) {}
 	private record AppleInstitutionDto(long id, String name, boolean locked) {}
 	private record AppleGroupDto(long id, String stilId, String groupName, long institutionId, Set<String> teacherUniIds) {}
@@ -51,15 +57,38 @@ public class AppleApiController {
 	@GetMapping("/full")
 	public AppleFullLoadDto getAppleFullLoad() {
 		// filter out non stil institutions as they have no groups
-		List<DBInstitution> institutions = institutionService.findAllActive()
-				.stream()
-				.filter(i -> !i.isNonSTILInstitution())
+		List<DBInstitution> institutions;
+		List<DBInstitutionPerson> dbInstitutionPeople;
+		List<DBGroup> dbMainGroups;
+
+		if (configuration.isAsmSchoolsOnly()) {
+			institutions = institutionService.findAllActiveByType(InstitutionType.SCHOOL)
+					.stream()
+					.filter(i -> !i.isNonSTILInstitution())
+					.collect(Collectors.toList());
+
+			List<Long> institutionIds = institutions.stream().map(DBInstitution::getId).toList();
+			dbInstitutionPeople = institutionPersonService.findAllNotDeletedNotApiOnlyByInstitutionIn(institutionIds);
+			dbMainGroups = groupService.findAllNotDeletedMainGroupsByInstitutionIn(institutionIds);
+		} else {
+			institutions = institutionService.findAllActive()
+					.stream()
+					.filter(i -> !i.isNonSTILInstitution())
+					.collect(Collectors.toList());
+			dbInstitutionPeople = institutionPersonService.findAllNotDeleted()
+					.stream()
+					.filter(i -> !i.isApiOnly())
+					.collect(Collectors.toList());
+			dbMainGroups = groupService.findAllNotDeletedMainGroups();
+		}
+
+		Set<Long> validInstitutionIds = institutions.stream()
+				.map(DBInstitution::getId)
+				.collect(Collectors.toSet());
+
+		dbInstitutionPeople = dbInstitutionPeople.stream()
+				.filter(p -> validInstitutionIds.contains(p.getInstitution().getId()))
 				.collect(Collectors.toList());
-		List<DBInstitutionPerson> dbInstitutionPeople = institutionPersonService.findAllNotDeleted()
-				.stream()
-				.filter(i -> !i.isApiOnly())
-				.collect(Collectors.toList());
-		List<DBGroup> dbMainGroups = groupService.findAllNotDeletedMainGroups();
 
 		Map<Long, Set<String>> groupIdEmployeeUniIdMap = new HashMap<>();
 		List<AppleRosterDto> rosterDtos = new ArrayList<>();
@@ -133,21 +162,30 @@ public class AppleApiController {
 		for (Map.Entry<String, List<DBInstitutionPerson>> entry : personsByUniLogin.entrySet()) {
 			String uniId = entry.getKey();
 			List<DBInstitutionPerson> matchingPeople = entry.getValue();
-			DBInstitutionPerson defaultPerson = matchingPeople.get(0);
+
+			// If person exists as both student and employee/external, only keep student roles due to SKOLEDATA-66
+			boolean filterToStudentOnly = configuration.isStudentRoleTakesPrecedence()
+					&& matchingPeople.stream().anyMatch(m -> m.getStudent() != null);
+
+			List<DBInstitutionPerson> filteredMatchingPeople = filterToStudentOnly
+					? matchingPeople.stream().filter(m -> m.getStudent() != null).collect(Collectors.toList())
+					: matchingPeople;
+
+			DBInstitutionPerson defaultPerson = filteredMatchingPeople.get(0);
 
 			if (!StringUtils.hasLength(defaultPerson.getUsername())) {
 				continue;
 			}
 
-			PersonRole role = institutionPersonService.findGlobalRole(defaultPerson, matchingPeople);
-			NameDTO calculatedName = institutionPersonService.calculateName(matchingPeople);
+			PersonRole role = institutionPersonService.findGlobalRole(defaultPerson, filteredMatchingPeople);
+			NameDTO calculatedName = institutionPersonService.calculateName(filteredMatchingPeople);
 
 			if (PersonRole.EMPLOYEE.equals(role) || PersonRole.STUDENT.equals(role)) {
 				if (PersonRole.STUDENT.equals(role) && defaultPerson.getStudent() != null && !defaultPerson.getStudent().getRole().equals(DBStudentRole.ELEV)) {
 					continue;
 				}
 
-				InstitutionAndLevelDTO institutionAndLevelDTO = resolvePrimaryInstitutionAndLevel(matchingPeople, defaultPerson, role, dbMainGroups);
+				InstitutionAndLevelDTO institutionAndLevelDTO = resolvePrimaryInstitutionAndLevel(filteredMatchingPeople, defaultPerson, role, dbMainGroups);
 				AppleUserDto dto = new AppleUserDto(
 						uniId,
 						calculatedName.getFirstname(),
@@ -159,14 +197,14 @@ public class AppleApiController {
 
 				if (role == PersonRole.STUDENT) {
 					studentDtos.add(dto);
-					matchingPeople.stream()
+					filteredMatchingPeople.stream()
 							.filter(s -> s.getStudent() != null)
 							.map(p -> findMainGroup(p.getStudent().getMainGroupId(), dbMainGroups))
 							.filter(Objects::nonNull)
 							.forEach(g -> rosterDtos.add(new AppleRosterDto(uniId, g.getId())));
 				} else {
 					staffDtos.add(dto);
-					matchingPeople.stream()
+					filteredMatchingPeople.stream()
 							.filter(e -> e.getEmployee() != null)
 							.flatMap(p -> p.getEmployee().getGroupIds().stream())
 							.map(id -> findMainGroup(id.getGroupId(), dbMainGroups))

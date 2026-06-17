@@ -6,24 +6,24 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.OneToMany;
-import javax.persistence.Table;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.ContactPersonFullMyndighed;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.StudentFullMyndighed;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
 
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.ContactPersonFullMyndighed;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.StudentFullMyndighed;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -117,20 +117,32 @@ public class DBStudent {
 				return false;
 			}
 			else {
-				// in this code we use firstName+familyName as a key
-				List<String> existingContactPersons = this.contactPersons.stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
-				List<String> stilContactPersons = student.getContactPerson().stream().map(cp -> cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()).collect(Collectors.toList());
+				for (DBContactPerson dbCp : this.contactPersons) {
+					String dbKey = dbCp.getPerson().getFirstName() + dbCp.getPerson().getFamilyName();
 
-				for (String contactPerson : stilContactPersons) {
-					if (!existingContactPersons.contains(contactPerson)) {
-						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " stil contactPerson not found in local.");
+					ContactPersonFullMyndighed stilCp = student.getContactPerson().stream()
+							.filter(cp -> Objects.equals(dbKey, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()))
+							.findAny()
+							.orElse(null);
+
+					if (stilCp == null) {
+						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " local contactPerson not found in stil.");
+						return false;
+					}
+
+					if (!dbCp.apiEquals(stilCp)) {
+						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " contactPerson data differs.");
 						return false;
 					}
 				}
 
-				for (String contactPerson : existingContactPersons) {
-					if (!stilContactPersons.contains(contactPerson)) {
-						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " local contactPerson not found in stil.");
+				// Also check the reverse direction
+				for (ContactPersonFullMyndighed stilCp : student.getContactPerson()) {
+					String stilKey = stilCp.getPerson().getFirstName() + stilCp.getPerson().getFamilyName();
+					boolean found = this.contactPersons.stream()
+							.anyMatch(cp -> Objects.equals(stilKey, cp.getPerson().getFirstName() + cp.getPerson().getFamilyName()));
+					if (!found) {
+						log.debug("DBStudent: Not equals on 'contactPersons' for " + this.id + " stil contactPerson not found in local.");
 						return false;
 					}
 				}

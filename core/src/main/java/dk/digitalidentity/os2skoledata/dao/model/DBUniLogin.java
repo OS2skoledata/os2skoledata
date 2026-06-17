@@ -2,24 +2,25 @@ package dk.digitalidentity.os2skoledata.dao.model;
 
 import java.util.Objects;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.EnumType;
-import javax.persistence.Enumerated;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
 
+import jakarta.validation.constraints.NotNull;
 import org.hibernate.annotations.BatchSize;
 import org.hibernate.envers.Audited;
 
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
-import https.unilogin_dk.data.transitional.UniLoginFull;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+
 
 @Audited
 @Entity
@@ -35,51 +36,34 @@ public class DBUniLogin {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private long id;
 
+	// no longer in STIL payload for WS17 v7
 	@Column
 	private String civilRegistrationNumber;
-	
+
+	// no longer in STIL payload for WS17 v7
 	@Column
 	private String initialPassword;
 
+	// no longer in STIL payload for WS17 v7
 	@Column
 	private String name;
-	
+
+	// no longer in STIL payload for WS17 v7
 	@Column
+	@NotNull
 	@Enumerated(EnumType.STRING)
-	private DBPasswordState passwordState;
-	
+	private DBPasswordState passwordState = DBPasswordState.UNKNOWN;
+
+	// still in use
 	@Column
 	private String userId;
 
-	public boolean apiEquals(UniLoginFull other) {
-		if (other == null) {
+	public boolean apiEquals(String userId) {
+		if (userId == null) {
 			return false;
 		}
 
-		if (!Objects.equals(this.civilRegistrationNumber, other.getCivilRegistrationNumber())) {
-			log.debug("DBUniLogin: Not equals on 'civilRegistrationNumber' for " + this.id);
-			return false;
-		}
-
-		if (!Objects.equals(this.initialPassword, other.getInitialPassword())) {
-			log.debug("DBUniLogin: Not equals on 'initialPassword' for " + this.id);
-			return false;
-		}
-
-		if (!Objects.equals(this.name, other.getName())) {
-			log.debug("DBUniLogin: Not equals on 'name' for " + this.id);
-			return false;
-		}
-
-		if ((this.passwordState == null && other.getPasswordState() != null) ||
-			(this.passwordState != null && other.getPasswordState() == null) ||
-			(!Objects.equals(this.passwordState.name(), other.getPasswordState().name()))) {
-
-			log.debug("DBUniLogin: Not equals on 'passwordState' for " + this.id);
-			return false;
-		}
-
-		if (!Objects.equals(this.userId, other.getUserId())) {
+		if (!Objects.equals(this.userId, userId)) {
 			log.debug("DBUniLogin: Not equals on 'userId' for " + this.id);
 			return false;
 		}
@@ -87,22 +71,12 @@ public class DBUniLogin {
 		return true;
 	}
 
-	public void copyFields(UniLoginFull uniLogin) {
-		if (uniLogin == null) {
+	public void copyFields(String userId) {
+		if (userId == null) {
 			return;
 		}
-		
-		this.civilRegistrationNumber = uniLogin.getCivilRegistrationNumber();
-		this.initialPassword = uniLogin.getInitialPassword();
-		this.name = uniLogin.getName();
-		
-		if (uniLogin.getPasswordState() != null) {
-			this.passwordState = DBPasswordState.from(uniLogin.getPasswordState());
-		}
-		else {
-			this.passwordState = null;
-		}
-		
-		this.userId = uniLogin.getUserId();
+
+		this.passwordState = DBPasswordState.UNKNOWN;
+		this.userId = userId;
 	}
 }

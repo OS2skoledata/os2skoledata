@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header (datatables = true, checkbox = true)" />
+<head th:replace="~{fragments/header :: header (datatables = true, checkbox = true)}" />
 <body class="top-navigation">
 	<div id="wrapper">
 		<div id="page-wrapper" class="gray-bg">
-			<div th:replace="fragments/topbar :: topbar (page = 'client.list')" />
+			<div th:replace="~{fragments/topbar :: topbar (page = 'client.list')}" />
 
 			<div class="wrapper wrapper-content">
 				<div class="row">
@@ -34,11 +34,11 @@
 		</div>
 	</div>
 
-	<div th:replace="client/fragments/clientModal :: modal" />
+	<div th:replace="~{client/fragments/clientModal :: modal}" />
 
-	<div th:replace="fragments/footer :: scripts (datatables = true, checkbox = true)" />
-	<div th:replace="client/fragments/clientTable :: scripts" />
-	<div th:replace="client/fragments/clientModal :: scripts" />
+	<div th:replace="~{fragments/footer :: scripts (datatables = true, checkbox = true)}" />
+	<div th:replace="~{client/fragments/clientTable :: scripts}" />
+	<div th:replace="~{client/fragments/clientModal :: scripts}" />
 
 	<script th:inline="javascript">
 		/*<![CDATA[*/

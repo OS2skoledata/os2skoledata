@@ -9,11 +9,9 @@ import dk.digitalidentity.os2skoledata.dao.model.DBExternGroupId;
 import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
-import dk.digitalidentity.os2skoledata.dao.model.GoogleWorkspaceClassFolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordAdmin;
 import dk.digitalidentity.os2skoledata.dao.model.StudentPasswordChangeConfiguration;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
-import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
 import dk.digitalidentity.os2skoledata.dao.model.enums.RoleSettingType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.StudentPasswordChangerSTILRoles;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
@@ -25,7 +23,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -74,6 +71,10 @@ public class GroupService {
 
 	public List<DBGroup> findAllNotDeletedMainGroups() {
 		return groupDao.findByDeletedFalseAndGroupType(DBImportGroupType.HOVEDGRUPPE);
+	}
+
+	public List<DBGroup> findAllNotDeletedMainGroupsByInstitutionIn(List<Long> institutionIds) {
+		return groupDao.findByDeletedFalseAndGroupTypeAndInstitutionIdIn(DBImportGroupType.HOVEDGRUPPE, institutionIds);
 	}
 
 	public List<DBGroup> findByIdIn(List<Long> ids) {
@@ -239,7 +240,8 @@ public class GroupService {
 		}
 
 		for (DBGroup group : allGroupsForLoggedInPerson) {
-			result.add(new PrintGroupDTO(group.getId(), group.getGroupName(), group.getGroupLevel(), group.getInstitution().getInstitutionName(), canChangePasswordIds.contains(group.getId())));
+			boolean canPrintPassword = configuration.getStudentAdministration().isSavePasswordInDB() && canChangePasswordIds.contains(group.getId());
+			result.add(new PrintGroupDTO(group.getId(), group.getGroupName(), group.getGroupLevel(), group.getInstitution().getInstitutionName(), canPrintPassword));
 		}
 
 		return result;

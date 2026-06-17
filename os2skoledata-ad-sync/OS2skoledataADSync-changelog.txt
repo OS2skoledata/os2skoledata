@@ -64,4 +64,10 @@
 2025.09.25 - 1.31.1 - MailEnable institution employees group bugfix
 2025.09.26 - 1.32.0 - Bugfix og mulighed for at matche på brugernavn, hvis det er udfyldt i databasen, ellers cpr. Det kan fx være nyttigt ved skift af cpr (fiktivt cpr til cpr)
 2025.12.04 - 1.32.1 - Performance opdatering: Kun omdøb enheder med prefix, når det er nødvendigt
+2026.01.07 - 1.33.0 - New powershell trigger - update user
+2026.01.13 - 1.33.1 - Bugfix: log error before reporting back to core
+2026.03.17 - 1.33.2 - Bugfix: ignore excluded users in delta sync
+2026.03.25 - 1.34.0 - Mulighed for at definere specifikt om der skal bruges æøå i sikkerhedsgruppemails (UseDanishCharactersInMails). Fx nyttigt hvis man gerne vil have æøå i navne men ikke i mails
+2026.03.25 - 1.34.1 - Bedre performance
+2026.03.25 - 1.34.2 - Bugfix: forkert navnestandard anvendes til global type daginstitutionsgruppe
 

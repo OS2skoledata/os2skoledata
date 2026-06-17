@@ -225,6 +225,7 @@ public class InstitutionRestController {
 			if (institution.getInstitutionPersons() != null && !institution.getInstitutionPersons().isEmpty()) {
 				for (DBInstitutionPerson institutionPerson : institution.getInstitutionPersons()) {
 					institutionPerson.setDeleted(true);
+					institutionPerson.setPrimaryInstitution(false);
 					institutionPersonService.save(institutionPerson);
 				}
 			}

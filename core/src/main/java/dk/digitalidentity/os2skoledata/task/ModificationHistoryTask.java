@@ -26,7 +26,7 @@ public class ModificationHistoryTask {
 			log.debug("ModificationHistoryTask: Scheduled jobs are disabled on this instance");
 			return;
 		}
-		
+
 		modificationHistoryService.processChanges();
 	}
 }

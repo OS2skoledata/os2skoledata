@@ -1,6 +1,6 @@
 package dk.digitalidentity.os2skoledata.dao.model.enums;
 
-import https.unilogin_dk.data.CountryCode;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.common.CountryCode;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j

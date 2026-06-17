@@ -21,7 +21,7 @@ import dk.digitalidentity.os2skoledata.config.modules.Scheduled;
 import lombok.Getter;
 import lombok.Setter;
 
-import javax.annotation.PostConstruct;
+import jakarta.annotation.PostConstruct;
 
 @Component
 @Getter
@@ -29,8 +29,13 @@ import javax.annotation.PostConstruct;
 @ConfigurationProperties(prefix = "os2skoledata")
 public class OS2SkoleDataConfiguration {
 	private boolean dev = false;
-	private String stilUsername;
-	private String stilPassword;
+
+	private String stilITSystemId;
+	private String stilKeystoreFilePath; // pfx certificate
+	private String stilKeystoreFilePW;
+	private String stilTruststoreFilePath;
+	private String stilTruststoreFilePW;
+
 	private List<InstitutionDTO> institutions = new ArrayList<>();
 	private StudentAdministration studentAdministration = new StudentAdministration();
 	private CprConfiguration cpr = new CprConfiguration();
@@ -52,6 +57,12 @@ public class OS2SkoleDataConfiguration {
 
 	// only level 0 groups or it will give problems when year change. 0* groups are filtered out
 	private boolean filterOutGroupsWithFutureFromDate = false;
+
+	// most municipalities only wants the student role when a user is both student and employee, but some needs both (e.g. Brøndby VSK setup)
+	private boolean studentRoleTakesPrecedence = true;
+
+	// if true AppleAPI will only return institutions of type school
+	private boolean asmSchoolsOnly = false;
 
 	@PostConstruct
 	public void validateUniqueAbbreviations() {

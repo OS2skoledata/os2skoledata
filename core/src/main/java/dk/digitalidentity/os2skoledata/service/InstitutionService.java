@@ -6,6 +6,7 @@ import dk.digitalidentity.os2skoledata.dao.model.DBInstitution;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionGroupIdentifierMapping;
 import dk.digitalidentity.os2skoledata.dao.model.Setting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
+import dk.digitalidentity.os2skoledata.dao.model.enums.InstitutionType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,8 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +56,11 @@ public class InstitutionService {
 	public List<DBInstitution> findAllActive() {
 		return institutionDao.findAllByDeletedFalse();
 	}
+
+	public List<DBInstitution> findAllActiveByType(InstitutionType type) {
+		return institutionDao.findAllByDeletedFalseAndType(type);
+	}
+
 
 	public List<DBInstitution> findByIdIn(List<Long> ids) {
 		return institutionDao.findByIdIn(ids);

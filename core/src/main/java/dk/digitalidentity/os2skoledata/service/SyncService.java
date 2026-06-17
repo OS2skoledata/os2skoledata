@@ -13,13 +13,12 @@ import dk.digitalidentity.os2skoledata.dao.model.DBUniLogin;
 import dk.digitalidentity.os2skoledata.dao.model.InstitutionChangeProposal;
 import dk.digitalidentity.os2skoledata.dao.model.ProposedPersonChange;
 import dk.digitalidentity.os2skoledata.dao.model.enums.CustomerSetting;
-import dk.digitalidentity.os2skoledata.dao.model.enums.DBPasswordState;
 import dk.digitalidentity.os2skoledata.dao.model.enums.PersonChangeType;
 import dk.digitalidentity.os2skoledata.service.stil.StilService;
-import https.unilogin_dk.data.Group;
-import https.unilogin_dk.data.transitional.UniLoginFull;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionFullMyndighed;
-import https.wsieksport_unilogin_dk.eksport.fullmyndighed.InstitutionPersonFullMyndighed;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.FiltreFuld;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.common.Group;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.InstitutionFullMyndighed;
+import dk.stil.brugerdatabasen.bpi.wsieksport._7.fullmyndighed.InstitutionPersonFullMyndighed;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -69,10 +68,10 @@ public class SyncService {
 
 
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
-	public void sync(InstitutionDTO institutionDTO) {
+	public void sync(InstitutionDTO institutionDTO, FiltreFuld filters) {
 		log.info("Synchronizing institution: " + institutionDTO.getInstitutionNumber());
 		
-		StilService.InstitutionYearChangeDTO dto = stilService.getInstitution(institutionDTO.getInstitutionNumber());
+		StilService.InstitutionYearChangeDTO dto = stilService.getInstitution(institutionDTO.getInstitutionNumber(), filters);
 		if (dto == null) {
 			log.error("Got no institution / year change data - this institution might not be approved yet - skipping: " + institutionDTO.getInstitutionNumber());
 			return;
@@ -96,7 +95,10 @@ public class SyncService {
 		if (dbInstitution != null && dbInstitution.isBypassTooFewPeople()) {
 			dbInstitution.setBypassTooFewPeople(false);
 			dbInstitution.setTooFewPeopleErrorCount(0);
-			dbInstitution.setChangeProposal(null);
+			if (dbInstitution.getChangeProposal() != null) {
+				dbInstitution.getChangeProposal().getProposedPersonChanges().clear();
+				dbInstitution.setChangeProposal(null);
+			}
 			institutionService.save(dbInstitution);
 		} else {
 			// sanity check: too few people?
@@ -110,6 +112,11 @@ public class SyncService {
 				int stilCount = stilInstitution.getInstitutionPerson().size();
 
 				if (stilCount <= dbCount * configuration.getSyncSettings().getThresholdPercentage()) {
+					if (dbInstitution.getChangeProposal() != null) {
+						dbInstitution.getChangeProposal().getProposedPersonChanges().clear();
+						dbInstitution.setChangeProposal(null);
+					}
+
 					InstitutionChangeProposal changeProposal = createChangeProposal(dbInstitution, stilInstitution, dbCount, stilCount);
 					dbInstitution.setChangeProposal(changeProposal);
 					dbInstitution.setTooFewPeopleErrorCount(dbInstitution.getTooFewPeopleErrorCount() + 1);
@@ -138,7 +145,10 @@ public class SyncService {
 				} else {
 					if (dbInstitution.getTooFewPeopleErrorCount() != 0) {
 						dbInstitution.setTooFewPeopleErrorCount(0);
-						dbInstitution.setChangeProposal(null);
+						if (dbInstitution.getChangeProposal() != null) {
+							dbInstitution.getChangeProposal().getProposedPersonChanges().clear();
+							dbInstitution.setChangeProposal(null);
+						}
 						institutionService.save(dbInstitution);
 					}
 				}
@@ -302,6 +312,7 @@ public class SyncService {
 		toBeDeleted.forEach(person -> {
 			log.info("Deleting institutionPerson: " + person.getId() + " " + person.getLocalPersonId());
 			person.setDeleted(true);
+			person.setPrimaryInstitution(false);
 			person.setStilDeleted(LocalDateTime.now());
 		});
 
@@ -343,8 +354,10 @@ public class SyncService {
 					}
 				}
 				case ALIAS_FIRST_NAME -> {
-					if (!Objects.equals(dbInstitutionPerson.getPerson().getAliasFirstName(), stilInstitutionPerson.getPerson().getAliasFirstName())) {
-						dbInstitutionPerson.getPerson().setAliasFirstName(stilInstitutionPerson.getPerson().getAliasFirstName());
+					String dbValue = dbInstitutionPerson.getPerson().getAliasFirstName();
+					String stilValue = stilInstitutionPerson.getPerson().getAliasFirstName();
+					if (!Objects.equals(dbValue, stilValue)) {
+						dbInstitutionPerson.getPerson().setAliasFirstName(stilValue);
 						changes = true;
 					}
 				}
@@ -441,31 +454,15 @@ public class SyncService {
 	}
 
 	private static boolean checkForUniLoginChanges(InstitutionPersonFullMyndighed stilInstitutionPerson, DBInstitutionPerson dbInstitutionPerson, boolean changes) {
-		UniLoginFull stilUNILogin = stilInstitutionPerson.getUNILogin();
-		if (stilUNILogin != null) {
+		String stilUserId = stilInstitutionPerson.getPerson().getUserId();
+		if (stilUserId != null) {
 			if (dbInstitutionPerson.getUniLogin() == null) {
 				dbInstitutionPerson.setUniLogin(new DBUniLogin());
 				changes = true;
 			}
 
-			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getUserId(), stilUNILogin.getUserId())) {
-				dbInstitutionPerson.getUniLogin().setUserId(stilUNILogin.getUserId());
-				changes = true;
-			}
-			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getCivilRegistrationNumber(), stilUNILogin.getCivilRegistrationNumber())) {
-				dbInstitutionPerson.getUniLogin().setCivilRegistrationNumber(stilUNILogin.getCivilRegistrationNumber());
-				changes = true;
-			}
-			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getInitialPassword(), stilUNILogin.getInitialPassword())) {
-				dbInstitutionPerson.getUniLogin().setInitialPassword(stilUNILogin.getInitialPassword());
-				changes = true;
-			}
-			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getPasswordState().name(), stilUNILogin.getPasswordState().name())) {
-				dbInstitutionPerson.getUniLogin().setPasswordState(DBPasswordState.from(stilUNILogin.getPasswordState()));
-				changes = true;
-			}
-			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getName(), stilUNILogin.getName())) {
-				dbInstitutionPerson.getUniLogin().setName(stilUNILogin.getName());
+			if (!Objects.equals(dbInstitutionPerson.getUniLogin().getUserId(), stilUserId)) {
+				dbInstitutionPerson.getUniLogin().setUserId(stilUserId);
 				changes = true;
 			}
 		}
@@ -709,7 +706,7 @@ public class SyncService {
 						PersonChangeType.CREATE,
 						stilPerson.getPerson().isProtected() ? stilPerson.getPerson().getAliasFirstName() : stilPerson.getPerson().getFirstName(),
 						stilPerson.getPerson().isProtected() ? stilPerson.getPerson().getAliasFamilyName() : stilPerson.getPerson().getFamilyName(),
-						stilPerson.getUNILogin().getUserId(),
+						stilPerson.getPerson().getUserId(),
 						getPersonType(stilPerson)
 				);
 				proposedChanges.add(personChange);
@@ -774,6 +771,7 @@ public class SyncService {
 					if (!institutionPerson.isDeleted()) {
 						institutionPerson.setStilDeleted(LocalDateTime.now());
 						institutionPerson.setDeleted(true);
+						institutionPerson.setPrimaryInstitution(false);
 					}
 				}
 

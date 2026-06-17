@@ -10,6 +10,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -61,6 +62,7 @@ import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class ReadApiController {
 
 	@Autowired
@@ -89,7 +91,7 @@ public class ReadApiController {
 
 	@GetMapping("/api/institutions")
 	public ResponseEntity<?> getInstitutions() {
-		List<InstitutionDTO> institutions = institutionService.findAll().stream()
+		List<InstitutionDTO> institutions = institutionService.findAllActive().stream()
 				.map(i -> institutionService.getInstitutionDTO(i)).toList();
 		return ResponseEntity.ok(institutions);
 	}
@@ -147,12 +149,25 @@ public class ReadApiController {
 
 			List<DBInstitutionPerson> matchingPeople = matchingPeopleIncludingDeleted.stream().filter(m -> !m.isDeleted()).collect(Collectors.toList());
 			List<DBInstitutionPerson> matchingPeopleDeleted = matchingPeopleIncludingDeleted.stream().filter(m -> m.isDeleted()).collect(Collectors.toList());
-			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
+
+			// If person exists as both student and employee/external, only return the student role due to SKOLEDATA-66
+			boolean filterToStudentOnly = configuration.isStudentRoleTakesPrecedence()
+					&& matchingPeople.stream().anyMatch(m -> m.getStudent() != null);
+
+			if (filterToStudentOnly && person.getStudent() == null) {
+				continue;
+			}
+
+			List<DBInstitutionPerson> filteredMatchingPeople = filterToStudentOnly
+					? matchingPeople.stream().filter(m -> m.getStudent() != null).collect(Collectors.toList())
+					: matchingPeople;
+
+			List<InstitutionDTO> institutions = new ArrayList<>(filteredMatchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
 			String stilUsername = null;
 			String uniId = null;
 			boolean setPasswordOnCreate = false;
 			String password = null;
-			DBInstitutionPerson primaryPerson = matchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
+			DBInstitutionPerson primaryPerson = filteredMatchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
 
 			if (person.getEmployee() != null) {
 				role = PersonRole.EMPLOYEE;
@@ -168,7 +183,7 @@ public class ReadApiController {
 				for (DBStudentGroupId groupId : person.getStudent().getGroupIds()) {
 					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
 				}
-				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+				for (DBInstitutionPerson matchingPerson : filteredMatchingPeople) {
 					if (matchingPerson.getStudent() != null) {
 						DBGroup group = groups.stream().filter(g -> g.getInstitution().getId() == matchingPerson.getInstitution().getId() && g.getGroupId().equals(matchingPerson.getStudent().getMainGroupId())).findAny().orElse(null);
 						if (group != null) {
@@ -223,7 +238,7 @@ public class ReadApiController {
 
 				// check for username on active people
 				String usernameMatch = null;
-				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+				for (DBInstitutionPerson matchingPerson : filteredMatchingPeople) {
 					if (matchingPerson.getUsername() != null) {
 						usernameMatch = matchingPerson.getUsername();
 						break;
@@ -251,10 +266,10 @@ public class ReadApiController {
 			}
 
 			// contactCards in Google Workspace
-			institutionPersonService.handleContactCard(matchingPeople, groups, contactCardRecords);
+			institutionPersonService.handleContactCard(filteredMatchingPeople, groups, contactCardRecords);
 
 			// prioritise name from school institution over daycare if multiple institutions
-			NameDTO calculatedName = institutionPersonService.calculateName(matchingPeople);
+			NameDTO calculatedName = institutionPersonService.calculateName(filteredMatchingPeople);
 
 			// handle password
 			if (SecurityUtil.hasRole("ROLE_API_" + ClientAccessRole.PASSWORD_ACCESS.toString())) {
@@ -278,7 +293,7 @@ public class ReadApiController {
 					stilUsername,
 					uniId,
 					role,
-					institutionPersonService.findGlobalRole(person, matchingPeople),
+					institutionPersonService.findGlobalRole(person, filteredMatchingPeople),
 					groupIds,
 					studentMainGroup,
 					studentMainGroupsAsObjects,
@@ -288,16 +303,16 @@ public class ReadApiController {
 					institutions,
 					person.getInstitution().getInstitutionNumber(),
 					studentRole,
-					institutionPersonService.findGlobalStudentRole(matchingPeople),
+					institutionPersonService.findGlobalStudentRole(filteredMatchingPeople),
 					employeeRole,
-					institutionPersonService.findGlobalEmployeeRoles(matchingPeople),
+					institutionPersonService.findGlobalEmployeeRoles(filteredMatchingPeople),
 					externalRole,
-					institutionPersonService.findGlobalExternalRole(matchingPeople),
+					institutionPersonService.findGlobalExternalRole(filteredMatchingPeople),
 					institutionService.getInstitutionDTO(person.getInstitution()),
 					studentMainGroupStartYearForInstitution,
 					studentMainGroupLevelForInstitution,
 					person.isDeleted(),
-					institutionPersonService.findTotalRoles(matchingPeople),
+					institutionPersonService.findTotalRoles(filteredMatchingPeople),
 					contactCardRecords,
 					setPasswordOnCreate,
 					password,
@@ -760,7 +775,7 @@ public class ReadApiController {
 	}
 
 	private List<DBInstitution> getLockedIntitutions() {
-		List<DBInstitution> allInstitutions = institutionService.findAll();
+		List<DBInstitution> allInstitutions = institutionService.findAllActive();
 		List<DBInstitution> lockedInstitutions = allInstitutions.stream().filter(i -> settingService.getBooleanValueByKey(CustomerSetting.LOCKED_INSTITUTION_.toString() + i.getInstitutionNumber())).collect(Collectors.toList());
 		return lockedInstitutions;
 	}

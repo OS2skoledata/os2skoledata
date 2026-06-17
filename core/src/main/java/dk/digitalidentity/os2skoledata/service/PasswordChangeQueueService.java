@@ -4,9 +4,11 @@ import dk.digitalidentity.framework.ad.service.ActiveDirectoryService;
 import dk.digitalidentity.framework.ad.service.model.SetPasswordRequest;
 import dk.digitalidentity.framework.ad.service.model.SetPasswordResponse;
 import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
+import dk.digitalidentity.os2skoledata.config.modules.ChangePasswordWhere;
 import dk.digitalidentity.os2skoledata.dao.PasswordChangeQueueDao;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordChangeQueue;
 import dk.digitalidentity.os2skoledata.dao.model.enums.ReplicationStatus;
+import dk.digitalidentity.os2skoledata.service.azure.AzureADPasswordService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -38,13 +40,13 @@ public class PasswordChangeQueueService {
 	private PasswordChangeQueueDao passwordChangeQueueDao;
 
 	@Autowired
-	private ADPasswordService adPasswordService;
-
-	@Autowired
 	private ActiveDirectoryService activeDirectoryService;
 
 	@Autowired
 	private CprPasswordMappingService cprPasswordMappingService;
+
+	@Autowired
+	private AzureADPasswordService azureADPasswordService;
 
 	private SecretKeySpec secretKey;
 
@@ -70,10 +72,16 @@ public class PasswordChangeQueueService {
 		String encryptedPassword = encryptPassword(newPassword);
 		PasswordChangeQueue change = new PasswordChangeQueue(username, encryptedPassword);
 
-		SetPasswordRequest setPasswordRequest = new SetPasswordRequest();
-		setPasswordRequest.setUserId(change.getUsername());
-		setPasswordRequest.setPassword(newPassword);
-		SetPasswordResponse setPasswordResponse = activeDirectoryService.setPassword(setPasswordRequest);
+		SetPasswordResponse setPasswordResponse;
+		if (configuration.getStudentAdministration().getChangePasswordWhere() == ChangePasswordWhere.AAD) {
+			setPasswordResponse = azureADPasswordService.setPassword(change.getUsername(), newPassword);
+		} else {
+			SetPasswordRequest setPasswordRequest = new SetPasswordRequest();
+			setPasswordRequest.setUserId(change.getUsername());
+			setPasswordRequest.setPassword(newPassword);
+			setPasswordResponse = activeDirectoryService.setPassword(setPasswordRequest);
+		}
+
 		SetPasswordResponse.PasswordStatus status = setPasswordResponse.getStatus();
 		switch (status) {
 			// inform user through UI (but also save result in queue for debugging purposes)

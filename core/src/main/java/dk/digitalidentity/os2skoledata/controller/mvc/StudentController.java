@@ -9,9 +9,8 @@ import dk.digitalidentity.os2skoledata.dao.model.DBGroup;
 import dk.digitalidentity.os2skoledata.dao.model.PasswordSetting;
 import dk.digitalidentity.os2skoledata.dao.model.enums.GradeGroup;
 import dk.digitalidentity.os2skoledata.security.RequireSchoolEmployeeOrPasswordAdminRole;
-import dk.digitalidentity.os2skoledata.security.RequireSchoolEmployeeRole;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
-import dk.digitalidentity.os2skoledata.service.ADPasswordService;
+import dk.digitalidentity.os2skoledata.service.PasswordSyncService;
 import dk.digitalidentity.os2skoledata.service.AuditLogger;
 import dk.digitalidentity.os2skoledata.service.GroupService;
 import dk.digitalidentity.os2skoledata.service.InstitutionPersonService;
@@ -39,8 +38,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.Valid;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import java.io.UnsupportedEncodingException;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
@@ -163,7 +162,7 @@ public class StudentController {
 		try {
 			SetPasswordResponse.PasswordStatus adPasswordStatus = institutionPersonService.changePassword(form.getUsername(), student.getCpr(), form.getPassword());
 
-			if (ADPasswordService.isCritical(adPasswordStatus)) {
+			if (PasswordSyncService.isCritical(adPasswordStatus)) {
 				model.addAttribute("technicalError", true);
 				model.addAttribute("settings", passwordSetting);
 				model.addAttribute("passwordForm", form);
@@ -207,7 +206,7 @@ public class StudentController {
 			withPassword = false;
 		}
 
-		if (configuration.getStudentAdministration().isClassListsOnly()) {
+		if (configuration.getStudentAdministration().isClassListsOnly() || !configuration.getStudentAdministration().isSavePasswordInDB()) {
 			withPassword = false;
 		}
 
@@ -238,7 +237,7 @@ public class StudentController {
 			withPassword = false;
 		}
 
-		if (configuration.getStudentAdministration().isClassListsOnly()) {
+		if (configuration.getStudentAdministration().isClassListsOnly() || !configuration.getStudentAdministration().isSavePasswordInDB()) {
 			withPassword = false;
 		}
 
@@ -248,9 +247,8 @@ public class StudentController {
 		model.put("groupName", printGroupDTO.getGroupName());
 		model.put("locale", loc);
 		model.put("messagesBundle", messageSource);
+		model.put("filename", printGroupDTO.getGroupName() + ".xlsx");
 
-		response.setContentType("application/ms-excel");
-		response.setHeader("Content-Disposition", "attachment; filename=\"" + printGroupDTO.getGroupName() + ".xlsx\"");
 		return new ModelAndView(new StudentListXlsxView(), model);
 	}
 }

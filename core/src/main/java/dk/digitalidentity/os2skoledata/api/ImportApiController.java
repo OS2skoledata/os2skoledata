@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
-import javax.validation.Valid;
+import jakarta.validation.Valid;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -487,6 +487,7 @@ public class ImportApiController {
 			person.setDeleted(true);
 			person.setStilDeleted(LocalDateTime.now());
 			person.setLastModified(LocalDateTime.now());
+			person.setPrimaryInstitution(false);
 		}
 	}
 

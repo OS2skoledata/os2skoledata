@@ -1,5 +1,6 @@
 package dk.digitalidentity.os2skoledata.service;
 
+import dk.digitalidentity.os2skoledata.config.OS2SkoleDataConfiguration;
 import dk.digitalidentity.os2skoledata.dao.CprPasswordMappingDao;
 import dk.digitalidentity.os2skoledata.dao.model.CprPasswordMapping;
 import dk.digitalidentity.os2skoledata.dao.model.DBInstitutionPerson;
@@ -26,7 +27,14 @@ public class CprPasswordMappingService {
 	@Autowired
 	private PasswordChangeQueueService passwordChangeQueueService;
 
+	@Autowired
+	private OS2SkoleDataConfiguration configuration;
+
 	public String getDecryptedPassword(String cpr) {
+		if (!configuration.getStudentAdministration().isSavePasswordInDB()) {
+			return null;
+		}
+
 		CprPasswordMapping mapping = cprPasswordMappingDao.findByCpr(cpr);
 		if (mapping != null) {
 			try {
@@ -40,6 +48,10 @@ public class CprPasswordMappingService {
 	}
 
 	public void setPassword(String cpr, String encryptedPassword) {
+		if (!configuration.getStudentAdministration().isSavePasswordInDB()) {
+			return;
+		}
+
 		CprPasswordMapping mapping = cprPasswordMappingDao.findByCpr(cpr);
 		if (mapping == null) {
 			mapping = new CprPasswordMapping();
@@ -52,6 +64,10 @@ public class CprPasswordMappingService {
 	}
 
 	public boolean exists(String cpr) {
+		if (!configuration.getStudentAdministration().isSavePasswordInDB()) {
+			return false;
+		}
+
 		CprPasswordMapping mapping = cprPasswordMappingDao.findByCpr(cpr);
 		return mapping != null;
 	}

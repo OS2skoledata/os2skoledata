@@ -20,7 +20,7 @@ using User = os2skoledata_ad_sync.Services.OS2skoledata.Model.User;
 
 namespace os2skoledata_ad_sync.Services.ActiveDirectory
 {
-    class ActiveDirectoryService : ServiceBase<ActiveDirectoryService>
+    class ActiveDirectoryService : ServiceBase<ActiveDirectoryService>, IDisposable
     {
         private readonly string rootOU;
         private readonly string keepAliveOU;
@@ -82,6 +82,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         private readonly string usernameKeyField;
         private readonly UsernameKeyType usernameKeyType;
         private readonly bool useDanishCharacters;
+        private readonly bool useDanishCharactersInMails;
         private readonly bool createOUHierarchy;
         private readonly Dictionary<string, string> institutionUserOUPath;
         private readonly string allSecurityGroupsOU;
@@ -129,6 +130,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
 
         private readonly PowerShellRunnerService powerShellRunner;
         private readonly OS2skoledataService os2SkoledataService;
+        private PrincipalContext cachedPrincipalContext;
 
         public ActiveDirectoryService(IServiceProvider sp) : base(sp)
         {
@@ -157,7 +159,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             globalEmployeeSecurityGroupName = settings.ActiveDirectorySettings.namingSettings.GlobalEmployeeSecurityGroupName;
             globalSecurityGroupForEmployeeTypeSchoolNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeSchoolNameStandard;
             globalSecurityGroupForEmployeeTypeDaycareNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeDaycareNameStandard;
-            globalSecurityGroupForEmployeeTypeDaycareNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeFUNameStandard;
+            globalSecurityGroupForEmployeeTypeFUNameStandard = settings.ActiveDirectorySettings.namingSettings.GlobalSecurityGroupForEmployeeTypeFUNameStandard;
             allInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllInInstitutionSecurityGroupNameStandard;
             allStudentsInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllStudentsInInstitutionSecurityGroupNameStandard;
             allEmployeesInInstitutionSecurityGroupNameStandard = settings.ActiveDirectorySettings.namingSettings.AllEmployeesInInstitutionSecurityGroupNameStandard;
@@ -192,6 +194,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             usernameKeyField = settings.ActiveDirectorySettings.UsernameKeyField;
             usernameKeyType = settings.ActiveDirectorySettings.UsernameKeyType;
             useDanishCharacters = settings.ActiveDirectorySettings.UseDanishCharacters;
+            useDanishCharactersInMails = settings.ActiveDirectorySettings.UseDanishCharactersInMails ?? settings.ActiveDirectorySettings.UseDanishCharacters;
             createOUHierarchy = settings.ActiveDirectorySettings.CreateOUHierarchy;
             institutionUserOUPath = settings.ActiveDirectorySettings.InstitutionUserOUPath;
             allSecurityGroupsOU = settings.ActiveDirectorySettings.AllSecurityGroupsOU;
@@ -479,7 +482,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             bool nameChanges = false;
             bool changes = false;
             bool reactivated = false;
-            using PrincipalContext ctx = GetPrincipalContext();
+            PrincipalContext ctx = GetPrincipalContext();
             using UserPrincipal userPrincipal = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
             if (userPrincipal == null)
             {
@@ -937,6 +940,11 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             if (changes || nameChanges || moved || reactivated)
             {
                 logger.LogInformation($"Updated user with username {username}. AD path = {entry.Properties["distinguishedName"].Value}");
+
+                if (changes || nameChanges || moved)
+                {
+                    powerShellRunner.RunUpdateScript(username, user.Firstname + " " + user.FamilyName, user.Role.ToString(), ctx.ConnectedServer, user, dn, entry.Properties["distinguishedName"].Value.ToString());
+                }
             }
 
             return entry.Properties["distinguishedName"].Value.ToString();
@@ -1373,7 +1381,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 }
 
                 logger.LogInformation("Checking if any groups under " + securityGroupOU.Name + " should be deleted");
-                PrincipalContext context = new PrincipalContext(ContextType.Domain, null, securityGroupOU.Properties["distinguishedName"].Value.ToString());
+                using PrincipalContext context = new PrincipalContext(ContextType.Domain, null, securityGroupOU.Properties["distinguishedName"].Value.ToString());
                 GroupPrincipal findAllGroups = new GroupPrincipal(context, "*");
                 PrincipalSearcher ps = new PrincipalSearcher(findAllGroups);
                 ((DirectorySearcher)ps.GetUnderlyingSearcher()).PageSize = 1000;
@@ -1457,7 +1465,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 if (moveUsersEnabled)
                 {
                     logger.LogInformation($"Handling members for group {group.Name}");
-                    PrincipalContext context = new PrincipalContext(ContextType.Domain, Environment.UserDomainName);
+                    using PrincipalContext context = new PrincipalContext(ContextType.Domain, Environment.UserDomainName);
                     GroupPrincipal groupPrincipal = GroupPrincipal.FindByIdentity(context, IdentityType.Guid, group.Guid.ToString());
                     List<Principal> members = new List<Principal>();
                     try
@@ -2792,7 +2800,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 name = name.Replace(".", "");
             }
 
-            if (!useDanishCharacters)
+            if (!useDanishCharacters || (mail && !useDanishCharactersInMails))
             {
                 name = name.Replace("ø", "oe");
                 name = name.Replace("å", "aa");
@@ -2830,7 +2838,9 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     logger.LogInformation("Created deleted ous ou for today: " + dayMatch.Properties["distinguishedName"][0].ToString());
                 }
 
-                var underInstitutionOUName = "OU=" + underInstitution;
+                var underInstitutionOUName = underInstitution.StartsWith("OU=")
+                    ? underInstitution
+                    : "OU=" + underInstitution;
                 DirectoryEntry institutionMatch = null;
                 foreach (DirectoryEntry ou in dayMatch.Children)
                 {
@@ -2873,7 +2883,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
             {
                 bool success = false;
                 
-                using PrincipalContext ctx = GetPrincipalContext();
+                PrincipalContext ctx = GetPrincipalContext();
                 using UserPrincipal user = UserPrincipal.FindByIdentity(ctx, IdentityType.SamAccountName, username);
                 if (user == null)
                 {
@@ -2975,7 +2985,12 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                 return new PrincipalContext(ContextType.Domain, null, ldapPath);
             }
 
-            return new PrincipalContext(ContextType.Domain);
+            if (cachedPrincipalContext == null)
+            {
+                cachedPrincipalContext = new PrincipalContext(ContextType.Domain);
+            }
+
+            return cachedPrincipalContext;
         }
 
         private string GetNamePart(string firstname)
@@ -3836,6 +3851,11 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
                     }
                 }
             }
+        }
+
+        public void Dispose()
+        {
+            cachedPrincipalContext?.Dispose();
         }
     }
 

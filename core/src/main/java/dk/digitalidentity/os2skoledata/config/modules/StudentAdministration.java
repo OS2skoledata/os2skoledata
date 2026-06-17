@@ -13,4 +13,7 @@ public class StudentAdministration {
 	// this setting shows the dropdown special for selecting a new password
 	private boolean indskolingSpecialEnabled = false;
 	private boolean setIndskolingPasswordOnCreate = false;
+	private ChangePasswordWhere changePasswordWhere = ChangePasswordWhere.AD;
+	private AzureAdPasswordConfig azureAd = new AzureAdPasswordConfig();
+	private boolean savePasswordInDB = true;
 }

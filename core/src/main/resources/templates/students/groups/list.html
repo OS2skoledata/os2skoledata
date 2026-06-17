@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
-<head th:replace="fragments/header :: header (datatables = true)" />
+<head th:replace="~{fragments/header :: header (datatables = true)}" />
 <body class="top-navigation">
 <div id="wrapper">
 	<div id="page-wrapper" class="gray-bg">
-		<div th:replace="fragments/topbar :: topbar (page = 'groups')" />
+		<div th:replace="~{fragments/topbar :: topbar (page = 'groups')}" />
 
 		<div class="wrapper wrapper-content">
 			<div class="row">
@@ -60,7 +60,7 @@
 	</div>
 </div>
 
-<div th:replace="fragments/footer :: scripts (datatables = true)" />
+<div th:replace="~{fragments/footer :: scripts (datatables = true)}" />
 <script th:inline="javascript">
 		/*<![CDATA[*/
 

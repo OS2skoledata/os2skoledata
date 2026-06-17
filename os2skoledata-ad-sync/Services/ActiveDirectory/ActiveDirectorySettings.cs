@@ -13,6 +13,7 @@ namespace os2skoledata_ad_sync.Services.ActiveDirectory
         public string UsernameKeyField { get; set; } = "sAMAccountName";
         public UsernameKeyType UsernameKeyType { get; set; } = UsernameKeyType.SAM_ACCOUNT_NAME;
         public bool UseDanishCharacters { get; set; }
+        public bool? UseDanishCharactersInMails { get; set; }
         public bool DryRun { get; set; }
         public bool CreateOUHierarchy { get; set; } = true;
         public Dictionary<string, string> InstitutionUserOUPath { get; set; }

@@ -21,8 +21,7 @@ import dk.digitalidentity.os2skoledata.dao.model.enums.DBEmployeeRole;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBExternalRoleType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBImportGroupType;
 import dk.digitalidentity.os2skoledata.dao.model.enums.DBStudentRole;
-import dk.digitalidentity.os2skoledata.dao.model.enums.FolderOrGroup;
-import dk.digitalidentity.os2skoledata.dao.model.enums.IntegrationType;
+import dk.digitalidentity.os2skoledata.security.RequireNormalAPIAccess;
 import dk.digitalidentity.os2skoledata.security.SecurityUtil;
 import dk.digitalidentity.os2skoledata.service.ClientService;
 import dk.digitalidentity.os2skoledata.service.CprPasswordMappingService;
@@ -52,6 +51,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
+@RequireNormalAPIAccess
 public class DeltaSyncApiController {
 
 	@Autowired
@@ -204,15 +204,33 @@ public class DeltaSyncApiController {
 			DBExternalRoleType externalRole = null;
 			int studentMainGroupStartYearForInstitution = 0;
 			String studentMainGroupLevelForInstitution = null;
+
 			List<DBInstitutionPerson> matchingPeopleIncludingDeleted = institutionPersonService.findByPersonCivilRegistrationNumber(cpr);
 			List<DBInstitutionPerson> matchingPeople = matchingPeopleIncludingDeleted.stream().filter(m -> !m.isDeleted()).collect(Collectors.toList());
 			List<DBInstitutionPerson> matchingPeopleDeleted = matchingPeopleIncludingDeleted.stream().filter(m -> m.isDeleted()).collect(Collectors.toList());
-			List<InstitutionDTO> institutions = new ArrayList<>(matchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
+
+			// If person exists as both student and employee/external, only return the student role due to SKOLEDATA-66
+			boolean filterToStudentOnly = configuration.isStudentRoleTakesPrecedence()
+					&& matchingPeople.stream().anyMatch(m -> m.getStudent() != null);
+
+			if (filterToStudentOnly && person.getStudent() == null) {
+				continue;
+			}
+
+			List<DBInstitutionPerson> filteredMatchingPeople = filterToStudentOnly
+					? matchingPeople.stream().filter(m -> m.getStudent() != null).collect(Collectors.toList())
+					: matchingPeople;
+
+			if (filteredMatchingPeople.isEmpty()) {
+				continue;
+			}
+
+			List<InstitutionDTO> institutions = new ArrayList<>(filteredMatchingPeople.stream().map(p -> institutionService.getInstitutionDTO(p.getInstitution())).toList());
 			String stilUsername = null;
 			String uniId = null;
 			boolean setPasswordOnCreate = false;
 			String password = null;
-			DBInstitutionPerson primaryPerson = matchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
+			DBInstitutionPerson primaryPerson = filteredMatchingPeople.stream().filter(p -> p.isPrimaryInstitution()).findAny().orElse(null);
 
 			if (person.getEmployee() != null) {
 				stilGroupsCurrentInstitution.addAll(person.getEmployee().getGroupIds().stream().map(DBEmployeeGroupId::getGroupId).collect(Collectors.toList()));
@@ -228,7 +246,7 @@ public class DeltaSyncApiController {
 				for (DBStudentGroupId groupId : person.getStudent().getGroupIds()) {
 					groups.stream().filter(g -> g.getGroupId().equals(groupId.getGroupId()) && g.getInstitution().getId() == person.getInstitution().getId()).findAny().ifPresent(group -> groupIds.add(group.getId()));
 				}
-				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+				for (DBInstitutionPerson matchingPerson : filteredMatchingPeople) {
 					if (matchingPerson.getStudent() != null) {
 						DBGroup group = groups.stream().filter(g ->  g.getInstitution().getId() == matchingPerson.getInstitution().getId() && g.getGroupId().equals(matchingPerson.getStudent().getMainGroupId())).findAny().orElse(null);
 						if (group != null) {
@@ -284,7 +302,7 @@ public class DeltaSyncApiController {
 
 				// check for username on active people
 				String usernameMatch = null;
-				for (DBInstitutionPerson matchingPerson : matchingPeople) {
+				for (DBInstitutionPerson matchingPerson : filteredMatchingPeople) {
 					if (matchingPerson.getUsername() != null) {
 						usernameMatch = matchingPerson.getUsername();
 						break;
@@ -311,10 +329,10 @@ public class DeltaSyncApiController {
 			}
 
 			// contactCards in Google Workspace
-			institutionPersonService.handleContactCard(matchingPeople, groups, contactCardRecords);
+			institutionPersonService.handleContactCard(filteredMatchingPeople, groups, contactCardRecords);
 
 			// prioritise name from school institution over daycare if multiple institutions
-			NameDTO calculatedName = institutionPersonService.calculateName(matchingPeopleIncludingDeleted);
+			NameDTO calculatedName = institutionPersonService.calculateName(filteredMatchingPeople);
 
 			// handle password
 			if (SecurityUtil.hasRole("ROLE_API_" + ClientAccessRole.PASSWORD_ACCESS.toString())) {
@@ -338,7 +356,7 @@ public class DeltaSyncApiController {
 					stilUsername,
 					uniId,
 					role,
-					institutionPersonService.findGlobalRole(person, matchingPeople),
+					institutionPersonService.findGlobalRole(person, filteredMatchingPeople),
 					groupIds,
 					studentMainGroup,
 					studentMainGroupsAsObjects,
@@ -348,16 +366,16 @@ public class DeltaSyncApiController {
 					institutions,
 					person.getInstitution().getInstitutionNumber(),
 					studentRole,
-					institutionPersonService.findGlobalStudentRole(matchingPeople),
+					institutionPersonService.findGlobalStudentRole(filteredMatchingPeople),
 					employeeRole,
-					institutionPersonService.findGlobalEmployeeRoles(matchingPeople),
+					institutionPersonService.findGlobalEmployeeRoles(filteredMatchingPeople),
 					externalRole,
-					institutionPersonService.findGlobalExternalRole(matchingPeople),
+					institutionPersonService.findGlobalExternalRole(filteredMatchingPeople),
 					institutionService.getInstitutionDTO(person.getInstitution()),
 					studentMainGroupStartYearForInstitution,
 					studentMainGroupLevelForInstitution,
 					person.isDeleted(),
-					institutionPersonService.findTotalRoles(matchingPeople),
+					institutionPersonService.findTotalRoles(filteredMatchingPeople),
 					contactCardRecords,
 					setPasswordOnCreate,
 					password,

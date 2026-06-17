@@ -482,8 +482,29 @@ public class AzureADService {
 		return appClient.education().classes(id).buildRequest().get();
 	}
 
-	public Group updateGroup(Group group, String id) {
-		return appClient.groups(id).buildRequest().patch(group);
+	public Group updateGroup(Group group, String id, boolean retry) {
+		if (!retry) {
+			return appClient.groups(id).buildRequest().patch(group);
+		}
+
+		int attempt = 0;
+		while (true) {
+			try {
+				return appClientWithoutLogging.groups(id).buildRequest().patch(group);
+			} catch (Exception e) {
+				attempt++;
+				if (attempt >= 10) {
+					throw new RuntimeException("Failed to update group with id " + id + " after " + attempt + " tries", e);
+				}
+
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException ie) {
+					Thread.currentThread().interrupt();
+					throw new RuntimeException("Thread was interrupted during wait", ie);
+				}
+			}
+		}
 	}
 
 	private void deleteGroup(String id, boolean forTeam, String name) {
@@ -493,41 +514,82 @@ public class AzureADService {
 	}
 
 	public List<User> getUserMembersOfGroup(String id) {
-		UserCollectionPage userCollection = appClient.groups(id).membersAsUser().buildRequest().get();
+		int maxRetries = 10;
+		int attempt = 0;
 
-		// returns 100 users pr page
-		List<User> result = new ArrayList<>();
-		while (userCollection != null) {
-			result.addAll(userCollection.getCurrentPage());
-			final UserCollectionRequestBuilder nextPage = userCollection.getNextPage();
-			if (nextPage == null) {
-				break;
-			}
-			else {
-				userCollection = nextPage.buildRequest().get();
+		while (attempt < maxRetries) {
+			try {
+				UserCollectionPage userCollection;
+				userCollection = appClientWithoutLogging.groups(id).membersAsUser().buildRequest().get();
+
+				// returns 100 users per page
+				List<User> result = new ArrayList<>();
+				while (userCollection != null) {
+					result.addAll(userCollection.getCurrentPage());
+					final UserCollectionRequestBuilder nextPage = userCollection.getNextPage();
+					if (nextPage == null) {
+						break;
+					} else {
+						userCollection = nextPage.buildRequest().get();
+					}
+				}
+
+				return result;
+			} catch (Exception e) {
+				attempt++;
+				if (attempt >= maxRetries) {
+					throw new RuntimeException("Failed to fetch members of group with id " + id + " after " + maxRetries + " tries", e);
+				}
+
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException ie) {
+					Thread.currentThread().interrupt();
+					throw new RuntimeException("Thread was interrupted during wait", ie);
+				}
 			}
 		}
 
-		return result;
+		throw new IllegalStateException("Unexpected error in getUserMembersOfGroup");
 	}
 
 	public List<User> getUserOwnersOfGroup(String id) {
-		UserCollectionPage userCollection = appClient.groups(id).ownersAsUser().buildRequest().get();
+		int maxRetries = 10;
+		int attempt = 0;
 
-		// returns 100 users pr page
-		List<User> result = new ArrayList<>();
-		while (userCollection != null) {
-			result.addAll(userCollection.getCurrentPage());
-			final UserCollectionRequestBuilder nextPage = userCollection.getNextPage();
-			if (nextPage == null) {
-				break;
-			}
-			else {
-				userCollection = nextPage.buildRequest().get();
+		while (attempt < maxRetries) {
+			try {
+				UserCollectionPage userCollection = appClientWithoutLogging.groups(id).ownersAsUser().buildRequest().get();
+
+				// returns 100 users per page
+				List<User> result = new ArrayList<>();
+				while (userCollection != null) {
+					result.addAll(userCollection.getCurrentPage());
+					final UserCollectionRequestBuilder nextPage = userCollection.getNextPage();
+					if (nextPage == null) {
+						break;
+					} else {
+						userCollection = nextPage.buildRequest().get();
+					}
+				}
+
+				return result;
+			} catch (Exception e) {
+				attempt++;
+				if (attempt >= maxRetries) {
+					throw new RuntimeException("Failed to fetch owners of group with id " + id + " after " + maxRetries + " tries", e);
+				}
+
+				try {
+					Thread.sleep(5000);
+				} catch (InterruptedException ie) {
+					Thread.currentThread().interrupt();
+					throw new RuntimeException("Thread was interrupted during wait", ie);
+				}
 			}
 		}
 
-		return result;
+		throw new IllegalStateException("Unexpected error in getUserOwnersOfGroup");
 	}
 
 	public void addMemberToGroup(String groupId, String objectId) {
@@ -1239,6 +1301,9 @@ public class AzureADService {
 
 			match = handleCreateGroup(name);
 
+			// Wait for the group to be available in Azure AD (eventual consistency)
+			match = getGroup(match.id, true);
+
 			if (os2skoledataKey != null && institution != null)
 			{
 				handleSetIdentifierAfterCreate(institution, os2skoledataKey, match);
@@ -1425,7 +1490,7 @@ public class AzureADService {
 		updatedGroup.mailNickname = mailNickmame;
 		updatedGroup.displayName = name;
 
-		updateGroup(updatedGroup, id);
+		updateGroup(updatedGroup, id, true);
 
 		return id;
 	}
@@ -1447,7 +1512,7 @@ public class AzureADService {
 			if (securityGroupIdsForRenamedGroups.contains(group.id) && group.displayName != null && group.displayName.startsWith("c_")) {
 				Group renamedGroup = new Group();
 				renamedGroup.displayName = removePrefix(group.displayName, "c_");
-				updateGroup(renamedGroup, group.id);
+				updateGroup(renamedGroup, group.id, false);
 			}
 		}
 	}
@@ -1490,7 +1555,7 @@ public class AzureADService {
 					if (teamIdsForRenamedTeams.contains(team.id) && team.displayName != null && team.displayName.startsWith("c_")) {
 						Group renamedGroup = new Group();
 						renamedGroup.displayName = removePrefix(team.displayName, "c_");
-						updateGroup(renamedGroup, team.id);
+						updateGroup(renamedGroup, team.id, false);
 
 						Team renamedTeam = new Team();
 						renamedTeam.displayName = removePrefix(team.displayName, "c_");
@@ -1552,7 +1617,7 @@ public class AzureADService {
 		Group group = new Group();
 		group.displayName = "Arkiveret-" + LocalDate.now().toString() + "-" +  orgName;
 
-		updateGroup(group, id);
+		updateGroup(group, id, false);
 	}
 
 	private Team createTeam(Team team) {
@@ -1692,7 +1757,7 @@ public class AzureADService {
 		}
 
 		try {
-			updateGroup(groupToUpdate, match.id);
+			updateGroup(groupToUpdate, match.id, false);
 		}
 		catch (Exception e) {
 			throw new Exception("Failed to update group with azure id " + match.id, e);

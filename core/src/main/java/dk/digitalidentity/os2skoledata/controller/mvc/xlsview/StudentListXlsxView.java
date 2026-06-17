@@ -8,56 +8,70 @@ import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.context.support.ResourceBundleMessageSource;
-import org.springframework.web.servlet.view.document.AbstractXlsxStreamingView;
+import org.springframework.web.servlet.View;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-public class StudentListXlsxView extends AbstractXlsxStreamingView {
+public class StudentListXlsxView implements View {
+    private static final String CONTENT_TYPE = "application/ms-excel";
 
     @Override
-    protected void buildExcelDocument(Map<String, Object> model, Workbook workbook, HttpServletRequest request, HttpServletResponse response) throws Exception {
+    public String getContentType() {
+        return CONTENT_TYPE;
+    }
+
+    @Override
+    public void render(Map<String, ?> model, HttpServletRequest request, HttpServletResponse response) throws Exception {
         List<PrintStudentDTO> students = (List<PrintStudentDTO>) model.get("students");
         boolean withPassword = (boolean) model.get("withPassword");
         String groupName = (String) model.get("groupName");
         ResourceBundleMessageSource messageSource = (ResourceBundleMessageSource) model.get("messagesBundle");
         Locale locale = (Locale) model.get("locale");
+        String filename = (String) model.get("filename");
 
-        // Setup shared resources
-        Font headerFont = workbook.createFont();
-        headerFont.setBold(true);
+        response.setContentType(getContentType());
+        response.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
 
-        CellStyle headerStyle = workbook.createCellStyle();
-        headerStyle.setFont(headerFont);
+        try (Workbook workbook = new DisposableSXSSFWorkbook()) {
+            // Setup shared resources
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
 
-        Sheet sheet = workbook.createSheet(messageSource.getMessage("html.students.xlsx.title", null, locale) + " " + groupName);
+            CellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFont(headerFont);
 
-        ArrayList<String> headers = new ArrayList<>();
-        headers.add("html.students.table.headers.person");
-        headers.add("html.students.table.headers.username");
-        headers.add("html.students.table.headers.unilogin");
+            Sheet sheet = workbook.createSheet(messageSource.getMessage("html.students.xlsx.title", null, locale) + " " + groupName);
 
-        if (withPassword) {
-            headers.add("html.students.table.headers.password");
-        }
-
-        createHeaderRow(messageSource, locale, sheet, headers, headerStyle);
-
-        int row = 1;
-        for (PrintStudentDTO student : students) {
-            Row dataRow = sheet.createRow(row++);
-
-            createCell(dataRow, 0, student.getName(), null);
-            createCell(dataRow, 1, student.getUsername(), null);
-            createCell(dataRow, 2, student.getUniId(), null);
+            ArrayList<String> headers = new ArrayList<>();
+            headers.add("html.students.table.headers.person");
+            headers.add("html.students.table.headers.username");
+            headers.add("html.students.table.headers.unilogin");
 
             if (withPassword) {
-                createCell(dataRow, 3, student.getPassword(), null);
+                headers.add("html.students.table.headers.password");
             }
+
+            createHeaderRow(messageSource, locale, sheet, headers, headerStyle);
+
+            int row = 1;
+            for (PrintStudentDTO student : students) {
+                Row dataRow = sheet.createRow(row++);
+
+                createCell(dataRow, 0, student.getName(), null);
+                createCell(dataRow, 1, student.getUsername(), null);
+                createCell(dataRow, 2, student.getUniId(), null);
+
+                if (withPassword) {
+                    createCell(dataRow, 3, student.getPassword(), null);
+                }
+            }
+
+            workbook.write(response.getOutputStream());
         }
     }
 
